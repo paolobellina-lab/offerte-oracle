@@ -126,7 +126,7 @@
               <div class="seg" id="c-prezzi"></div>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px">
-              <span class="muted small" style="font-weight:600">Sottocapitoli in Oracle</span>
+              <span class="muted small" style="font-weight:600" title="SI = nella colonna Nome Capitolato va il capitolato assegnato alla riga">Capitolati in Oracle</span>
               <div class="seg" id="c-sotto"></div>
             </div>
             <label class="f">N° partenza righe<input id="c-linea" type="number" min="0" step="10" style="width:100px"></label>
@@ -156,13 +156,17 @@
 
         <div id="s-righe">
           <div class="row no-print" style="margin-bottom:8px">
-            <span class="muted small grow">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).</span>
+            <span class="muted small grow">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).
+              Il capitolato va nella colonna "Nome Capitolato" se "Capitolati in Oracle" è SI.</span>
             <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
           </div>
+          <div class="capitolati no-print" id="capitolati"></div>
           <div class="bulk no-print" id="bulk" hidden>
             <b id="bulk-n"></b>
-            <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:230px">
-            <button class="btn small primary" data-bulk="dup">Duplica in fondo con questa nota</button>
+            <select id="bulk-cap" title="Capitolato per Oracle"></select>
+            <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:210px">
+            <button class="btn small primary" data-bulk="dup">Duplica in fondo con capitolato e nota</button>
+            <button class="btn small" data-bulk="cap">Assegna il capitolato</button>
             <button class="btn small" data-bulk="nota">Applica la nota</button>
             <button class="btn small" data-bulk="su">Porta in cima</button>
             <button class="btn small" data-bulk="giu">Porta in fondo</button>
@@ -175,7 +179,7 @@
               <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
               <th class="num">Prezzo base</th><th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th>
               <th class="num">Aum.1</th><th class="num">Ric.</th><th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th>
-              <th>Nota post-linea</th><th></th>
+              <th>Capitolato</th><th>Nota post-linea</th><th></th>
             </tr></thead>
             <tbody id="righe-offerta"></tbody>
           </table></div>
@@ -186,7 +190,8 @@
             <label class="f">Database<select id="a-db"></select></label>
             <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
             <label class="f grow">Cerca<input id="a-cerca" type="search" placeholder="codice, n° ordinazione o descrizione"></label>
-            <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:200px"></label>
+            <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
+            <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:180px"></label>
             <label class="row small muted" style="align-self:flex-end;padding-bottom:7px"><input type="checkbox" id="a-solo"> solo già in offerta</label>
           </div>
           <div class="tbl-wrap"><table>
@@ -226,6 +231,7 @@
       <div class="row" style="margin-bottom:10px">
         <h2>Catalogo</h2>
         <select id="c-capitolo"></select>
+        <select id="c-sotto" title="Sottocapitolo del database"></select>
         <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMV">
         <button class="btn" id="c-impost">Impostazioni capitolo</button>
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>

@@ -109,14 +109,19 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
    - *Prezzo target*: in VENDITA CLIENTE scrivi il totale che vuoi ottenere e l'app calcola il ricarico del capitolo.
 4. **Aggiungi articoli**: scegli il database (di solito quello del capitolo), cerca, scrivi la quantità e premi Invio o Tab: ogni volta si aggiunge una riga in fondo.
    Con **Nota post-linea per le nuove righe** (es. "posizione A_1") le righe aggiunte prendono quella nota (se l'articolo non ne ha già una nel database).
-5. **Righe**: l'ordine è quello che vedi e va così in Oracle. Lo stesso articolo può comparire più volte.
+5. **Capitolati per Oracle** (colonna "Nome Capitolato"): li crei offerta per offerta, per ogni capitolo (es. "PIANO TERRA", "PRIMO PIANO"),
+   dalla barra "Capitolati per Oracle" nelle Righe o con "+ nuovo capitolato…" in Aggiungi articoli, e li assegni alle righe.
+   Vanno in Oracle se "Capitolati in Oracle" è SI. Non c'entrano con i **sottocapitoli del database** (Sistema, Centrale…),
+   che servono solo a organizzare gli articoli e si creano dal Catalogo scrivendo un nome nuovo nella scheda dell'articolo.
+   Note: per gli ARTICOLO_GEN sono automatiche (pre-linea = n° di ordinazione, post-linea = descrizione); per gli altri sono testo libero.
+6. **Righe**: l'ordine è quello che vedi e va così in Oracle. Lo stesso articolo può comparire più volte.
    Seleziona delle righe per **duplicarle in fondo con una nuova nota** (es. da "posizione A_1" a "posizione A_2"), cambiare la nota, spostarle o toglierle. ↑ ↓ ⧉ ✎ su ogni riga.
-6. **GMV**: per ogni GMA del capitolo vedi venduto, acquistato, **peso** sul capitolo e margine; puoi forzare sconti e ricarico e vedi il confronto con il cartellino del cliente.
-7. **Esporta per Oracle**: un foglio "Sheet1" per capitolo (Excel, CSV o copia). Dal **Riepilogo** scarichi quelli di tutti i capitoli.
-8. **Riepilogo** (ex ANALISI PACCHETTO): per capitolo venduto, acquistato, materiale, attività, ricarico e margine, con i totali dell'offerta.
-9. **Database**: clicca un articolo per modificarlo; il pallino indica da quanto non aggiorni il prezzo.
+7. **GMV**: per ogni GMA del capitolo vedi venduto, acquistato, **peso** sul capitolo e margine; puoi forzare sconti e ricarico e vedi il confronto con il cartellino del cliente.
+8. **Esporta per Oracle**: un foglio "Sheet1" per capitolo (Excel, CSV o copia). Dal **Riepilogo** scarichi quelli di tutti i capitoli.
+9. **Riepilogo** (ex ANALISI PACCHETTO): per capitolo venduto, acquistato, materiale, attività, ricarico e margine, con i totali dell'offerta.
+10. **Database**: clicca un articolo per modificarlo; il pallino indica da quanto non aggiorni il prezzo.
    **Aggiorna i prezzi da Oracle**: incolla la griglia di Oracle (con intestazioni) e l'app aggiorna listino acquisto, GMV e data.
-10. **Copia di sicurezza**: scarichi tutti i dati in un file `.json` e puoi ripristinarli.
+11. **Copia di sicurezza**: scarichi tutti i dati in un file `.json` e puoi ripristinarli.
 
 ## File
 

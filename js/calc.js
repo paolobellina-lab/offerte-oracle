@@ -155,7 +155,7 @@ export function righeOracle(off, opz = {}) {
     const prezzoNetto = (codice === "PITATT.TEC" || codice === "P000ARTICOLO_GEN" || daExcel) ? arrot(c.unitario) : "";
     out.push([
       linea, codice, off.magazzino || "BG", arrot(c.qta),
-      off.sottocapitoli ? (r.sottocapitolo || "") : "",
+      off.sottocapitoli ? (r.capitolato || "") : "", // capitolato dell'offerta, non il sottocapitolo del database
       prezzoNetto,
       perc(c.sc3), perc(c.sc4), perc(c.sc5), "", "", "",
       perc(c.aum1), perc(c.ric), "", "",

@@ -168,7 +168,7 @@ function vai(vista) {
   for (const v of ["offerte", "offerta", "catalogo", "clienti", "importa"]) $("#v-" + v).hidden = v !== vista;
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.vista === (vista === "offerta" ? "offerte" : vista)));
   if (vista !== "offerta" && location.hash) history.replaceState(null, "", location.pathname);
-  ridisegna();
+  ridisegna(true);
   window.scrollTo(0, 0);
 }
 $("#tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) vai(b.dataset.vista); });
@@ -181,11 +181,12 @@ const staScrivendo = () => {
 document.addEventListener("focusout", () => setTimeout(() => {
   if (rinviato && !staScrivendo()) { rinviato = false; ridisegna(); }
 }, 50));
-function ridisegna() {
+function ridisegna(forza = false) {
   cancelAnimationFrame(rafRid);
   rafRid = requestAnimationFrame(() => {
     // dati arrivati mentre si scrive in un campo: si ridisegna appena il campo perde il focus
-    if (staScrivendo() && S.vista !== "offerte" && S.vista !== "importa") { rinviato = true; return; }
+    // (non quando si cambia pagina: lì si disegna sempre)
+    if (!forza && staScrivendo() && S.vista !== "offerte" && S.vista !== "importa") { rinviato = true; return; }
     if (S.vista === "offerte") disegnaElencoOfferte();
     else if (S.vista === "offerta") disegnaOfferta();
     else if (S.vista === "catalogo") disegnaCatalogo();
@@ -195,13 +196,16 @@ function ridisegna() {
 
 /* ================= Modello dell'offerta =================
    offerta = { id, nome, cliente, note, capitoli: [capitolo], creatoIl, aggiornatoIl, creatoDa }
-   capitolo = { nome, tipo, prezzi, sottocapitoli, lineaPartenza, magazzino, globali, gmv, notaNuove, righe: [riga] }
+   capitolo = { nome, tipo, prezzi, sottocapitoli, lineaPartenza, magazzino, globali, gmv, notaNuove,
+                capitolati: [nomi dei capitolati per Oracle], capNuove, righe: [riga] }
+   Il capitolato (colonna "Nome Capitolato" in Oracle) si decide offerta per offerta e non c'entra con
+   i sottocapitoli del database, che servono solo a organizzare gli articoli.
    riga = copia dei dati dell'articolo + { id, qta, giorni, notePre, notePost }. Le righe sono nell'ordine scelto. */
 function nuovoCapitolo(nome, base = {}) {
   return {
     nome, tipo: base.tipo || "VENDITA CLIENTE", prezzi: base.prezzi || "DA ORACLE", sottocapitoli: !!base.sottocapitoli,
     lineaPartenza: base.lineaPartenza ?? 10, magazzino: base.magazzino ?? "BG",
-    globali: { ...(base.globali || {}) }, gmv: structuredClone(base.gmv || {}), notaNuove: "", righe: [],
+    globali: { ...(base.globali || {}) }, gmv: structuredClone(base.gmv || {}), notaNuove: "", capitolati: [], capNuove: "", righe: [],
   };
 }
 function nuovaOffertaVuota() {
@@ -222,8 +226,13 @@ function normalizza(o) {
     for (const k of ["righe", "tipo", "prezzi", "sottocapitoli", "lineaPartenza", "magazzino", "globali", "gmv"]) delete o[k];
   }
   for (const c of o.capitoli) {
-    c.globali ||= {}; c.gmv ||= {}; c.righe ||= [];
-    for (const r of c.righe) r.id ||= db.nuovoId();
+    c.globali ||= {}; c.gmv ||= {}; c.righe ||= []; c.capitolati ||= [];
+    for (const r of c.righe) {
+      r.id ||= db.nuovoId();
+      // offerte di prima: il capitolato era il sottocapitolo della riga
+      if (r.capitolato === undefined) r.capitolato = c.sottocapitoli ? (r.sottocapitolo || "") : "";
+      if (r.capitolato && !c.capitolati.includes(r.capitolato)) c.capitolati.push(r.capitolato);
+    }
   }
   return o;
 }
@@ -557,7 +566,59 @@ function lineeOracle(c) {
   for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r)) { m.set(r.id, l); l += 10; }
   return m;
 }
+function disegnaCapitolati(c) {
+  const conta = (n) => c.righe.filter((r) => r.capitolato === n).length;
+  $("#capitolati").innerHTML = `<span class="muted small" style="font-weight:600">Capitolati per Oracle:</span>` +
+    c.capitolati.map((n, i) => `<span class="chip"><button type="button" class="chip-nome" data-capi="${i}" title="Rinomina">${esc(n)}</button><span class="muted">${conta(n)}</span><button type="button" class="chip-x" data-capx="${i}" title="Elimina il capitolato">✕</button></span>`).join("") +
+    `<input id="nuovo-capitolato" placeholder="nuovo capitolato, es. PIANO TERRA" style="min-width:220px"><button class="btn small" id="aggiungi-capitolato" type="button">+ Aggiungi</button>`;
+  const opz = `<option value="">— capitolato —</option>` + c.capitolati.map((n) => `<option>${esc(n)}</option>`).join("");
+  const prev = $("#bulk-cap").value;
+  $("#bulk-cap").innerHTML = opz;
+  if (c.capitolati.includes(prev)) $("#bulk-cap").value = prev;
+}
+function aggiungiCapitolato(c, nome) {
+  nome = (nome || "").trim();
+  if (!nome) return false;
+  if (!c.capitolati.includes(nome)) c.capitolati.push(nome);
+  return true;
+}
+$("#capitolati").addEventListener("click", suCap((c, e) => {
+  if (e.target.id === "aggiungi-capitolato") {
+    if (!aggiungiCapitolato(c, $("#nuovo-capitolato").value)) return toast("Scrivi il nome del capitolato.");
+    modificata(); return disegnaOfferta();
+  }
+  const x = e.target.closest("[data-capx]");
+  if (x) {
+    const nome = c.capitolati[+x.dataset.capx];
+    c.capitolati.splice(+x.dataset.capx, 1);
+    c.righe.forEach((r) => { if (r.capitolato === nome) r.capitolato = ""; });
+    if (c.capNuove === nome) c.capNuove = "";
+    modificata(); return disegnaOfferta();
+  }
+  const b = e.target.closest("[data-capi]");
+  if (b) {
+    const i = +b.dataset.capi, vecchio = c.capitolati[i];
+    dialogo({
+      titolo: "Rinomina capitolato",
+      html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="r-cap" value="${esc(vecchio)}"></label>`,
+      pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Rinomina", value: "ok", cls: "primary" }],
+      onConferma(v, body) {
+        const nuovo = $("#r-cap", body).value.trim();
+        if (!nuovo) return false;
+        c.capitolati[i] = nuovo;
+        c.righe.forEach((r) => { if (r.capitolato === vecchio) r.capitolato = nuovo; });
+        if (c.capNuove === vecchio) c.capNuove = nuovo;
+        modificata(); disegnaOfferta();
+      },
+    });
+  }
+}));
+$("#capitolati").addEventListener("keydown", (e) => {
+  if (e.target.id === "nuovo-capitolato" && e.key === "Enter") { e.preventDefault(); $("#aggiungi-capitolato").click(); }
+});
+
 function disegnaRighe(c) {
+  disegnaCapitolati(c);
   const tb = $("#righe-offerta");
   const sel = S.sel;
   for (const id of [...sel]) if (!c.righe.some((r) => r.id === id)) sel.delete(id);
@@ -565,17 +626,23 @@ function disegnaRighe(c) {
   $("#bulk-n").textContent = sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
   $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
   if (!c.righe.length) {
-    tb.innerHTML = `<tr><td colspan="19" class="vuoto">Nessuna riga. Vai su “Aggiungi articoli” e scrivi le quantità.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="20" class="vuoto">Nessuna riga. Vai su “Aggiungi articoli” e scrivi le quantità.</td></tr>`;
     return;
   }
   const linee = lineeOracle(c);
   const opz = opzCap(c);
-  let tot = 0;
+  let tot = 0, capPrec = null;
+  const opzioniCap = (v) => `<option value="">—</option>` + c.capitolati.map((n) => `<option ${n === v ? "selected" : ""}>${esc(n)}</option>`).join("");
   tb.innerHTML = c.righe.map((r, i) => {
     const x = calcolaRiga(r, c, opz.ricarichi);
     if (num(r.qta) !== 0) tot += x.totale;
     const att = isAttivita(r);
-    return `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
+    let testa = "";
+    if ((r.capitolato || "") !== capPrec) {
+      capPrec = r.capitolato || "";
+      testa = `<tr class="gruppo"><td colspan="20">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+    }
+    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${esc(codiceOracle(r)) || '<span class="badge bad">senza codice</span>'}</td>
@@ -588,12 +655,13 @@ function disegnaRighe(c) {
       <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td class="mono">${esc(r.gmv)}</td>
+      <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       <td>${isGenerico(r) ? `<span class="nota-auto" title="Articolo generico: in Oracle nota pre-linea = ${esc(r.nOrdine)}, nota post-linea = descrizione">auto: ${esc(r.nOrdine)}</span>`
         : `<input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea">`}</td>
       <td class="nowrap">
         <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button>${isGenerico(r) ? "" : '<button class="icon mini" data-az="note" title="Note pre e post linea">✎</button>'}<button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
       </td></tr>`;
-  }).join("") + `<tr class="sotto"><td colspan="14" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="4"></td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="14" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="5"></td></tr>`;
 }
 const rigaDi = (el) => { const c = capAtt(); const id = el.closest("tr[data-id]")?.dataset.id; return { c, id, r: c?.righe.find((x) => x.id === id) }; };
 $("#righe-offerta").addEventListener("change", (e) => {
@@ -602,6 +670,7 @@ $("#righe-offerta").addEventListener("change", (e) => {
   if (inp.matches("[data-sel]")) { inp.checked ? S.sel.add(id) : S.sel.delete(id); return disegnaOfferta(); }
   const campo = inp.dataset.campo; if (!campo) return;
   if (campo === "notePost") { r.notePost = inp.value.trim(); modificata(); return; }
+  if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
   r[campo] = num(inp.value);
   if (campo === "qta" && !r.qta) c.righe = c.righe.filter((x) => x.id !== id);
   modificata(); ridisegnaOfferta();
@@ -640,13 +709,18 @@ $("#bulk").addEventListener("click", (e) => {
   const c = capAtt(); if (!c) return;
   const scelte = c.righe.filter((r) => S.sel.has(r.id));
   const nota = $("#bulk-nota").value.trim();
+  const capSc = $("#bulk-cap").value;
   const az = b.dataset.bulk;
   if (az === "dup") {
-    // le copie vanno in fondo, nello stesso ordine, con la nuova nota (se scritta)
-    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(), ...(nota && !isGenerico(r) ? { notePost: nota } : {}) }));
+    // le copie vanno in fondo, nello stesso ordine, con il capitolato e la nota scelti (se indicati)
+    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(),
+      ...(capSc ? { capitolato: capSc } : {}), ...(nota && !isGenerico(r) ? { notePost: nota } : {}) }));
     c.righe.push(...copie);
     S.sel = new Set(copie.map((r) => r.id));
-    toast(`Duplicate ${copie.length} righe${nota ? ` con nota “${nota}”` : ""}: le trovi in fondo, già selezionate.`, 4500);
+    toast(`Duplicate ${copie.length} righe${capSc ? ` nel capitolato “${capSc}”` : ""}${nota ? ` con nota “${nota}”` : ""}: le trovi in fondo, già selezionate.`, 4500);
+  } else if (az === "cap") {
+    if (!capSc) return toast("Scegli il capitolato (o crealo nella barra “Capitolati per Oracle”).");
+    scelte.forEach((r) => (r.capitolato = capSc));
   } else if (az === "nota") {
     scelte.filter((r) => !isGenerico(r)).forEach((r) => (r.notePost = nota));
   } else if (az === "su" || az === "giu") {
@@ -690,6 +764,8 @@ function disegnaPicker(c, reset = false) {
   if (S.pickCap !== c.nome || !dbs.includes(S.pickDb)) { S.pickCap = c.nome; S.pickDb = dbs.includes(c.nome) ? c.nome : dbs[0] || ""; reset = true; }
   $("#a-db").innerHTML = dbs.map((d) => `<option value="${esc(d)}" ${d === S.pickDb ? "selected" : ""}>${esc(d)}${d === c.nome ? " (questo capitolo)" : ""}</option>`).join("");
   $("#a-nota").value = c.notaNuove || "";
+  $("#a-cap").innerHTML = `<option value="">— nessuno —</option>` + c.capitolati.map((n) => `<option ${n === c.capNuove ? "selected" : ""}>${esc(n)}</option>`).join("") +
+    `<option value="__nuovo">+ nuovo capitolato…</option>`;
   const nelDb = S.catalogo.filter((a) => a.capitolo === S.pickDb);
   const sotti = [...new Set(nelDb.map((a) => a.sottocapitolo).filter(Boolean))];
   const sottoSel = $("#a-sotto");
@@ -733,6 +809,21 @@ $("#a-sotto").addEventListener("change", () => { const c = capAtt(); if (c) dise
 $("#a-cerca").addEventListener("input", () => { const c = capAtt(); if (c) disegnaPicker(c); });
 $("#a-solo").addEventListener("change", () => { const c = capAtt(); if (c) disegnaPicker(c); });
 $("#a-nota").addEventListener("input", suCap((c, e) => { c.notaNuove = e.target.value; modificata(); }));
+$("#a-cap").addEventListener("change", suCap((c, e) => {
+  if (e.target.value !== "__nuovo") { c.capNuove = e.target.value; modificata(); return; }
+  dialogo({
+    titolo: "Nuovo capitolato",
+    html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="r-cap" placeholder="es. PIANO TERRA"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Crea", value: "ok", cls: "primary" }],
+    onApri: (b) => setTimeout(() => $("#r-cap", b).focus(), 50),
+    onConferma(v, b) {
+      const n = $("#r-cap", b).value.trim();
+      if (!aggiungiCapitolato(c, n)) return false;
+      c.capNuove = n; modificata(); disegnaPicker(c);
+    },
+  });
+  e.target.value = c.capNuove || "";
+}));
 $("#righe-picker").addEventListener("change", (e) => {
   const inp = e.target.closest('input[data-pick="qta"]'); if (!inp) return;
   const c = capAtt(); if (!c) return;
@@ -744,6 +835,7 @@ $("#righe-picker").addEventListener("change", (e) => {
   if (isAttivita(a)) r.giorni = num(tr.querySelector('[data-pick="giorni"]')?.value);
   // nota per le nuove righe: sugli articoli senza una nota già scritta nel database; mai sui generici (le loro note sono automatiche)
   if (c.notaNuove && !r.notePost && !isGenerico(r)) r.notePost = c.notaNuove;
+  r.capitolato = c.capNuove || "";
   c.righe.push(r);
   inp.value = "";
   tr.querySelector("[data-conta]").innerHTML = badgeConta(contaInOfferta(c).get(a.k));
@@ -810,6 +902,8 @@ function disegnaExport(c) {
   if (avvisi.length) av.push(`<div class="avviso bad"><b>${avvisi.length} righe escluse:</b><ul class="riep">${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`);
   const fuori = controlloCartellino(c, clienteOff(), opzCap(c)).filter((x) => x.stato === "fuori");
   if (fuori.length) av.push(`<div class="avviso">Attenzione: ${fuori.map((f) => esc(f.gmv)).join(", ")} fuori cartellino del cliente (vedi “GMV e cartellino”).</div>`);
+  const senzaCap = c.sottocapitoli ? c.righe.filter((r) => num(r.qta) && !r.capitolato).length : 0;
+  if (senzaCap) av.push(`<div class="avviso">“Capitolati in Oracle” è SI ma ${senzaCap} righe non hanno un capitolato: in Oracle avranno “Nome Capitolato” vuoto.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
@@ -841,7 +935,8 @@ $("#copia-righe").addEventListener("click", suCap(async (c) => {
 }));
 
 /* ================= Catalogo ================= */
-$("#c-capitolo").addEventListener("change", () => { S.limiteCat = 300; disegnaCatalogo(); });
+$("#c-capitolo").addEventListener("change", () => { S.limiteCat = 300; $("#c-sotto").value = ""; disegnaCatalogo(); });
+$("#c-sotto").addEventListener("change", () => { S.limiteCat = 300; disegnaCatalogo(); });
 $("#c-cerca").addEventListener("input", () => { S.limiteCat = 300; disegnaCatalogo(); });
 $("#c-altri").addEventListener("click", () => { S.limiteCat += 300; disegnaCatalogo(); });
 
@@ -851,8 +946,13 @@ function disegnaCatalogo() {
   sel.innerHTML = `<option value="">Tutti i capitoli</option>` +
     S.capitoli.map((c) => `<option ${c.nome === prev ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
   const cap = sel.value;
+  const ss = $("#c-sotto"), prevS = ss.value;
+  const sotti = cap ? [...new Set(S.catalogo.filter((a) => a.capitolo === cap).map((a) => a.sottocapitolo).filter(Boolean))] : [];
+  ss.innerHTML = `<option value="">Tutti i sottocapitoli</option>` + sotti.map((x) => `<option ${x === prevS ? "selected" : ""}>${esc(x)}</option>`).join("");
+  ss.hidden = !cap;
+  const sotto = ss.value;
   const q = $("#c-cerca").value.trim().toLowerCase();
-  const lista = S.catalogo.filter((a) => (!cap || a.capitolo === cap) &&
+  const lista = S.catalogo.filter((a) => (!cap || a.capitolo === cap) && (!sotto || a.sottocapitolo === sotto) &&
     (!q || `${codiceOracle(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
   const ord = ordinaRighe(lista, ordineCap());
   const vis = ord.slice(0, S.limiteCat);
@@ -908,14 +1008,14 @@ function campoNum(id, label, valore, pct = false) {
 function modificaArticolo(a) {
   const nuovo = !a;
   const capDef = $("#c-capitolo").value || S.capitoli[0]?.nome || "";
-  a = a || { capitolo: capDef, precodice: "", codice: "", nOrdine: "", descrizione: "", um: "n.", listinoAcquisto: 0, sc3: 0, sc4: 0, sc5: 0, aum1: 0, riparam: 0, giorni: 0, gmv: "", dataAgg: oggiIso() };
+  a = a || { capitolo: capDef, sottocapitolo: $("#c-sotto").value || "", precodice: "", codice: "", nOrdine: "", descrizione: "", um: "n.", listinoAcquisto: 0, sc3: 0, sc4: 0, sc5: 0, aum1: 0, riparam: 0, giorni: 0, gmv: "", dataAgg: oggiIso() };
   const auto = !num(a.listino) || Math.abs(num(a.listino) - listinoCalcolato(a)) < 0.005;
   const sotti = [...new Set(S.catalogo.filter((x) => x.capitolo === a.capitolo).map((x) => x.sottocapitolo).filter(Boolean))];
   dialogo({
     titolo: nuovo ? "Nuovo articolo" : `${codiceOracle(a)} · ${a.nOrdine}`,
     html: `<div class="grid-set">
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
-      <label class="f wide">Sottocapitolo<input id="m-sotto" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
+      <label class="f wide">Sottocapitolo del database (scegline uno o scrivine uno nuovo)<input id="m-sotto" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
       <label class="f">Precodice<input id="m-pre" value="${esc(a.precodice)}"></label>
       <label class="f">Codice<input id="m-cod" value="${esc(a.codice)}"></label>
       <label class="f wide">N° di ordinazione<input id="m-ord" value="${esc(a.nOrdine)}"></label>
@@ -1126,7 +1226,9 @@ async function eseguiImport() {
       o.nome = `Offerta da ${r.nomeFile}`;
       for (const cap of [...new Set(r.conQuantita.map((a) => a.capitolo))]) {
         const c = nuovoCapitolo(cap);
-        c.righe = r.conQuantita.filter((a) => a.capitolo === cap).map((a) => ({ ...rigaDaArticolo(a), id: db.nuovoId(), qta: a._qta }));
+        // come nell'Excel: il capitolato è la descrizione della riga di testata sopra le righe (es. "OFFERTA ANTINTRUSIONE")
+        c.righe = r.conQuantita.filter((a) => a.capitolo === cap).map((a) => ({ ...rigaDaArticolo(a), id: db.nuovoId(), qta: a._qta, capitolato: a.sottocapitolo || "" }));
+        c.capitolati = [...new Set(c.righe.map((x) => x.capitolato).filter(Boolean))];
         o.capitoli.push(c);
       }
       ops.push({ tipo: "set", coll: COLL.off, id: o.id, data: o });
