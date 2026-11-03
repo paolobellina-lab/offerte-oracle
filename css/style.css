@@ -552,3 +552,9 @@ select.add-cap.sb-testo { margin: 2px 4px 4px; width: calc(100% - 8px); }
 @media (max-width: 700px) { .off-layout { gap: 8px; } }
 @media print { .sidebar { display: none !important; } }
 .sidebar.aperta .sb-testo[hidden], .sidebar.aperta select.sb-testo[hidden] { display: none !important; }
+
+/* Pagina a tutta larghezza (uso su PC) */
+main { max-width: none; padding: 14px 20px 40px 14px; }
+.topbar-in { max-width: none; padding-left: 20px; padding-right: 20px; }
+.tbl-wrap { max-height: calc(100vh - 220px); }
+.picker-wrap { max-height: 46vh; }
