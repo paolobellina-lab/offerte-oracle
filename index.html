@@ -4,12 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Offerte Oracle</title>
-<meta name="theme-color" content="#1f5f8b">
+<meta name="theme-color" content="#ffffff">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icona-192.png">
 <link rel="apple-touch-icon" href="icons/icona-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="css/style.css">
+<script>
+  // tema: chiaro di partenza; si può passare allo scuro con il pulsante ◐ (scelta ricordata su questo dispositivo)
+  try { document.documentElement.dataset.theme = localStorage.getItem("tema") || "chiaro"; }
+  catch { document.documentElement.dataset.theme = "chiaro"; }
+</script>
 </head>
 <body>
 <div id="banner-prova" class="banner" hidden>
@@ -37,6 +42,7 @@
         <button data-vista="importa">Importa e aggiorna</button>
       </nav>
       <span class="spacer"></span>
+      <button class="btn small" id="tema" title="Tema chiaro / scuro">Tema</button>
       <span class="utente" id="utente"></span>
       <button class="btn small" id="esci">Esci</button>
     </div>

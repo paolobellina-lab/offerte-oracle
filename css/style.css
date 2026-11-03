@@ -390,3 +390,93 @@ tbody input:not([type=checkbox]), tbody select {
 }
 tbody input.qta { font-weight: 800; }
 .o-titolo { font-size: 1rem; margin-left: 4px; }
+
+
+/* ===================== Tema calmo (versione 3): sfondo neutro, intestazioni discrete, dati in evidenza ===================== */
+:root[data-theme="chiaro"] {
+  color-scheme: light;
+  --bg: #eef0f3; --card: #ffffff; --card-2: #f6f7f9; --field: #ffffff; --field-line: #c9d0d8;
+  --ink: #15191e; --muted: #6b7480; --label: #6b7480; --line: #e3e6ea; --line-strong: #d3d8de;
+  --accent: #2563a6; --accent-dark: #1d4f86; --accent-soft: #e8f0f9; --accent-ink: #ffffff;
+  --row: #ffffff; --row-alt: #f8f9fb; --row-line: #e8ebef; --th-bg: transparent; --th-ink: #7a838e; --grp-bg: #f1f5fa;
+  --ok: #1f7a46; --ok-soft: #e3f3ea; --warn: #8a5a00; --warn-soft: #fbf1dc; --bad: #b3261e; --bad-soft: #fbe6e4;
+  --shadow: 0 1px 2px rgba(20, 30, 40, .06), 0 2px 8px rgba(20, 30, 40, .04);
+  --shadow-lift: 0 2px 6px rgba(20, 30, 40, .10);
+}
+:root[data-theme="scuro"] {
+  color-scheme: dark;
+  --bg: #1b1d21; --card: #25282d; --card-2: #2c3036; --field: #1f2226; --field-line: #4a5058;
+  --ink: #eceef1; --muted: #9aa1aa; --label: #9aa1aa; --line: #363a41; --line-strong: #434851;
+  --accent: #6aa8e8; --accent-dark: #5596d8; --accent-soft: #2b3a4b; --accent-ink: #0d1620;
+  --row: #25282d; --row-alt: #2a2e34; --row-line: #363a41; --th-bg: transparent; --th-ink: #8d949d; --grp-bg: #2d3540;
+  --ok: #7fd1a3; --ok-soft: #22382c; --warn: #e6bb63; --warn-soft: #3b321f; --bad: #ff9a90; --bad-soft: #402524;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35); --shadow-lift: 0 2px 8px rgba(0, 0, 0, .45);
+}
+body { background: var(--bg); color: var(--ink); }
+.topbar { background: var(--card); box-shadow: none; border-bottom: 1px solid var(--line); }
+
+/* riquadri sobri */
+.card, .cap-testa, .tbl-wrap, .captabs-in button, .subtabs button, .kpi, .mini-kpi { box-shadow: var(--shadow); }
+.card { border: 1px solid var(--line); }
+.titolo-sez { border-left: 3px solid var(--accent); font-weight: 700; font-size: .98rem; }
+
+/* etichette discrete */
+label.f, .muted.small[style*="font-weight:600"] {
+  color: var(--label) !important; font-weight: 600 !important; font-size: .74rem !important; letter-spacing: .02em;
+}
+
+/* campi: bianchi con bordo chiaro, testo ben leggibile */
+input:not([type=checkbox]):not([type=radio]), select, textarea {
+  background: var(--field); border: 1px solid var(--field-line); color: var(--ink); font-weight: 600;
+}
+
+/* tabelle: intestazioni piccole e grigie, i dati sono la cosa importante */
+.tbl-wrap { background: var(--row); border: 1px solid var(--line); }
+th {
+  background: var(--card) !important; color: var(--th-ink) !important; font-weight: 600 !important; font-size: .7rem;
+  text-transform: uppercase; letter-spacing: .04em; border-right: 0 !important; border-bottom: 1px solid var(--line-strong) !important;
+  padding-top: 9px; padding-bottom: 7px;
+}
+th input[type=checkbox] { accent-color: var(--accent); }
+tbody td { background: var(--row); border-bottom: 1px solid var(--row-line); color: var(--ink); font-size: .9rem; }
+tbody tr:nth-child(even) td { background: var(--row-alt); }
+tbody tr:hover td { background: var(--accent-soft) !important; }
+td.mono { font-weight: 600; color: var(--ink); }
+td.num { font-size: .92rem; }
+td.desc b { font-size: .93rem; }
+td.desc .d { color: var(--muted); font-size: .82rem; }
+tr.gruppo td {
+  background: var(--grp-bg) !important; color: var(--ink) !important; border-left: 3px solid var(--accent);
+  font-weight: 700; font-size: .78rem; letter-spacing: .03em; text-transform: uppercase;
+}
+tr.sotto td {
+  background: var(--card-2) !important; color: var(--muted) !important; border-left: 3px solid var(--line-strong);
+  font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em;
+}
+tr.sel td { background: color-mix(in srgb, var(--accent) 14%, var(--row)) !important; }
+tbody input:not([type=checkbox]), tbody select { background: var(--field); box-shadow: none; }
+
+/* numeri principali */
+.kpi { background: var(--card-2); border: 1px solid var(--line); }
+.kpi span:first-child { color: var(--label); font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .78rem; }
+.kpi-main { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.kpi-main span:first-child { color: var(--label) !important; }
+.kpi-main .big { color: var(--accent) !important; }
+.mini-kpi span { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: .72rem; }
+.cap-nome { color: var(--ink); }
+
+/* schede: attivo = pieno, gli altri tranquilli */
+.captabs-in button { border: 1px solid var(--line); background: var(--card); }
+.captabs-in button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); transform: none; }
+.subtabs button { border: 1px solid var(--line); background: var(--card); font-weight: 700; }
+.subtabs button.on { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); }
+.subtabs button.on .conta { color: var(--accent-ink); opacity: .85; }
+.seg { background: var(--card-2); box-shadow: none; }
+.seg button.on { box-shadow: none; }
+.bulk { border: 1px solid var(--accent); background: var(--accent-soft); box-shadow: var(--shadow); }
+.avviso { border-left-width: 3px; font-weight: 500; }
+
+/* pulsante del tema */
+#tema { min-width: 36px; justify-content: center; }
+label.f, .muted.small[style*="font-weight:600"] { text-transform: none !important; font-size: .78rem !important; }
+#tema { font-size: 1rem; }

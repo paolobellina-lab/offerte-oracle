@@ -134,6 +134,11 @@ $("#google-login").addEventListener("click", async () => {
   try { await db.accediGoogle(); } catch (x) { $("#login .err").textContent = "Accesso non riuscito: " + (x.message || x); }
 });
 $("#esci").addEventListener("click", () => db.esci());
+$("#tema").addEventListener("click", () => {
+  const t = document.documentElement.dataset.theme === "scuro" ? "chiaro" : "scuro";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("tema", t); } catch {}
+});
 
 function collega() {
   const onErr = (e) => errore(e, "Errore di lettura");
