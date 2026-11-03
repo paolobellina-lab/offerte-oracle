@@ -302,6 +302,7 @@ function normalizza(o) {
       if (r.capitolato === undefined) r.capitolato = c.sottocapitoli ? (r.sottocapitolo || "") : "";
       if (r.capitolato && !c.capitolati.includes(r.capitolato)) c.capitolati.push(r.capitolato);
     }
+    raggruppa(c);
   }
   return o;
 }
@@ -380,7 +381,16 @@ function apriOfferta(id, daRemoto = false, dati = null) {
 }
 
 let tSalva;
+/* Le righe di uno stesso capitolato stanno sempre in fila sotto il suo titolo.
+   Ordine dei blocchi = ordine dei capitolati (barra "Capitolati per Oracle"); le righe senza capitolato in fondo.
+   Dentro ogni blocco resta l'ordine scelto. */
+function raggruppa(c) {
+  for (const r of c.righe) if (r.capitolato && !c.capitolati.includes(r.capitolato)) c.capitolati.push(r.capitolato);
+  const pos = (r) => (r.capitolato ? c.capitolati.indexOf(r.capitolato) : c.capitolati.length);
+  c.righe = c.righe.map((r, i) => ({ r, i })).sort((a, b) => pos(a.r) - pos(b.r) || a.i - b.i).map((x) => x.r);
+}
 function modificata() {
+  for (const c of S.off?.capitoli || []) raggruppa(c);
   S.dirty = true;
   statoSalvataggio("Modifiche non salvate…");
   clearTimeout(tSalva);
@@ -653,9 +663,17 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const x = e.target.closest("[data-xlsx-cap]");
   if (x) scaricaXlsx(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
 });
-$("#scarica-tutti").addEventListener("click", async () => {
+$("#scarica-tutti").addEventListener("click", () => {
   const caps = S.off.capitoli.filter((c) => calcolaOfferta(c).righe.length);
-  for (const c of caps) { scaricaXlsx(c); await new Promise((r) => setTimeout(r, 600)); }
+  const vai = async () => { for (const c of caps) { scaricaXlsx(c); await new Promise((r) => setTimeout(r, 600)); } };
+  const senza = caps.filter((c) => righeSenzaCapitolato(c));
+  if (!senza.length) return vai();
+  dialogo({
+    titolo: "Non tutte le righe hanno un capitolato",
+    html: `<p>Righe senza capitolato in: ${senza.map((c) => `<b>${esc(c.nome)}</b> (${righeSenzaCapitolato(c)})`).join(", ")}.</p><p>Vuoi scaricare comunque?</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Scarica comunque", value: "ok", cls: "primary" }],
+    onConferma: () => { vai(); },
+  });
 });
 
 /* --- Righe del capitolo --- */
@@ -669,7 +687,7 @@ function lineeOracle(c) {
 function disegnaCapitolati(c) {
   const conta = (n) => c.righe.filter((r) => r.capitolato === n).length;
   $("#capitolati").innerHTML = `<span class="muted small" style="font-weight:600">Capitolati per Oracle:</span>` +
-    c.capitolati.map((n, i) => `<span class="chip"><button type="button" class="chip-nome" data-capi="${i}" title="Rinomina">${esc(n)}</button><span class="muted">${conta(n)}</span><button type="button" class="chip-x" data-capx="${i}" title="Elimina il capitolato">✕</button></span>`).join("") +
+    c.capitolati.map((n, i) => `<span class="chip"><button type="button" class="chip-x" data-capsu="${i}" title="Sposta prima" ${i === 0 ? "disabled" : ""}>‹</button><button type="button" class="chip-nome" data-capi="${i}" title="Rinomina">${esc(n)}</button><span class="muted">${conta(n)}</span><button type="button" class="chip-x" data-capgiu="${i}" title="Sposta dopo" ${i === c.capitolati.length - 1 ? "disabled" : ""}>›</button><button type="button" class="chip-x" data-capx="${i}" title="Elimina il capitolato">✕</button></span>`).join("") +
     `<input id="nuovo-capitolato" placeholder="nuovo capitolato, es. PIANO TERRA" style="min-width:220px"><button class="btn small" id="aggiungi-capitolato" type="button">+ Aggiungi</button>`;
   const opz = `<option value="">— capitolato —</option>` + c.capitolati.map((n) => `<option>${esc(n)}</option>`).join("");
   const prev = $("#bulk-cap").value;
@@ -685,6 +703,13 @@ function aggiungiCapitolato(c, nome) {
 $("#capitolati").addEventListener("click", suCap((c, e) => {
   if (e.target.id === "aggiungi-capitolato") {
     if (!aggiungiCapitolato(c, $("#nuovo-capitolato").value)) return toast("Scrivi il nome del capitolato.");
+    modificata(); return disegnaOfferta();
+  }
+  const su = e.target.closest("[data-capsu]"), giu = e.target.closest("[data-capgiu]");
+  if (su || giu) {
+    const i = +(su || giu).dataset[su ? "capsu" : "capgiu"], j = su ? i - 1 : i + 1;
+    if (j < 0 || j >= c.capitolati.length) return;
+    [c.capitolati[i], c.capitolati[j]] = [c.capitolati[j], c.capitolati[i]];
     modificata(); return disegnaOfferta();
   }
   const x = e.target.closest("[data-capx]");
@@ -1145,8 +1170,8 @@ function disegnaExport(c) {
   const elenco = (l) => `<details><summary>vedi</summary><ul class="riep">${l.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>`;
   if (daAgg.length) av.push(`<div class="avviso bad"><b>${daAgg.length} righe con prezzo da aggiornare.</b> ${elenco(daAgg)}</div>`);
   if (cambi.length) av.push(`<div class="avviso"><b>${cambi.length} righe con prezzo in scadenza o cambio listino entro un mese.</b> ${elenco(cambi)}</div>`);
-  const senzaCap = c.sottocapitoli ? c.righe.filter((r) => num(r.qta) && !r.capitolato && !esclusoDaExport(r, c)).length : 0;
-  if (senzaCap) av.push(`<div class="avviso">“Capitolati in Oracle” è SI ma ${senzaCap} righe non hanno un capitolato: in Oracle avranno “Nome Capitolato” vuoto.</div>`);
+  const senzaCap = righeSenzaCapitolato(c);
+  if (senzaCap) av.push(`<div class="avviso bad"><b>Non tutte le righe hanno un capitolato:</b> ${senzaCap} ${senzaCap === 1 ? "riga è" : "righe sono"} senza capitolato${c.sottocapitoli ? " e in Oracle avranno “Nome Capitolato” vuoto" : ""}.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
@@ -1171,22 +1196,40 @@ $("#export-capitolati").addEventListener("click", suCap((c, e) => {
   if (e.target.id !== "export-tutti") return;
   c.esclusiExport = []; modificata(); disegnaOfferta();
 }));
+/* righe che vanno in Oracle senza capitolato, quando nel capitolo ci sono capitolati */
+const righeSenzaCapitolato = (c) => (c.capitolati.length || c.sottocapitoli)
+  ? c.righe.filter((r) => num(r.qta) && !r.capitolato && !esclusoDaExport(r, c)).length : 0;
+/* prima di scaricare: avviso se non tutte le righe hanno un capitolato */
+function controllaCapitolati(c, procedi) {
+  const n = righeSenzaCapitolato(c);
+  if (!n) return procedi();
+  dialogo({
+    titolo: "Non tutte le righe hanno un capitolato",
+    html: `<p>Nel capitolo <b>${esc(c.nome)}</b> ${n === 1 ? "c'è 1 riga" : `ci sono ${n} righe`} senza capitolato.
+      ${c.sottocapitoli ? "In Oracle avranno la colonna “Nome Capitolato” vuota." : ""}</p><p>Vuoi scaricare comunque?</p>`,
+    pulsanti: [{ label: "Torna alle righe", value: "righe" }, { label: "Scarica comunque", value: "ok", cls: "primary" }],
+    onConferma(v) {
+      if (v === "righe") { S.sub = "righe"; disegnaOfferta(true); return; }
+      procedi();
+    },
+  });
+}
 function scaricaXlsx(c) {
   if (!c) return;
   const { righe } = datiOracle(c);
   scarica(scriviExcel([COLONNE_ORACLE, ...righe], "Sheet1"), nomeFile(c, "xlsx"));
 }
-$("#scarica-xlsx").addEventListener("click", suCap((c) => scaricaXlsx(c)));
+$("#scarica-xlsx").addEventListener("click", suCap((c) => controllaCapitolati(c, () => scaricaXlsx(c))));
 const celleTesto = (sep) => (v) => {
   const s = typeof v === "number" ? String(v).replace(".", ",") : String(v ?? "");
   return sep === ";" && /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s.replace(/[\t\n\r]+/g, " ");
 };
-$("#scarica-csv").addEventListener("click", suCap((c) => {
+$("#scarica-csv").addEventListener("click", suCap((c) => controllaCapitolati(c, () => {
   const { righe } = datiOracle(c);
   const f = celleTesto(";");
   const csv = [COLONNE_ORACLE, ...righe].map((r) => r.map(f).join(";")).join("\r\n");
   scarica(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }), nomeFile(c, "csv"));
-}));
+})));
 $("#copia-righe").addEventListener("click", suCap(async (c) => {
   const { righe } = datiOracle(c);
   const f = celleTesto("\t");
