@@ -585,3 +585,5 @@ tbody tr:not(.testa-gruppo):focus-within td {
 tbody tr:not(.testa-gruppo):focus-within td:first-child { box-shadow: inset 4px 0 0 var(--riga-attiva-bordo); }
 tbody tr:not(.testa-gruppo):focus-within td:last-child { box-shadow: inset -4px 0 0 var(--riga-attiva-bordo); }
 .tg:focus { outline: 2px solid #fff; outline-offset: 1px; }
+/* Menu compresso: niente voci generali (Offerte, Catalogo, Clienti, Importa, Tutte le offerte); si vedono da aperto */
+.sidebar:not(.aperta) #tabs, .sidebar:not(.aperta) #torna-offerte { display: none !important; }
