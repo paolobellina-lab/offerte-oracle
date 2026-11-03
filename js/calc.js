@@ -145,14 +145,17 @@ export function righeOracle(off, opz = {}) {
   const start = num(off.lineaPartenza) || 10;
   const out = [], avvisi = [];
   let linea = start;
-  const perc = (v) => (v === 0 || daExcel ? "" : arrot(v * 100));
   for (const { riga: r, c } of righe) {
     const codice = codiceOracle(r);
     if (!codice) {
       avvisi.push(`Riga senza codice articolo esclusa: ${r.nOrdine || r.descrizione || "(senza descrizione)"} (${r.capitolo})`);
       continue;
     }
-    const prezzoNetto = (codice === "PITATT.TEC" || codice === "P000ARTICOLO_GEN" || daExcel) ? arrot(c.unitario) : "";
+    // Prezzo netto = unitario finale del tipo di offerta scelto (acquisto, listino, vendita…).
+    // Quando c'è il prezzo netto Oracle ignora sconti e aumenti, quindi le percentuali restano vuote.
+    const conNetto = codice === "PITATT.TEC" || codice === "P000ARTICOLO_GEN" || daExcel;
+    const prezzoNetto = conNetto ? arrot(c.unitario) : "";
+    const perc = (v) => (v === 0 || conNetto ? "" : arrot(v * 100));
     out.push([
       linea, codice, off.magazzino || "BG", arrot(c.qta),
       off.sottocapitoli ? (r.capitolato || "") : "", // capitolato dell'offerta, non il sottocapitolo del database
