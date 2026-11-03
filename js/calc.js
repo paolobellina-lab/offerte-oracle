@@ -34,11 +34,15 @@ const arrot = (n, dec = 6) => {
 
 export const isAttivita = (r) => String(r.codice || "").trim().toUpperCase() === "ATT.TEC";
 export const isListino = (tipo) => tipo === "LISTINO" || tipo === "LISTINO COMPUTO";
-export const codiceOracle = (r) => `${r.precodice || ""}${r.codice || ""}`.trim();
+/* Codice dell'articolo come scritto nel database (precodice + codice). */
+export const codiceArticolo = (r) => `${r.precodice || ""}${r.codice || ""}`.trim();
+export const CODICE_GENERICO = "P000ARTICOLO_GEN";
+/* Codice che va in Oracle: per gli articoli trattati come generici è sempre P000ARTICOLO_GEN. */
+export const codiceOracle = (r) => (isGenerico(r) ? CODICE_GENERICO : codiceArticolo(r));
 /* Articoli generici (P000 ARTICOLO_GEN): in Oracle il codice è sempre lo stesso, quindi l'articolo vero
    va nelle note: nota pre-linea = numero di ordinazione, nota post-linea = descrizione. Per tutti gli altri
    articoli le note sono testo libero scritto a mano. */
-export const isGenerico = (r) => String(r.codice || "").trim().toUpperCase() === "ARTICOLO_GEN";
+export const isGenerico = (r) => !!r.generico || String(r.codice || "").trim().toUpperCase() === "ARTICOLO_GEN";
 export const notePreRiga = (r) => (isGenerico(r) ? (r.nOrdine || "") : (r.notePre || ""));
 export const notePostRiga = (r) => (isGenerico(r) ? (r.descrizione || "") : (r.notePost || ""));
 
@@ -162,7 +166,7 @@ export function righeOracle(off, opz = {}) {
     }
     // Prezzo netto = unitario finale del tipo di offerta scelto (acquisto, listino, vendita…).
     // Quando c'è il prezzo netto Oracle ignora sconti e aumenti, quindi le percentuali restano vuote.
-    const conNetto = codice === "PITATT.TEC" || codice === "P000ARTICOLO_GEN" || daExcel;
+    const conNetto = codice === "PITATT.TEC" || isGenerico(r) || daExcel;
     const prezzoNetto = conNetto ? arrot(c.unitario) : "";
     const perc = (v) => (v === 0 || conNetto ? "" : arrot(v * 100));
     out.push([
@@ -277,4 +281,35 @@ export function ricaricoPerTarget(cap, target, opz = {}) {
   if (!variabile) return null;
   const ric = (num(target) - fisso) / variabile - 1;
   return Number.isFinite(ric) ? ric : null;
+}
+
+/* Stato del prezzo di un articolo, in base alla data di aggiornamento e alla regola del suo precodice.
+   regole = { PRECODICE: { tipo: "richiesta", validitaMesi } | { tipo: "listino", cambioListino: "AAAA-MM-GG" } }
+   Restituisce { livello: "fresco" | "medio" | "vecchio" | "", testo }. */
+export function statoPrezzo(a, regole = {}, oggi = new Date()) {
+  const regola = regole[String(a.precodice || "").trim().toUpperCase()];
+  const agg = a.dataAgg ? new Date(a.dataAgg) : null;
+  const dataTxt = agg ? agg.toLocaleDateString("it-IT") : "";
+  const mesiDa = (d) => (oggi - d) / (1000 * 60 * 60 * 24 * 30.44);
+  if (regola?.tipo === "listino" && regola.cambioListino) {
+    const cambio = new Date(regola.cambioListino);
+    const cambioTxt = cambio.toLocaleDateString("it-IT");
+    if (cambio <= oggi) {
+      if (!agg || agg < cambio) return { livello: "vecchio", testo: `Listino cambiato il ${cambioTxt}: prezzo da aggiornare${dataTxt ? ` (aggiornato il ${dataTxt})` : ""}` };
+      return { livello: "fresco", testo: `Prezzo aggiornato il ${dataTxt}, dopo il cambio listino del ${cambioTxt}` };
+    }
+    const giorni = (cambio - oggi) / 86400000;
+    if (giorni <= 31) return { livello: "medio", testo: `Cambio listino previsto il ${cambioTxt}: possibile aumento` };
+    return { livello: "fresco", testo: `Listino valido; prossimo cambio il ${cambioTxt}${dataTxt ? ` · aggiornato il ${dataTxt}` : ""}` };
+  }
+  if (!agg || Number.isNaN(agg.getTime())) return { livello: regola ? "vecchio" : "", testo: "Data di aggiornamento non indicata" };
+  const mesi = mesiDa(agg);
+  if (regola?.tipo === "richiesta" && num(regola.validitaMesi) > 0) {
+    const v = num(regola.validitaMesi);
+    if (mesi >= v) return { livello: "vecchio", testo: `Prezzo a richiesta scaduto: aggiornato il ${dataTxt}, validità ${v} mesi` };
+    if (mesi >= v - 1) return { livello: "medio", testo: `Prezzo a richiesta in scadenza: aggiornato il ${dataTxt}, validità ${v} mesi` };
+    return { livello: "fresco", testo: `Prezzo aggiornato il ${dataTxt}, validità ${v} mesi` };
+  }
+  // senza regola: legenda dell'Excel (meno di 1 mese, 1–2 mesi, oltre 2 mesi)
+  return { livello: mesi < 1 ? "fresco" : mesi <= 2 ? "medio" : "vecchio", testo: `Prezzo aggiornato il ${dataTxt}` };
 }

@@ -48,6 +48,7 @@ function leggiCatalogo(nome, righe) {
       pos: testo(r[C.E]),
       precodice,
       codice: cod,
+      generico: cod.toUpperCase() === "ARTICOLO_GEN",
       nOrdine: nOrd,
       descrizione: testo(r[C.H]),
       um: testo(r[C.I]),

@@ -3,6 +3,7 @@ import {
   TIPI, FONTI, CAMPI_SCONTO, ETICHETTE, COLONNE_ORACLE, num, isAttivita, codiceOracle, prezzoListino,
   listinoCalcolato, prezzoBase, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
   riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
+  codiceArticolo, statoPrezzo, CODICE_GENERICO,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
@@ -13,7 +14,7 @@ const S = {
   capitoli: [], gmv: [], clienti: [], chunks: [], catalogo: [], perK: new Map(), offerte: [],
   off: null, vista: "offerte", sub: "righe", dirty: false, salvando: false, utente: null,
   limiteCat: 300, limitePick: 300, pickCap: "", pickDb: "", importato: null, aggOracle: null,
-  capAtt: "", sel: new Set(),
+  capAtt: "", sel: new Set(), precodici: [],
 };
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
@@ -38,6 +39,14 @@ const ricarichi = () => Object.fromEntries(S.capitoli.map((c) => [c.nome, num(c.
 const ordineCap = () => S.capitoli.map((c) => c.nome);
 const clienteOff = () => S.clienti.find((c) => c.id === S.off?.cliente) || null;
 const fornitore = (g) => S.gmv.find((x) => x.codice === g)?.fornitore || "";
+/* Regole di scadenza dei prezzi per precodice */
+const regole = () => Object.fromEntries(S.precodici.filter((p) => p.tipo).map((p) => [String(p.precodice).toUpperCase(), p]));
+const stato = (a) => statoPrezzo(a, regole());
+const pallino = (a) => { const st = stato(a); return `<span class="dot ${st.livello}" title="${esc(st.testo)}"></span>`; };
+/* Codice da mostrare: quello del database; per i generici anche quello che va in Oracle */
+const codiceVis = (a) => isGenerico(a)
+  ? `<span title="In Oracle: ${CODICE_GENERICO}">${esc(codiceArticolo(a))}</span> <span class="badge warn gen" title="Trattato come articolo generico: in Oracle ${CODICE_GENERICO}, prezzo netto, n° ordinazione e descrizione nelle note">GEN</span>`
+  : esc(codiceArticolo(a));
 
 let toastT;
 function toast(msg, ms = 3500) {
@@ -64,7 +73,8 @@ function scarica(blob, nome) {
 
 /* ================= Finestra di dialogo ================= */
 let dlgHandler = null;
-function dialogo({ titolo, html, pulsanti = [{ label: "Chiudi", value: "annulla" }], onApri, onConferma }) {
+function dialogo({ titolo, html, pulsanti = [{ label: "Chiudi", value: "annulla" }], onApri, onConferma, largo = false }) {
+  $("#dlg").classList.toggle("largo", largo);
   $("#dlg-titolo").textContent = titolo;
   $("#dlg-body").innerHTML = html;
   $("#dlg-foot").innerHTML = pulsanti.map((p) =>
@@ -130,6 +140,7 @@ function collega() {
   ascoltatori.push(db.ascolta(COLL.cfg, (docs) => {
     const cap = docs.find((d) => d.id === "capitoli");
     const gmv = docs.find((d) => d.id === "gmv");
+    S.precodici = docs.find((d) => d.id === "precodici")?.lista || [];
     S.capitoli = (cap?.lista || []).slice().sort((a, b) => num(a.ordine) - num(b.ordine));
     S.gmv = gmv?.lista || [];
     ridisegna();
@@ -647,14 +658,14 @@ function disegnaRighe(c) {
     return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
-      <td class="mono nowrap">${esc(codiceOracle(r)) || '<span class="badge bad">senza codice</span>'}</td>
+      <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
       <td class="num"><input class="qta" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}">${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
-      <td class="num">${euro(x.base)}</td>
+      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo di acquisto: se lo cambi si aggiorna anche nel database con la data di oggi"><div class="muted small">acquisto</div>` : euro(x.base)}</td>
       <td class="num">${pctTxt(x.sc3)}</td><td class="num">${pctTxt(x.sc4)}</td><td class="num">${pctTxt(x.sc5)}</td>
       <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
@@ -667,6 +678,19 @@ function disegnaRighe(c) {
       </td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="14" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="5"></td></tr>`;
 }
+/* Stato del prezzo di una riga: si guarda l'articolo nel database (data aggiornata), altrimenti la copia nella riga. */
+function statoRiga(r) {
+  const st = stato(S.perK.get(r.k) || r);
+  if (st.livello === "vecchio" || st.livello === "medio") return `<span class="dot ${st.livello}" title="${esc(st.testo)}"></span>`;
+  return "";
+}
+/* Nuovo prezzo di un articolo: aggiorna il database con la data di oggi (e il listino se è calcolato). */
+function nuovoPrezzoArticolo(art, prezzo) {
+  const auto = !num(art.listino) || Math.abs(num(art.listino) - listinoCalcolato(art)) < 0.005;
+  art.listinoAcquisto = prezzo;
+  if (auto) art.listino = listinoCalcolato(art);
+  art.dataAgg = oggiIso();
+}
 const rigaDi = (el) => { const c = capAtt(); const id = el.closest("tr[data-id]")?.dataset.id; return { c, id, r: c?.righe.find((x) => x.id === id) }; };
 $("#righe-offerta").addEventListener("change", (e) => {
   const inp = e.target;
@@ -676,6 +700,18 @@ $("#righe-offerta").addEventListener("change", (e) => {
   if (campo === "notePost") { r.notePost = inp.value.trim(); modificata(); return; }
   if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
   if (campo === "aGiornate") { r.aGiornate = inp.checked; modificata(); return ridisegnaOfferta(); }
+  if (campo === "prezzoGen") {
+    const p = num(inp.value);
+    if (!p || Math.abs(p - num(r.listinoAcquisto)) < 0.0001) return ridisegnaOfferta();
+    nuovoPrezzoArticolo(r, p);
+    const art = S.perK.get(r.k);
+    if (art) {
+      nuovoPrezzoArticolo(art, p);
+      salvaCapitolo(art.capitolo).then(() => toast(`Prezzo aggiornato anche nel database (${art.capitolo}) con la data di oggi.`))
+        .catch((x) => errore(x, "Aggiornamento del database non riuscito"));
+    }
+    modificata(); return ridisegnaOfferta();
+  }
   r[campo] = num(inp.value);
   if (campo === "qta" && !r.qta) c.righe = c.righe.filter((x) => x.id !== id);
   modificata(); ridisegnaOfferta();
@@ -694,7 +730,7 @@ $("#righe-offerta").addEventListener("click", (e) => {
 });
 function modificaNoteRiga(r) {
   dialogo({
-    titolo: `Note · ${codiceOracle(r)} ${r.nOrdine}`,
+    titolo: `Note · ${codiceArticolo(r)} ${r.nOrdine}`,
     html: `<label class="f">Note pre-linea<textarea id="n-pre" rows="4">${esc(r.notePre)}</textarea></label>
       <label class="f" style="margin-top:10px">Note post-linea<textarea id="n-post" rows="4">${esc(r.notePost)}</textarea></label>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
@@ -741,7 +777,7 @@ $("#aggiorna-da-catalogo").addEventListener("click", () => {
   const c = capAtt(); if (!c) return;
   let n = 0, mancanti = 0;
   c.righe = c.righe.map((r) => {
-    const a = S.perK.get(r.k) || S.catalogo.find((x) => x.capitolo === r.capitolo && codiceOracle(x) === codiceOracle(r) && x.nOrdine === r.nOrdine);
+    const a = S.perK.get(r.k) || S.catalogo.find((x) => x.capitolo === r.capitolo && codiceArticolo(x) === codiceArticolo(r) && x.nOrdine === r.nOrdine);
     if (!a) { mancanti++; return r; }
     n++;
     const nuovo = rigaDaArticolo(a);
@@ -781,7 +817,7 @@ function disegnaPicker(c, reset = false) {
   const conta = contaInOfferta(c);
   const lista = nelDb.filter((a) => (!sottoSel.value || a.sottocapitolo === sottoSel.value) &&
     (!solo || conta.has(a.k)) &&
-    (!q || `${codiceOracle(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
+    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
   const vis = lista.slice(0, S.limitePick);
   let sotto = null, html = "";
   for (const a of vis) {
@@ -791,11 +827,11 @@ function disegnaPicker(c, reset = false) {
     }
     const att = isAttivita(a);
     html += `<tr data-k="${esc(a.k)}">
-      <td class="mono nowrap">${esc(codiceOracle(a))}</td>
+      <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
       <td class="mono">${esc(a.gmv)}</td>
-      <td><span class="dot ${freschezza(a.dataAgg)}" title="${esc(dataIt(a.dataAgg) || "data non indicata")}"></span></td>
+      <td>${pallino(a)}</td>
       <td class="nowrap" data-conta>${badgeConta(conta.get(a.k))}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
@@ -922,6 +958,17 @@ function disegnaExport(c) {
   if (avvisi.length) av.push(`<div class="avviso bad"><b>${avvisi.length} righe escluse:</b><ul class="riep">${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`);
   const fuori = controlloCartellino(c, clienteOff(), opzCap(c)).filter((x) => x.stato === "fuori");
   if (fuori.length) av.push(`<div class="avviso">Attenzione: ${fuori.map((f) => esc(f.gmv)).join(", ")} fuori cartellino del cliente (vedi “GMV e cartellino”).</div>`);
+  // prezzi da aggiornare o cambio listino in arrivo
+  const daAgg = [], cambi = [];
+  for (const r of c.righe) {
+    if (!num(r.qta) || esclusoDaExport(r, c)) continue;
+    const st = stato(S.perK.get(r.k) || r);
+    if (st.livello === "vecchio") daAgg.push(`${codiceArticolo(r)} ${r.nOrdine}: ${st.testo}`);
+    else if (st.livello === "medio") cambi.push(`${codiceArticolo(r)} ${r.nOrdine}: ${st.testo}`);
+  }
+  const elenco = (l) => `<details><summary>vedi</summary><ul class="riep">${l.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>`;
+  if (daAgg.length) av.push(`<div class="avviso bad"><b>${daAgg.length} righe con prezzo da aggiornare.</b> ${elenco(daAgg)}</div>`);
+  if (cambi.length) av.push(`<div class="avviso"><b>${cambi.length} righe con prezzo in scadenza o cambio listino entro un mese.</b> ${elenco(cambi)}</div>`);
   const senzaCap = c.sottocapitoli ? c.righe.filter((r) => num(r.qta) && !r.capitolato && !esclusoDaExport(r, c)).length : 0;
   if (senzaCap) av.push(`<div class="avviso">“Capitolati in Oracle” è SI ma ${senzaCap} righe non hanno un capitolato: in Oracle avranno “Nome Capitolato” vuoto.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
@@ -991,7 +1038,7 @@ function disegnaCatalogo() {
   const sotto = ss.value;
   const q = $("#c-cerca").value.trim().toLowerCase();
   const lista = S.catalogo.filter((a) => (!cap || a.capitolo === cap) && (!sotto || a.sottocapitolo === sotto) &&
-    (!q || `${codiceOracle(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
+    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
   const ord = ordinaRighe(lista, ordineCap());
   const vis = ord.slice(0, S.limiteCat);
   let gruppo = null, html = "";
@@ -999,12 +1046,12 @@ function disegnaCatalogo() {
     const g = (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
     if (g !== gruppo) { gruppo = g; html += `<tr class="sotto"><td colspan="12">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile" data-k="${esc(a.k)}">
-      <td class="mono nowrap">${esc(codiceOracle(a))}</td>
+      <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
       <td class="num">${pctTxt(a.sc3)}</td><td class="num">${pctTxt(a.sc4)}</td><td class="num">${pctTxt(a.sc5)}</td>
       <td class="num">${pctTxt(a.aum1)}</td><td class="num">${pctTxt(a.riparam)}</td><td class="mono">${esc(a.gmv)}</td>
-      <td class="nowrap"><span class="dot ${freschezza(a.dataAgg)}"></span>${esc(dataIt(a.dataAgg))}</td></tr>`;
+      <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
   $("#righe-catalogo").innerHTML = html || `<tr><td colspan="12" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
   $("#c-info").textContent = `${vis.length} di ${lista.length} articoli`;
@@ -1050,7 +1097,7 @@ function modificaArticolo(a) {
   const auto = !num(a.listino) || Math.abs(num(a.listino) - listinoCalcolato(a)) < 0.005;
   const sotti = [...new Set(S.catalogo.filter((x) => x.capitolo === a.capitolo).map((x) => x.sottocapitolo).filter(Boolean))];
   dialogo({
-    titolo: nuovo ? "Nuovo articolo" : `${codiceOracle(a)} · ${a.nOrdine}`,
+    titolo: nuovo ? "Nuovo articolo" : `${codiceArticolo(a)} · ${a.nOrdine}`,
     html: `<div class="grid-set">
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
       <label class="f wide">Sottocapitolo del database (scegline uno o scrivine uno nuovo)<input id="m-sotto" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
@@ -1067,6 +1114,9 @@ function modificaArticolo(a) {
       ${campoNum("m-li", "Prezzo di listino €", a.listino)}
       <label class="f">Data aggiornamento<input id="m-data" type="date" value="${esc(a.dataAgg || "")}"></label>
     </div>
+    <label class="row small" style="margin-top:8px"><input type="checkbox" id="m-gen" ${isGenerico(a) ? "checked" : ""}>
+      <b>Tratta come articolo generico</b> — in Oracle: ${CODICE_GENERICO}, prezzo netto, n° di ordinazione nella nota pre-linea e descrizione nella post-linea</label>
+    <p class="muted small" style="margin:4px 0 0">Se cambi un prezzo o uno sconto, la data di aggiornamento diventa quella di oggi (puoi correggerla).</p>
     <label class="row small" style="margin-top:8px"><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}>
       Prezzo di listino calcolato automaticamente (come la colonna K dell'Excel)</label>
     <label class="f" style="margin-top:10px">Descrizione<textarea id="m-des" rows="4">${esc(a.descrizione)}</textarea></label>
@@ -1083,8 +1133,20 @@ function modificaArticolo(a) {
         li.disabled = $("#m-auto", b).checked;
         if (li.disabled) li.value = String(Math.round(listinoCalcolato(leggi(b)) * 10000) / 10000).replace(".", ",");
       };
-      const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
-      b.addEventListener("input", () => { sync(); gen(); });
+      const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value, generico: $("#m-gen", b).checked }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
+      // data automatica: quando cambia un prezzo o uno sconto, la data di aggiornamento diventa oggi
+      const prezzi = ["#m-la", "#m-li", "#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1", "#m-rp"];
+      const iniziali = prezzi.map((id) => $(id, b).value);
+      let dataToccata = false;
+      $("#m-data", b).addEventListener("input", () => (dataToccata = true));
+      b.addEventListener("input", (e) => {
+        sync(); gen();
+        if (!dataToccata && prezzi.some((id) => e.target.matches(id))) {
+          const cambiato = prezzi.some((id, i) => $(id, b).value !== iniziali[i]);
+          $("#m-data", b).value = cambiato ? oggiIso() : (a.dataAgg || "");
+        }
+      });
+      b.addEventListener("change", (e) => { if (e.target.id === "m-gen") gen(); });
       sync(); gen();
     },
     async onConferma(v, b) {
@@ -1121,9 +1183,52 @@ function modificaArticolo(a) {
       listinoAcquisto: num(g("#m-la")), giorni: num(g("#m-gg")),
       sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: daPct(g("#m-rp")),
       listino: num(g("#m-li")), dataAgg: g("#m-data"), descrizione: g("#m-des"), notePre: g("#m-npre"), notePost: g("#m-npost"),
+      generico: $("#m-gen", b).checked,
     };
   }
 }
+
+/* Regole di scadenza dei prezzi per precodice */
+$("#c-scadenze").addEventListener("click", () => {
+  const conta = new Map();
+  for (const a of S.catalogo) {
+    const p = String(a.precodice || "").trim().toUpperCase();
+    if (!p) continue;
+    const x = conta.get(p) || { n: 0, gen: 0 };
+    x.n++; if (isGenerico(a)) x.gen++;
+    conta.set(p, x);
+  }
+  for (const r of S.precodici) if (!conta.has(String(r.precodice).toUpperCase())) conta.set(String(r.precodice).toUpperCase(), { n: 0, gen: 0 });
+  const elenco = [...conta.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const reg = (p) => S.precodici.find((x) => String(x.precodice).toUpperCase() === p) || {};
+  dialogo({
+    titolo: "Scadenza dei prezzi per precodice",
+    largo: true,
+    html: `<p class="muted small" style="margin-top:0"><b>Prezzi a richiesta</b>: il prezzo scade dopo i mesi indicati dalla data di aggiornamento.
+      <b>Listino</b>: indica quando è previsto il prossimo cambio listino; un mese prima gli articoli vengono segnalati (possibile aumento)
+      e dopo il cambio sono "da aggiornare" finché non aggiorni il prezzo. Senza regola vale la legenda: verde meno di 1 mese, giallo 1–2 mesi, rosso oltre.</p>
+      <div class="tbl-wrap" style="max-height:55vh"><table><thead><tr><th>Precodice</th><th class="num">Articoli</th><th>Fornitore / note</th><th>Regola</th><th>Validità (mesi)</th><th>Prossimo cambio listino</th></tr></thead><tbody>
+      ${elenco.map(([p, x]) => { const r = reg(p); return `<tr data-p="${esc(p)}"><td class="mono"><b>${esc(p)}</b></td>
+        <td class="num">${x.n}${x.gen ? ` <span class="badge warn" title="di cui trattati come generici">${x.gen} GEN</span>` : ""}</td>
+        <td><input data-r="descrizione" value="${esc(r.descrizione || "")}" style="width:150px"></td>
+        <td><select data-r="tipo"><option value="">— nessuna —</option><option value="richiesta" ${r.tipo === "richiesta" ? "selected" : ""}>prezzi a richiesta</option><option value="listino" ${r.tipo === "listino" ? "selected" : ""}>listino</option></select></td>
+        <td><input data-r="validitaMesi" inputmode="decimal" value="${esc(r.validitaMesi ?? "")}" style="width:70px" placeholder="es. 3"></td>
+        <td><input data-r="cambioListino" type="date" value="${esc(r.cambioListino || "")}"></td></tr>`; }).join("")}
+      </tbody></table></div>
+      <label class="f" style="margin-top:10px">Aggiungi un precodice<input id="m-nuovopre" placeholder="es. VAN" style="width:120px"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    async onConferma(v, b) {
+      const lista = $$("tr[data-p]", b).map((tr) => {
+        const g = (k) => $(`[data-r="${k}"]`, tr).value.trim();
+        return { precodice: tr.dataset.p, descrizione: g("descrizione"), tipo: g("tipo"), validitaMesi: num(g("validitaMesi")) || "", cambioListino: g("cambioListino") };
+      }).filter((r) => r.tipo || r.descrizione);
+      const nuovo = $("#m-nuovopre", b).value.trim().toUpperCase();
+      if (nuovo && !lista.some((r) => r.precodice === nuovo)) lista.push({ precodice: nuovo, descrizione: "", tipo: "", validitaMesi: "", cambioListino: "" });
+      await db.salva(COLL.cfg, "precodici", { lista });
+      toast("Regole salvate");
+    },
+  });
+});
 
 $("#c-impost").addEventListener("click", () => {
   dialogo({
@@ -1298,7 +1403,7 @@ $("#file-oracle").addEventListener("change", async (e) => {
   } catch (x) { errore(x, "File non leggibile"); }
 });
 
-const CODICI_GENERICI = new Set(["P000ARTICOLO_GEN", "PITATT.TEC"]);
+const CODICI_GENERICI = new Set([CODICE_GENERICO, "PITATT.TEC"]);
 function confrontaOracle(righe) {
   const box = $("#riepilogo-oracle");
   let mappa;
@@ -1307,8 +1412,8 @@ function confrontaOracle(righe) {
   let uguali = 0;
   const trovati = new Set();
   for (const a of S.catalogo) {
-    const cod = codiceOracle(a);
-    if (CODICI_GENERICI.has(cod)) continue;
+    const cod = codiceArticolo(a);
+    if (isGenerico(a) || CODICI_GENERICI.has(cod)) continue;
     const m = mappa.get(cod);
     if (!m) continue;
     trovati.add(cod);
@@ -1323,7 +1428,7 @@ function confrontaOracle(righe) {
       Gli articoli generici (P000ARTICOLO_GEN, PITATT.TEC) non si aggiornano: hanno tutti lo stesso codice in Oracle.</div>
     ${cambi.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Capitolo</th><th>Codice</th><th>Articolo</th><th class="num">Listino acq. attuale</th><th class="num">Oracle</th><th class="num">Diff.</th><th>GMV</th></tr></thead><tbody>
       ${cambi.map(({ a, m }) => { const d = num(a.listinoAcquisto) ? (m.prezzo / num(a.listinoAcquisto) - 1) : 0;
-        return `<tr><td>${esc(a.capitolo)}</td><td class="mono">${esc(codiceOracle(a))}</td><td>${esc(a.nOrdine)}</td>
+        return `<tr><td>${esc(a.capitolo)}</td><td class="mono">${esc(codiceArticolo(a))}</td><td>${esc(a.nOrdine)}</td>
         <td class="num">${euro(a.listinoAcquisto)}</td><td class="num"><b>${euro(m.prezzo)}</b></td>
         <td class="num"><span class="badge ${d > 0 ? "bad" : "ok"}">${d > 0 ? "+" : ""}${fNum.format(Math.round(d * 1000) / 10)}%</span></td>
         <td class="mono">${m.gmv && m.gmv !== a.gmv ? `${esc(a.gmv || "—")} → <b>${esc(m.gmv)}</b>` : esc(a.gmv)}</td></tr>`; }).join("")}

@@ -234,15 +234,17 @@
         <select id="c-capitolo"></select>
         <select id="c-sotto" title="Sottocapitolo del database"></select>
         <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMV">
+        <button class="btn" id="c-scadenze">Scadenze prezzi</button>
         <button class="btn" id="c-impost">Impostazioni capitolo</button>
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
       </div>
       <div class="row" style="margin-bottom:8px">
         <div class="legenda">
-          <span><span class="dot fresco"></span>prezzi aggiornati da meno di 1 mese</span>
-          <span><span class="dot medio"></span>da 1 a 2 mesi</span>
-          <span><span class="dot vecchio"></span>da più di 2 mesi</span>
+          <span><span class="dot fresco"></span>prezzo valido</span>
+          <span><span class="dot medio"></span>in scadenza o cambio listino entro un mese</span>
+          <span><span class="dot vecchio"></span>da aggiornare</span>
           <span><span class="dot"></span>data non indicata</span>
+          <span>(regole per precodice in “Scadenze prezzi”; passa sul pallino per il dettaglio)</span>
         </div>
         <span class="spacer"></span><span class="muted small" id="c-info"></span>
       </div>

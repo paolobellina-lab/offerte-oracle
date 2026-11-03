@@ -119,7 +119,12 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
 7. **GMV**: per ogni GMA del capitolo vedi venduto, acquistato, **peso** sul capitolo e margine; puoi forzare sconti e ricarico e vedi il confronto con il cartellino del cliente.
 8. **Esporta per Oracle**: un foglio "Sheet1" per capitolo (Excel, CSV o copia). Dal **Riepilogo** scarichi quelli di tutti i capitoli.
 9. **Riepilogo** (ex ANALISI PACCHETTO): per capitolo venduto, acquistato, materiale, attività, ricarico e margine, con i totali dell'offerta.
-10. **Database**: clicca un articolo per modificarlo; il pallino indica da quanto non aggiorni il prezzo.
+10. **Database**: clicca un articolo per modificarlo. Se cambi un prezzo o uno sconto la data di aggiornamento diventa quella di oggi.
+   - **Tratta come articolo generico**: l'articolo tiene precodice e codice veri, ma in Oracle va come P000ARTICOLO_GEN con prezzo netto,
+     n° di ordinazione nella nota pre-linea e descrizione nella post-linea. Nelle righe dell'offerta il suo prezzo di acquisto si può cambiare
+     direttamente: si aggiorna anche nel database con la data di oggi.
+   - **Scadenze prezzi** (per precodice): "prezzi a richiesta" con validità in mesi, oppure "listino" con la data del prossimo cambio
+     (avviso un mese prima, "da aggiornare" dopo il cambio). Il pallino colorato e gli avvisi in "Esporta per Oracle" seguono queste regole.
    **Aggiorna i prezzi da Oracle**: incolla la griglia di Oracle (con intestazioni) e l'app aggiorna listino acquisto, GMV e data.
 11. **Copia di sicurezza**: scarichi tutti i dati in un file `.json` e puoi ripristinarli.
 
