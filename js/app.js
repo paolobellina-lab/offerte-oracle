@@ -929,7 +929,7 @@ function disegnaPicker(c, reset = false) {
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
       sotto = a.sottocapitolo || "";
-      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="9">${esc(sotto || "—")}</td></tr>`;
+      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="8">${esc(sotto || "—")}</td></tr>`;
     }
     const att = isAttivita(a);
     html += `<tr data-k="${esc(a.k)}">
@@ -938,10 +938,9 @@ function disegnaPicker(c, reset = false) {
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
       <td class="mono">${esc(a.gmv)}</td>
       <td>${pallino(a)}</td>
-      <td class="nowrap" data-conta>${badgeConta(conta.get(a.k))}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
-  $("#righe-picker").innerHTML = html || `<tr><td colspan="9" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
+  $("#righe-picker").innerHTML = html || `<tr><td colspan="8" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
   applicaGruppi($("#righe-picker"));
   $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` :
     `${lista.length} articoli. Scrivi la quantità e premi Invio o Tab: ogni volta si aggiunge una riga nuova in fondo all'offerta.`;
@@ -986,7 +985,6 @@ $("#righe-picker").addEventListener("change", (e) => {
   r.capitolato = c.capNuove || "";
   c.righe.push(r);
   inp.value = "";
-  tr.querySelector("[data-conta]").innerHTML = badgeConta(contaInOfferta(c).get(a.k));
   tr.classList.add("aggiunta"); setTimeout(() => tr.classList.remove("aggiunta"), 700);
   modificata();
   aggiornaSoloTotali();
