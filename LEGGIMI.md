@@ -104,6 +104,10 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
    Le righe del **blocco 0** (quelle copiate in testa al foglio per l'offerta in corso) non entrano nel database se l'articolo c'è già più sotto.
    Spuntando l'ultima casella si crea un'offerta con le quantità del file, un capitolo per foglio.
 2. **Offerte → + Nuova offerta**: riferimento e cliente, poi **+ Aggiungi capitolo** (FIRE, KNX, ANTINTRUSIONE…). Un'offerta può avere tutti i capitoli che vuoi.
+   Ogni capitolo ha tre pagine: **1 · Righe** (aggiungere articoli, quantità, ordine, capitolati, note),
+   **2 · Sconti e ricarichi** (tipo offerta, extrasconti e ricarico, prezzo target, sconti per GMA con peso e cartellino, riepilogo righe)
+   e **3 · Esporta per Oracle** (prezzi DA ORACLE/DA EXCEL, capitolati, n° partenza righe, magazzino, foglio Oracle).
+   Gli extrasconti valgono sempre sia per l'acquisto sia per la vendita.
 3. **Ogni capitolo è a sé stante**: tipo offerta, prezzi (DA ORACLE / DA EXCEL), sottocapitoli, n° partenza righe, extrasconti, ricarico, sconti per GMV.
    Restano salvati: passando da un capitolo all'altro non si perde niente.
    - *Prezzo target*: in VENDITA CLIENTE scrivi il totale che vuoi ottenere e l'app calcola il ricarico del capitolo.

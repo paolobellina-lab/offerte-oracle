@@ -105,7 +105,7 @@
           <tbody id="riepilogo-capitoli"></tbody>
         </table></div>
         <p class="muted small">Venduto = totale del capitolo con il suo tipo di offerta. Acquistato = il costo vero: listino acquisto con gli sconti
-          del database e gli extrasconti del fornitore, senza ricarico (gli extrasconti "al cliente" non abbassano l'acquistato). Margine = 1 − acquistato / venduto.</p>
+          del database e gli extrasconti, senza ricarico. Margine = 1 − acquistato / venduto.</p>
         <div class="card">
           <label class="f">Note dell'offerta (uso interno, non vanno in Oracle)
             <textarea id="o-note" rows="5"></textarea>
@@ -115,51 +115,42 @@
 
       <!-- CAPITOLO -->
       <div id="p-capitolo" hidden>
-        <div class="card">
-          <div class="row" style="gap:18px;align-items:flex-end">
-            <div style="display:flex;flex-direction:column;gap:3px">
-              <span class="muted small" style="font-weight:600">Tipo offerta</span>
-              <div class="seg" id="c-tipo"></div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px">
-              <span class="muted small" style="font-weight:600">Prezzi</span>
-              <div class="seg" id="c-prezzi"></div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px">
-              <span class="muted small" style="font-weight:600" title="SI = nella colonna Nome Capitolato va il capitolato assegnato alla riga">Capitolati in Oracle</span>
-              <div class="seg" id="c-sotto"></div>
-            </div>
-            <label class="f">N° partenza righe<input id="c-linea" type="number" min="0" step="10" style="width:100px"></label>
-            <label class="f">Magazzino<input id="c-magazzino" maxlength="10" style="width:80px"></label>
-            <span class="spacer"></span>
-            <button class="btn small danger" id="c-togli">Togli capitolo</button>
-          </div>
-          <div style="margin-top:12px">
-            <span class="muted small" style="font-weight:600">Extrasconti e ricarico del capitolo</span>
-            <span class="muted small"> — vuoto = valgono quelli del database</span>
-            <div class="row" id="c-globali" style="margin-top:4px;gap:14px"></div>
-          </div>
-          <div class="row" id="c-target-box" style="margin-top:12px">
-            <label class="f">Prezzo target del capitolo €<input id="c-target" inputmode="decimal" style="width:150px" placeholder="es. 25000"></label>
-            <button class="btn" id="c-target-calcola" style="align-self:flex-end">Calcola il ricarico</button>
-            <span class="muted small" style="align-self:flex-end;padding-bottom:7px">Imposta il ricarico del capitolo per arrivare a quel totale (condizione a pacchetto).</span>
-          </div>
-          <div class="muted" id="c-totali" style="margin-top:12px"></div>
+        <div class="cap-testa">
+          <div class="muted grow" id="c-totali"></div>
+          <button class="btn small danger" id="c-togli">Togli capitolo</button>
         </div>
 
         <nav class="subtabs no-print" id="subtabs">
-          <button data-sub="righe" class="on">Righe<span class="conta" id="conta-righe"></span></button>
-          <button data-sub="aggiungi">Aggiungi articoli</button>
-          <button data-sub="gmv">GMV: peso, sconti e cartellino<span class="conta" id="conta-gmv"></span></button>
-          <button data-sub="export">Esporta per Oracle</button>
+          <button data-sub="righe" class="on">1 · Righe<span class="conta" id="conta-righe"></span></button>
+          <button data-sub="prezzi">2 · Sconti e ricarichi<span class="conta" id="conta-gmv"></span></button>
+          <button data-sub="export">3 · Esporta per Oracle</button>
         </nav>
 
+        <!-- PAGINA 1: RIGHE (aggiungere, quantità, ordine) -->
         <div id="s-righe">
+          <div class="card">
+            <h3 style="margin-bottom:8px">Aggiungi articoli</h3>
+            <div class="row" style="margin-bottom:8px">
+              <label class="f">Database<select id="a-db"></select></label>
+              <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
+              <label class="f grow">Cerca<input id="a-cerca" type="search" placeholder="codice, n° ordinazione o descrizione"></label>
+              <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
+              <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:180px"></label>
+              <label class="row small muted" style="align-self:flex-end;padding-bottom:7px"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+            </div>
+            <div class="tbl-wrap picker-wrap"><table>
+              <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th>In offerta</th><th class="num">Aggiungi</th></tr></thead>
+              <tbody id="righe-picker"></tbody>
+            </table></div>
+            <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
+          </div>
+
           <div class="row no-print" style="margin-bottom:8px">
-            <span class="muted small grow">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).
-              Il capitolato va nella colonna "Nome Capitolato" se "Capitolati in Oracle" è SI.</span>
+            <h3 class="grow">Righe dell'offerta</h3>
             <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
           </div>
+          <p class="muted small" style="margin-top:0">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).
+            Sconti, ricarichi e dettaglio dei prezzi sono nella pagina “2 · Sconti e ricarichi”.</p>
           <div class="capitolati no-print" id="capitolati"></div>
           <div class="bulk no-print" id="bulk" hidden>
             <b id="bulk-n"></b>
@@ -177,42 +168,69 @@
             <thead><tr>
               <th><input type="checkbox" id="sel-tutte" title="Seleziona tutte"></th><th class="num">Linea</th>
               <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
-              <th class="num">Prezzo base</th><th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th>
-              <th class="num">Aum.1</th><th class="num">Ric.</th><th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th>
-              <th>Capitolato</th><th>Nota post-linea</th><th></th>
+              <th class="num">Unitario</th><th class="num">Totale</th><th>Capitolato</th><th>Nota post-linea</th><th></th>
             </tr></thead>
             <tbody id="righe-offerta"></tbody>
           </table></div>
         </div>
 
-        <div id="s-aggiungi" hidden>
-          <div class="row" style="margin-bottom:8px">
-            <label class="f">Database<select id="a-db"></select></label>
-            <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
-            <label class="f grow">Cerca<input id="a-cerca" type="search" placeholder="codice, n° ordinazione o descrizione"></label>
-            <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
-            <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:180px"></label>
-            <label class="row small muted" style="align-self:flex-end;padding-bottom:7px"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+        <!-- PAGINA 2: SCONTI E RICARICHI + RIEPILOGO -->
+        <div id="s-prezzi" hidden>
+          <div class="card">
+            <div class="row" style="gap:18px;align-items:flex-end">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <span class="muted small" style="font-weight:600">Tipo offerta</span>
+                <div class="seg" id="c-tipo"></div>
+              </div>
+            </div>
+            <div style="margin-top:12px">
+              <span class="muted small" style="font-weight:600">Extrasconti e ricarico del capitolo</span>
+              <span class="muted small"> — valgono per i GMA senza valori propri; vuoto = valgono quelli del database</span>
+              <div class="row" id="c-globali" style="margin-top:4px;gap:14px"></div>
+            </div>
+            <div class="row" id="c-target-box" style="margin-top:12px">
+              <label class="f">Prezzo target del capitolo €<input id="c-target" inputmode="decimal" style="width:150px" placeholder="es. 25000"></label>
+              <button class="btn" id="c-target-calcola" style="align-self:flex-end">Calcola il ricarico</button>
+              <span class="muted small" style="align-self:flex-end;padding-bottom:7px">Imposta il ricarico del capitolo per arrivare a quel totale (condizione a pacchetto).</span>
+            </div>
           </div>
-          <div class="tbl-wrap"><table>
-            <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th>In offerta</th><th class="num">Aggiungi</th></tr></thead>
-            <tbody id="righe-picker"></tbody>
-          </table></div>
-          <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
-        </div>
 
-        <div id="s-gmv" hidden>
-          <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. Gli sconti scritti qui valgono solo per gli articoli di quel GMV
-            e hanno la precedenza su tutto. Il controllo cartellino confronta lo sconto complessivo con quello del cliente.</p>
+          <h3 style="margin:4px 0 6px">Sconti e ricarico per GMA</h3>
+          <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. I valori scritti qui valgono solo per quel GMA e vincono su quelli del capitolo.
+            Il controllo cartellino confronta lo sconto complessivo con quello del cliente.</p>
           <div class="tbl-wrap"><table>
             <thead><tr><th>GMV</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th><th class="num">Peso</th><th class="num">Margine</th>
-              <th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th title="Extrasconti del fornitore (abbassano l'acquisto) o al cliente (abbassano solo il venduto)">Extra di</th><th>Ricarico</th>
+              <th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th>Ricarico</th>
               <th class="num">Sconto offerta</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
             <tbody id="righe-gmv"></tbody>
           </table></div>
+
+          <h3 style="margin:18px 0 6px">Riepilogo delle righe</h3>
+          <p class="muted small" style="margin-top:0">Sconti e ricarico effettivamente applicati a ogni riga. Per i generici puoi cambiare qui il prezzo (si aggiorna anche il database).</p>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th class="num">Linea</th><th>Codice</th><th>Articolo</th><th class="num">Q.tà</th><th class="num">Prezzo base</th>
+              <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th class="num">Ric.</th>
+              <th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th></tr></thead>
+            <tbody id="riepilogo-righe"></tbody>
+          </table></div>
         </div>
 
+        <!-- PAGINA 3: ESPORTA PER ORACLE -->
         <div id="s-export" hidden>
+          <div class="card">
+            <div class="row" style="gap:18px;align-items:flex-end">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <span class="muted small" style="font-weight:600">Prezzi</span>
+                <div class="seg" id="c-prezzi"></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <span class="muted small" style="font-weight:600" title="SI = nella colonna Nome Capitolato va il capitolato assegnato alla riga">Capitolati in Oracle</span>
+                <div class="seg" id="c-sotto"></div>
+              </div>
+              <label class="f">N° partenza righe<input id="c-linea" type="number" min="0" step="10" style="width:100px"></label>
+              <label class="f">Magazzino<input id="c-magazzino" maxlength="10" style="width:80px"></label>
+            </div>
+          </div>
           <h3 id="export-titolo" style="margin-bottom:8px"></h3>
           <div class="capitolati no-print" id="export-capitolati"></div>
           <div id="export-avvisi"></div>

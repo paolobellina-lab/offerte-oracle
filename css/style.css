@@ -252,3 +252,5 @@ label.giornate input { min-height: 0; vertical-align: -2px; }
 input.qta.prezzo { width: 90px; }
 dialog.largo { width: min(1040px, calc(100vw - 24px)); }
 .badge.gen { font-size: .65rem; padding: 0 5px; }
+.cap-testa { display: flex; gap: 10px; align-items: center; margin: 2px 0 6px; flex-wrap: wrap; }
+.picker-wrap { max-height: 42vh; }

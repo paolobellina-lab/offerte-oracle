@@ -399,7 +399,7 @@ $("#add-cap").addEventListener("change", (e) => {
   const modello = capAtt() || S.off.capitoli[S.off.capitoli.length - 1];
   // il nuovo capitolo parte con tipo offerta e prezzi del capitolo attuale, ma senza sconti
   S.off.capitoli.push(nuovoCapitolo(nome, modello ? { tipo: modello.tipo, prezzi: modello.prezzi, sottocapitoli: modello.sottocapitoli } : {}));
-  S.capAtt = nome; S.sub = "aggiungi"; S.sel = new Set();
+  S.capAtt = nome; S.sub = "righe"; S.sel = new Set();
   modificata(); disegnaOfferta(true);
 });
 
@@ -416,8 +416,6 @@ function disegnaImpostCapitolo() {
     <label class="f" ${k === "ric" ? 'title="Solo per VENDITA CLIENTE. Vuoto = ricarico automatico del capitolo."' : ""}>${ETICHETTE[k]}${k === "ric" ? " *" : ""}
       <span class="pct-wrap"><input class="pct" data-glob="${k}" inputmode="decimal" value="${esc(pctVal(c.globali[k]))}"
         ${k === "ric" ? (c.tipo !== "VENDITA CLIENTE" ? "disabled" : 'placeholder="auto"') : ""}></span></label>`).join("") +
-    `<div style="display:flex;flex-direction:column;gap:3px"><span class="muted small" style="font-weight:600">Gli extrasconti sono</span>
-      <div class="seg" id="c-extra"><button type="button" data-v="F" class="${c.extraCliente ? "" : "on"}" title="Abbassano il prezzo di acquisto: il ricarico si calcola sopra">del fornitore</button><button type="button" data-v="C" class="${c.extraCliente ? "on" : ""}" title="Abbassano solo il prezzo al cliente: il costo non cambia, cala il margine">al cliente</button></div></div>` +
     `<span class="muted small" style="align-self:flex-end;padding-bottom:7px">* ricarico solo per vendita cliente; vuoto = automatico del capitolo (${pctTxt(ricAuto) || "0%"})</span>`;
   $("#c-target-box").hidden = c.tipo !== "VENDITA CLIENTE";
 }
@@ -442,10 +440,6 @@ $("#c-globali").addEventListener("change", suCap((c, e) => {
   if (v) c.globali[k] = v; else delete c.globali[k];
   e.target.value = pctVal(v);
   modificata(); ridisegnaOfferta();
-}));
-$("#c-globali").addEventListener("click", suCap((c, e) => {
-  const b = e.target.closest("#c-extra button"); if (!b) return;
-  c.extraCliente = b.dataset.v === "C"; modificata(); disegnaOfferta();
 }));
 $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
@@ -525,12 +519,11 @@ function disegnaOffertaIn(cambioSub) {
   const rc = riepilogoCapitolo(c, opzCap(c));
   $("#c-totali").innerHTML = `<b>${esc(c.nome)}</b> · venduto <b>${euro(rc.venduto)}</b> · acquistato ${euro(rc.acquistato)} · margine ${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}`;
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
-  for (const s of ["righe", "aggiungi", "gmv", "export"]) $("#s-" + s).hidden = s !== S.sub;
+  for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
   $("#conta-righe").textContent = c.righe.length ? `(${c.righe.length})` : "";
   $("#conta-gmv").textContent = rc.perGmv.size ? `(${rc.perGmv.size})` : "";
-  if (S.sub === "righe") disegnaRighe(c);
-  else if (S.sub === "aggiungi") disegnaPicker(c, cambioSub);
-  else if (S.sub === "gmv") disegnaGmv(c, rc);
+  if (S.sub === "righe") { disegnaRighe(c); if (!S.noPicker) disegnaPicker(c, cambioSub); }
+  else if (S.sub === "prezzi") { disegnaGmv(c, rc); disegnaRiepilogoRighe(c); }
   else if (S.sub === "export") disegnaExport(c);
 }
 
@@ -639,7 +632,7 @@ function disegnaRighe(c) {
   $("#bulk-n").textContent = sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
   $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
   if (!c.righe.length) {
-    tb.innerHTML = `<tr><td colspan="20" class="vuoto">Nessuna riga. Vai su “Aggiungi articoli” e scrivi le quantità.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="12" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
     return;
   }
   const linee = lineeOracle(c);
@@ -653,7 +646,7 @@ function disegnaRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo"><td colspan="20">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
@@ -665,18 +658,42 @@ function disegnaRighe(c) {
       <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
-      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo di acquisto: se lo cambi si aggiorna anche nel database con la data di oggi"><div class="muted small">acquisto</div>` : euro(x.base)}</td>
-      <td class="num">${pctTxt(x.sc3)}</td><td class="num">${pctTxt(x.sc4)}</td><td class="num">${pctTxt(x.sc5)}</td>
-      <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
-      <td class="mono">${esc(r.gmv)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       <td>${isGenerico(r) ? `<span class="nota-auto" title="Articolo generico: in Oracle nota pre-linea = ${esc(r.nOrdine)}, nota post-linea = descrizione">auto: ${esc(r.nOrdine)}</span>`
         : `<input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea">`}</td>
       <td class="nowrap">
         <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button>${isGenerico(r) ? "" : '<button class="icon mini" data-az="note" title="Note pre e post linea">✎</button>'}<button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
       </td></tr>`;
-  }).join("") + `<tr class="sotto"><td colspan="14" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="5"></td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="8" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
+}
+
+/* Pagina 2: riepilogo delle righe con sconti e ricarico applicati (come la vista di controllo dell'Excel). */
+function disegnaRiepilogoRighe(c) {
+  const tb = $("#riepilogo-righe");
+  const righe = c.righe.filter((r) => num(r.qta));
+  if (!righe.length) { tb.innerHTML = `<tr><td colspan="13" class="vuoto">Nessuna riga: aggiungile nella pagina “1 · Righe”.</td></tr>`; return; }
+  const linee = lineeOracle(c), opz = opzCap(c);
+  let tot = 0, capPrec = null;
+  tb.innerHTML = righe.map((r) => {
+    const x = calcolaRiga(r, c, opz.ricarichi);
+    tot += x.totale;
+    let testa = "";
+    if ((r.capitolato || "") !== capPrec) {
+      capPrec = r.capitolato || "";
+      testa = `<tr class="gruppo"><td colspan="13">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+    }
+    return testa + `<tr data-id="${esc(r.id)}">
+      <td class="num muted small">${linee.get(r.id) ?? ""}</td>
+      <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
+      <td class="desc"><b>${esc(r.nOrdine)}</b><div class="d">${esc(r.descrizione)}</div></td>
+      <td class="num">${esc(numIt(x.qta))}</td>
+      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo del generico: se lo cambi si aggiorna anche nel database con la data di oggi">` : euro(x.base)}</td>
+      <td class="num">${pctTxt(x.sc3)}</td><td class="num">${pctTxt(x.sc4)}</td><td class="num">${pctTxt(x.sc5)}</td>
+      <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
+      <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
+      <td class="mono">${esc(r.gmv)}</td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="11" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td></td></tr>`;
 }
 /* Stato del prezzo di una riga: si guarda l'articolo nel database (data aggiornata), altrimenti la copia nella riga. */
 function statoRiga(r) {
@@ -692,7 +709,7 @@ function nuovoPrezzoArticolo(art, prezzo) {
   art.dataAgg = oggiIso();
 }
 const rigaDi = (el) => { const c = capAtt(); const id = el.closest("tr[data-id]")?.dataset.id; return { c, id, r: c?.righe.find((x) => x.id === id) }; };
-$("#righe-offerta").addEventListener("change", (e) => {
+function cambioRiga(e) {
   const inp = e.target;
   const { c, id, r } = rigaDi(inp); if (!r) return;
   if (inp.matches("[data-sel]")) { inp.checked ? S.sel.add(id) : S.sel.delete(id); return disegnaOfferta(); }
@@ -715,7 +732,9 @@ $("#righe-offerta").addEventListener("change", (e) => {
   r[campo] = num(inp.value);
   if (campo === "qta" && !r.qta) c.righe = c.righe.filter((x) => x.id !== id);
   modificata(); ridisegnaOfferta();
-});
+}
+$("#righe-offerta").addEventListener("change", cambioRiga);
+$("#riepilogo-righe").addEventListener("change", cambioRiga);
 $("#righe-offerta").addEventListener("click", (e) => {
   const b = e.target.closest("[data-az]"); if (!b) return;
   const { c, id, r } = rigaDi(b); if (!r) return;
@@ -885,10 +904,9 @@ $("#righe-picker").addEventListener("change", (e) => {
   aggiornaSoloTotali();
 });
 function aggiornaSoloTotali() {
-  // aggiorna intestazioni e totali senza ridisegnare l'elenco in cui si sta scrivendo
-  const sub = S.sub; S.sub = "_"; disegnaOffertaIn(false); S.sub = sub;
-  $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
-  for (const s of ["righe", "aggiungi", "gmv", "export"]) $("#s-" + s).hidden = s !== S.sub;
+  // dopo un'aggiunta: aggiorna totali ed elenco righe senza ridisegnare la ricerca in cui si sta scrivendo
+  S.noPicker = true;
+  try { disegnaOffertaIn(false); } finally { S.noPicker = false; }
 }
 
 /* --- GMV: peso, sconti e cartellino --- */
@@ -899,7 +917,7 @@ function disegnaGmv(c, rc) {
     const comuni = `<td class="num">${info.righe}</td><td class="num">${euro(info.venduto)}</td><td class="num">${euro(info.acquistato)}</td>
       <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
       <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>`;
-    if (!g) return `<tr><td class="muted">(senza GMV)</td><td></td>${comuni}<td colspan="9" class="muted small">Senza GMV valgono gli sconti del capitolo o del database.</td></tr>`;
+    if (!g) return `<tr><td class="muted">(senza GMV)</td><td></td>${comuni}<td colspan="8" class="muted small">Senza GMV valgono gli sconti del capitolo o del database.</td></tr>`;
     const v = c.gmv[g] || {};
     const e = esiti.get(g);
     const inp = (k) => `<span class="pct-wrap"><input class="pct" data-gmv="${esc(g)}" data-k="${k}" inputmode="decimal" value="${esc(pctVal(v[k]))}"
@@ -909,22 +927,13 @@ function disegnaGmv(c, rc) {
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
     return `<tr><td class="mono"><b>${esc(g)}</b></td><td>${esc(fornitore(g))}</td>${comuni}
       <td>${inp("sc3")}</td><td>${inp("sc4")}</td><td>${inp("sc5")}</td><td>${inp("aum1")}</td>
-      <td><select class="extra-di" data-gmv-extra="${esc(g)}" title="Di chi è l'extrasconto di questo GMV"><option value="F">fornitore</option><option value="C" ${v.cliente ? "selected" : ""}>cliente</option></select></td>
       <td>${inp("ric")}</td>
       <td class="num">${att ? euro(e.offerta) + "/g" : pctTxt(1 - info.prima.c.fattore) || "0%"}</td>
       <td class="num">${e ? (att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
   }).join("");
-  $("#righe-gmv").innerHTML = html || `<tr><td colspan="16" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMV.</td></tr>`;
+  $("#righe-gmv").innerHTML = html || `<tr><td colspan="15" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMV.</td></tr>`;
 }
 $("#righe-gmv").addEventListener("change", suCap((c, e) => {
-  const sel = e.target.closest("select[data-gmv-extra]");
-  if (sel) {
-    const g = sel.dataset.gmvExtra;
-    c.gmv[g] ||= {};
-    if (sel.value === "C") c.gmv[g].cliente = true; else delete c.gmv[g].cliente;
-    if (!Object.keys(c.gmv[g]).length) delete c.gmv[g];
-    modificata(); return ridisegnaOfferta();
-  }
   const inp = e.target.closest("input[data-gmv]"); if (!inp) return;
   const g = inp.dataset.gmv, k = inp.dataset.k;
   const v = daPct(inp.value);
@@ -957,7 +966,7 @@ function disegnaExport(c) {
   if (!righe.length) av.push(`<div class="avviso">Nessuna riga da esportare.</div>`);
   if (avvisi.length) av.push(`<div class="avviso bad"><b>${avvisi.length} righe escluse:</b><ul class="riep">${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`);
   const fuori = controlloCartellino(c, clienteOff(), opzCap(c)).filter((x) => x.stato === "fuori");
-  if (fuori.length) av.push(`<div class="avviso">Attenzione: ${fuori.map((f) => esc(f.gmv)).join(", ")} fuori cartellino del cliente (vedi “GMV e cartellino”).</div>`);
+  if (fuori.length) av.push(`<div class="avviso">Attenzione: ${fuori.map((f) => esc(f.gmv)).join(", ")} fuori cartellino del cliente (vedi “2 · Sconti e ricarichi”).</div>`);
   // prezzi da aggiornare o cambio listino in arrivo
   const daAgg = [], cambi = [];
   for (const r of c.righe) {
