@@ -96,7 +96,7 @@
       <!-- RIEPILOGO DELL'OFFERTA -->
       <div id="p-riepilogo" hidden>
         <div class="row" style="margin-bottom:8px">
-          <h2 class="grow">Riepilogo per capitolo</h2>
+          <h2 class="grow titolo-sez" style="margin:0">Riepilogo per capitolo</h2>
           <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle di tutti i capitoli</button>
         </div>
         <div class="tbl-wrap"><table>
@@ -116,7 +116,7 @@
       <!-- CAPITOLO -->
       <div id="p-capitolo" hidden>
         <div class="cap-testa">
-          <div class="muted grow" id="c-totali"></div>
+          <div class="grow cap-kpi" id="c-totali"></div>
           <button class="btn small danger" id="c-togli">Togli capitolo</button>
         </div>
 
@@ -129,7 +129,7 @@
         <!-- PAGINA 1: RIGHE (aggiungere, quantità, ordine) -->
         <div id="s-righe">
           <div class="card">
-            <h3 style="margin-bottom:8px">Aggiungi articoli</h3>
+            <h3 class="titolo-sez">Aggiungi articoli</h3>
             <div class="row" style="margin-bottom:8px">
               <label class="f">Database<select id="a-db"></select></label>
               <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
@@ -146,7 +146,7 @@
           </div>
 
           <div class="row no-print" style="margin-bottom:8px">
-            <h3 class="grow">Righe dell'offerta</h3>
+            <h3 class="grow titolo-sez" style="margin:0">Righe dell'offerta</h3>
             <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
           </div>
           <p class="muted small" style="margin-top:0">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).
@@ -177,6 +177,7 @@
         <!-- PAGINA 2: SCONTI E RICARICHI + RIEPILOGO -->
         <div id="s-prezzi" hidden>
           <div class="card">
+            <h3 class="titolo-sez">Condizioni del capitolo</h3>
             <div class="row" style="gap:18px;align-items:flex-end">
               <div style="display:flex;flex-direction:column;gap:3px">
                 <span class="muted small" style="font-weight:600">Tipo offerta</span>
@@ -195,7 +196,7 @@
             </div>
           </div>
 
-          <h3 style="margin:4px 0 6px">Sconti e ricarico per GMA</h3>
+          <h3 class="titolo-sez">Sconti e ricarico per GMA</h3>
           <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. I valori scritti qui valgono solo per quel GMA e vincono su quelli del capitolo.
             Il controllo cartellino confronta lo sconto complessivo con quello del cliente.</p>
           <div class="tbl-wrap"><table>
@@ -205,7 +206,7 @@
             <tbody id="righe-gmv"></tbody>
           </table></div>
 
-          <h3 style="margin:18px 0 6px">Riepilogo delle righe</h3>
+          <h3 class="titolo-sez" style="margin-top:20px">Riepilogo delle righe</h3>
           <p class="muted small" style="margin-top:0">Sconti e ricarico effettivamente applicati a ogni riga. Per i generici puoi cambiare qui il prezzo (si aggiorna anche il database).</p>
           <div class="tbl-wrap"><table>
             <thead><tr><th class="num">Linea</th><th>Codice</th><th>Articolo</th><th class="num">Q.tà</th><th class="num">Prezzo base</th>
@@ -218,6 +219,7 @@
         <!-- PAGINA 3: ESPORTA PER ORACLE -->
         <div id="s-export" hidden>
           <div class="card">
+            <h3 class="titolo-sez">Impostazioni dell'output per Oracle</h3>
             <div class="row" style="gap:18px;align-items:flex-end">
               <div style="display:flex;flex-direction:column;gap:3px">
                 <span class="muted small" style="font-weight:600">Prezzi</span>

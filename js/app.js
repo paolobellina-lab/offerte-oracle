@@ -501,7 +501,7 @@ function disegnaOffertaIn(cambioSub) {
     fuori += controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
   }
   $("#o-totali").innerHTML = `
-    <div class="kpi"><span>Venduto</span><span class="big">${euro(venduto)}</span></div>
+    <div class="kpi kpi-main"><span>Venduto</span><span class="big">${euro(venduto)}</span></div>
     <div class="kpi"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
     <div class="kpi"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
     <div class="kpi"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>
@@ -517,7 +517,11 @@ function disegnaOffertaIn(cambioSub) {
   if (!c) return;
   disegnaImpostCapitolo();
   const rc = riepilogoCapitolo(c, opzCap(c));
-  $("#c-totali").innerHTML = `<b>${esc(c.nome)}</b> · venduto <b>${euro(rc.venduto)}</b> · acquistato ${euro(rc.acquistato)} · margine ${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}`;
+  $("#c-totali").innerHTML = `<span class="cap-nome">${esc(c.nome)}</span>
+    <span class="mini-kpi"><span>Venduto</span><b>${euro(rc.venduto)}</b></span>
+    <span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
+    <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>
+    <span class="mini-kpi"><span>Tipo</span><b>${esc(c.tipo)} · ${esc(c.prezzi)}</b></span>`;
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
   for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
   $("#conta-righe").textContent = c.righe.length ? `(${c.righe.length})` : "";

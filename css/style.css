@@ -254,3 +254,138 @@ dialog.largo { width: min(1040px, calc(100vw - 24px)); }
 .badge.gen { font-size: .65rem; padding: 0 5px; }
 .cap-testa { display: flex; gap: 10px; align-items: center; margin: 2px 0 6px; flex-wrap: wrap; }
 .picker-wrap { max-height: 42vh; }
+
+/* ===================== Profondità e gerarchia visiva ===================== */
+:root {
+  --bg: #e7eaee; --card: #ffffff; --card-2: #f3f5f8; --field: #eaf3fb; --field-line: #b9d3ea;
+  --ink: #16202a; --muted: #5f6b77; --line: #d6dbe1; --line-strong: #c3cad2;
+  --accent: #1d5f91; --accent-dark: #164a72; --accent-soft: #dcebf7; --accent-ink: #fff;
+  --label: #3b4a58;
+  --shadow: 0 1px 2px rgba(15, 30, 45, .08), 0 8px 24px rgba(15, 30, 45, .08);
+  --shadow-lift: 0 2px 4px rgba(15, 30, 45, .10), 0 12px 32px rgba(15, 30, 45, .12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0f13; --card: #181d24; --card-2: #212833; --field: #13283b; --field-line: #2e5578;
+    --ink: #eef2f6; --muted: #98a4b1; --line: #2a323d; --line-strong: #3a4452;
+    --accent: #4fa3e3; --accent-dark: #3b8ccb; --accent-soft: #17324a; --accent-ink: #06121d;
+    --label: #c4cfda;
+    --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 28px rgba(0, 0, 0, .55);
+    --shadow-lift: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 14px 36px rgba(0, 0, 0, .65);
+  }
+}
+body { background: var(--bg); }
+.topbar { box-shadow: 0 2px 10px rgba(0, 0, 0, .12); }
+
+/* Riquadri */
+.card { border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); border-color: var(--line); }
+.titolo-sez {
+  font-size: 1rem; font-weight: 800; letter-spacing: .02em; margin: 0 0 12px; padding-left: 10px;
+  border-left: 4px solid var(--accent); line-height: 1.2;
+}
+
+/* Etichette forti, come nell'Excel */
+label.f, .muted.small[style*="font-weight:600"] {
+  color: var(--label) !important; font-size: .72rem !important; font-weight: 800 !important;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* Campi da compilare: azzurrini, si riconoscono subito */
+input:not([type=checkbox]):not([type=radio]), select, textarea {
+  background: var(--field); border: 1px solid var(--field-line); font-weight: 600;
+}
+input:not([type=checkbox]):not([type=radio]):hover, select:hover, textarea:hover { border-color: var(--accent); }
+input::placeholder, textarea::placeholder { font-weight: 400; }
+input:disabled, select:disabled { opacity: .45; }
+
+/* Pulsanti a scelta (tipo offerta, prezzi…) */
+.seg { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--card-2); box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
+.seg button { background: transparent; color: var(--muted); font-weight: 700; padding: 8px 14px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button:hover { color: var(--ink); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+/* Numeri principali dell'offerta */
+.totale-box { gap: 12px; }
+.kpi { background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; min-width: 150px; }
+.kpi span:first-child { color: var(--label); font-size: .7rem; letter-spacing: .06em; }
+.kpi .big { font-size: 1.5rem; font-weight: 800; }
+.kpi-main { background: var(--accent); border-color: var(--accent); }
+.kpi-main span, .kpi-main span:first-child { color: var(--accent-ink) !important; }
+
+/* Barra dei capitoli */
+.captabs-in button { padding: 9px 14px; border-radius: 11px; background: var(--card); box-shadow: var(--shadow); border-color: var(--line); }
+.captabs-in button:hover { border-color: var(--accent); }
+.captabs-in button.on { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+select.add-cap { background: transparent; border: 2px dashed var(--accent); font-weight: 700; }
+
+/* Testata del capitolo */
+.cap-testa { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow); margin: 4px 0 12px; }
+.cap-kpi { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.cap-nome { font-size: 1.25rem; font-weight: 800; align-self: center; margin-right: 6px; color: var(--accent); }
+.mini-kpi { display: flex; flex-direction: column; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 5px 12px; }
+.mini-kpi span { font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--label); }
+.mini-kpi b { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+
+/* Le tre pagine del capitolo */
+.subtabs { border-bottom: 0; gap: 8px; margin: 0 0 14px; }
+.subtabs button {
+  background: var(--card); border: 1px solid var(--line); border-radius: 11px; padding: 10px 18px;
+  font-size: .95rem; font-weight: 800; color: var(--muted); box-shadow: var(--shadow); border-bottom: 1px solid var(--line);
+}
+.subtabs button:hover { color: var(--ink); border-color: var(--accent); }
+.subtabs button.on { background: var(--accent-soft); color: var(--ink); border: 2px solid var(--accent); }
+
+/* Tabelle */
+.tbl-wrap { border-radius: 12px; box-shadow: var(--shadow); border-color: var(--line); }
+th { background: var(--card-2); color: var(--label); font-weight: 800; border-bottom: 2px solid var(--line-strong); }
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--card-2) 55%, transparent); }
+tbody tr:hover td { background: var(--accent-soft) !important; }
+tr.gruppo td { background: var(--accent-soft) !important; color: var(--ink); font-weight: 800; border-left: 4px solid var(--accent); text-transform: uppercase; letter-spacing: .03em; font-size: .8rem; }
+tr.sotto td { background: var(--card-2) !important; color: var(--label); font-weight: 800; }
+tr.sel td { background: color-mix(in srgb, var(--accent) 22%, transparent) !important; }
+td .d { color: var(--muted); }
+td b { font-weight: 800; }
+
+/* Barra delle azioni sulle righe selezionate */
+.bulk { background: var(--card); border: 2px solid var(--accent); box-shadow: var(--shadow-lift); }
+
+/* Pulsanti */
+button.btn { border-radius: 9px; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+button.btn.primary { box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Pallini di stato più visibili */
+.dot { width: 11px; height: 11px; box-shadow: 0 0 0 2px var(--card); }
+
+/* Avvisi */
+.avviso { border-left: 4px solid currentColor; font-weight: 600; }
+
+/* ===================== Tabelle leggibili (righe che non si confondono con lo sfondo) ===================== */
+:root { --row: #ffffff; --row-alt: #e8f1fa; --row-line: #cfd9e3; --th-bg: #1d5f91; --th-ink: #ffffff; --grp-bg: #c9def0; }
+@media (prefers-color-scheme: dark) {
+  :root { --row: #1c232d; --row-alt: #24303e; --row-line: #354353; --th-bg: #2b6ea3; --th-ink: #ffffff; --grp-bg: #1f4466; }
+}
+.tbl-wrap { background: var(--row); border: 1px solid var(--row-line); }
+th {
+  background: var(--th-bg) !important; color: var(--th-ink) !important; border-bottom: 0 !important;
+  border-right: 1px solid color-mix(in srgb, var(--th-ink) 18%, transparent);
+}
+th input[type=checkbox] { accent-color: #fff; }
+tbody td { background: var(--row); border-bottom: 1px solid var(--row-line); }
+tbody tr:nth-child(even) td { background: var(--row-alt); }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 22%, var(--row)) !important; }
+tr.gruppo td {
+  background: var(--grp-bg) !important; border-left: 5px solid var(--accent); border-bottom: 1px solid var(--row-line);
+  font-size: .82rem;
+}
+tr.sotto td {
+  background: color-mix(in srgb, var(--th-bg) 14%, var(--row)) !important; color: var(--ink) !important;
+  border-left: 5px solid color-mix(in srgb, var(--accent) 55%, transparent); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em;
+}
+td.desc .d { color: var(--muted); }
+td.mono { color: var(--ink); font-weight: 600; }
+/* campi nelle tabelle: ben distinti dalla riga */
+tbody input:not([type=checkbox]), tbody select {
+  background: var(--field); border: 1px solid var(--field-line); box-shadow: inset 0 1px 2px rgba(0,0,0,.15);
+}
+tbody input.qta { font-weight: 800; }
