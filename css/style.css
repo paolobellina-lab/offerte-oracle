@@ -499,3 +499,10 @@ tr.testa-gruppo span { color: #fff !important; }
 .tg-n { margin-left: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; opacity: .85; font-size: .78rem; }
 tbody tr.testa-gruppo:hover td { background: var(--accent) !important; }
 :root[data-theme="scuro"] tbody tr.testa-gruppo:hover td { background: #2f6aa6 !important; }
+
+/* Intestazione delle colonne azzurrina, righe alternate bianco / grigino */
+:root[data-theme="chiaro"] { --th-fondo: #dceaf8; --th-testo: #2b4a6a; --row: #ffffff; --row-alt: #eef0f3; }
+:root[data-theme="scuro"] { --th-fondo: #2a3b4e; --th-testo: #c9dbee; --row: #25282d; --row-alt: #2e3238; }
+th { background: var(--th-fondo) !important; color: var(--th-testo) !important; border-bottom: 1px solid color-mix(in srgb, var(--th-testo) 25%, transparent) !important; }
+tbody tr:nth-child(odd) td { background: var(--row); }
+tbody tr:nth-child(even) td { background: var(--row-alt); }
