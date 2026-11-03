@@ -1,0 +1,220 @@
+// Lettura e scrittura di file Excel (.xlsx / .xlsm) senza librerie esterne.
+// Lettura: si usano i valori già calcolati salvati da Excel nel file (non si ricalcolano le formule).
+// Scrittura: un foglio semplice, compatibile con Excel e con l'import di Oracle.
+
+/* ---------------- ZIP ---------------- */
+async function inflateRaw(bytes) {
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function leggiZip(buf) {
+  const u8 = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Il file non è un Excel valido (.xlsx / .xlsm).");
+  const n = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const voci = new Map();
+  const dec = new TextDecoder();
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const metodo = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+    const off = dv.getUint32(p + 42, true);
+    const nome = dec.decode(u8.subarray(p + 46, p + 46 + nl));
+    voci.set(nome, { metodo, compSize, off });
+    p += 46 + nl + el + cl;
+  }
+  return {
+    has: (nome) => voci.has(nome),
+    async testo(nome) {
+      const v = voci.get(nome);
+      if (!v) return null;
+      const lnl = dv.getUint16(v.off + 26, true), lel = dv.getUint16(v.off + 28, true);
+      const start = v.off + 30 + lnl + lel;
+      const raw = u8.subarray(start, start + v.compSize);
+      const dati = v.metodo === 0 ? raw : await inflateRaw(raw);
+      return new TextDecoder().decode(dati);
+    },
+  };
+}
+
+/* ---------------- Lettura ---------------- */
+const xml = (s) => new DOMParser().parseFromString(s, "application/xml");
+const figli = (el, nome) => Array.from(el.getElementsByTagName(nome));
+
+function colIndex(ref) {
+  let n = 0;
+  for (const ch of ref) {
+    const c = ch.charCodeAt(0);
+    if (c < 65 || c > 90) break;
+    n = n * 26 + (c - 64);
+  }
+  return n - 1;
+}
+
+function testoSi(si) {
+  // testo di una stringa condivisa, ignorando la guida fonetica (rPh)
+  let s = "";
+  for (const t of figli(si, "t")) {
+    if (t.parentNode && t.parentNode.nodeName === "rPh") continue;
+    s += t.textContent;
+  }
+  return s;
+}
+
+/* Restituisce { nomi: [...], foglio(nome) → righe (array di array, indice 0 = riga 1) } */
+export async function leggiExcel(buf) {
+  const zip = await leggiZip(buf);
+  const wb = xml(await zip.testo("xl/workbook.xml"));
+  const rels = xml(await zip.testo("xl/_rels/workbook.xml.rels"));
+  const target = {};
+  for (const r of figli(rels, "Relationship")) target[r.getAttribute("Id")] = r.getAttribute("Target");
+  const fogli = figli(wb, "sheet").map((s) => {
+    const rid = s.getAttribute("r:id") || s.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+    let t = target[rid] || "";
+    t = t.startsWith("/") ? t.slice(1) : "xl/" + t.replace(/^\.\//, "");
+    return { nome: s.getAttribute("name"), percorso: t };
+  });
+  let condivise = [];
+  if (zip.has("xl/sharedStrings.xml")) {
+    condivise = figli(xml(await zip.testo("xl/sharedStrings.xml")), "si").map(testoSi);
+  }
+  const cache = {};
+  return {
+    nomi: fogli.map((f) => f.nome),
+    async foglio(nome) {
+      if (cache[nome]) return cache[nome];
+      const f = fogli.find((x) => x.nome === nome);
+      if (!f) return null;
+      const doc = xml(await zip.testo(f.percorso));
+      const righe = [];
+      for (const row of figli(doc, "row")) {
+        const ri = Number(row.getAttribute("r")) - 1;
+        const arr = [];
+        for (const c of figli(row, "c")) {
+          const ci = colIndex(c.getAttribute("r") || "");
+          const t = c.getAttribute("t");
+          const vEl = c.getElementsByTagName("v")[0];
+          let v = vEl ? vEl.textContent : null;
+          if (t === "s") v = condivise[Number(v)] ?? "";
+          else if (t === "inlineStr") v = figli(c, "t").map((x) => x.textContent).join("");
+          else if (t === "b") v = v === "1";
+          else if (t === "e") v = { errore: v };
+          else if (t === "str") v = v ?? "";
+          else if (v !== null) v = Number(v);
+          if (v !== null && v !== "") arr[ci] = v;
+        }
+        righe[ri] = arr;
+      }
+      for (let i = 0; i < righe.length; i++) if (!righe[i]) righe[i] = [];
+      cache[nome] = righe;
+      return righe;
+    },
+  };
+}
+
+/* Data seriale di Excel → "AAAA-MM-GG" */
+export function dataDaSeriale(v) {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "number" && v > 20000 && v < 80000) {
+    const ms = Math.round((v - 25569) * 86400000);
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  if (typeof v === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) {
+    const [d, m, y] = v.split("/").map(Number);
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  return "";
+}
+
+/* ---------------- Scrittura ---------------- */
+const CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xffffffff;
+  for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const parti = [], centrale = [];
+  let off = 0;
+  for (const [nome, contenuto] of files) {
+    const n = enc.encode(nome), d = enc.encode(contenuto), crc = crc32(d);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true);
+    lh.setUint16(26, n.length, true); lh.setUint16(28, 0, true);
+    parti.push(new Uint8Array(lh.buffer), n, d);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true);
+    ch.setUint16(28, n.length, true); ch.setUint32(42, off, true);
+    centrale.push(new Uint8Array(ch.buffer), n);
+    off += 30 + n.length + d.length;
+  }
+  const dimC = centrale.reduce((s, x) => s + x.length, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, dimC, true); e.setUint32(16, off, true);
+  return new Blob([...parti, ...centrale, new Uint8Array(e.buffer)],
+    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+const escXml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
+  // caratteri di controllo non ammessi in XML
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+
+function nomeCol(i) {
+  let s = "";
+  i++;
+  while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
+/* righe: array di array (la prima è l'intestazione). Celle vuote = "" o null. */
+export function scriviExcel(righe, nomeFoglio = "Sheet1") {
+  const rowsXml = righe.map((r, ri) => {
+    const celle = r.map((v, ci) => {
+      if (v === "" || v === null || v === undefined) return "";
+      const ref = nomeCol(ci) + (ri + 1);
+      const stile = ri === 0 ? ' s="1"' : "";
+      if (typeof v === "number" && Number.isFinite(v)) return `<c r="${ref}"${stile}><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"${stile}><is><t xml:space="preserve">${escXml(v)}</t></is></c>`;
+    }).join("");
+    return `<row r="${ri + 1}">${celle}</row>`;
+  }).join("");
+  const files = [
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escXml(nomeFoglio)}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+    ["xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml}</sheetData></worksheet>`],
+  ];
+  return zipStore(files);
+}

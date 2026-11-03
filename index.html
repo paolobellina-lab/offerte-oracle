@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offerte Oracle</title>
+<meta name="theme-color" content="#1f5f8b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icona-192.png">
+<link rel="apple-touch-icon" href="icons/icona-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="banner-prova" class="banner" hidden>
+  Modalità prova: i dati restano solo in questo browser. Per salvarli su Firebase compila <b>firebase-config.js</b> (vedi LEGGIMI).
+</div>
+
+<section id="login" class="login" hidden>
+  <div class="card">
+    <div class="brand-mark">OF</div>
+    <h1>Offerte Oracle</h1>
+    <p class="muted">Righe offerta, prezzi e sconti da importare nel gestionale.</p>
+    <button class="btn primary" id="google-login" style="width:100%;justify-content:center">Accedi con Google</button>
+    <div class="err"></div>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header class="topbar no-print">
+    <div class="topbar-in">
+      <div class="brand"><div class="brand-mark">OF</div><h1>Offerte Oracle</h1></div>
+      <nav class="tabs" id="tabs">
+        <button data-vista="offerte" class="on">Offerte</button>
+        <button data-vista="catalogo">Catalogo</button>
+        <button data-vista="clienti">Clienti</button>
+        <button data-vista="importa">Importa e aggiorna</button>
+      </nav>
+      <span class="spacer"></span>
+      <span class="utente" id="utente"></span>
+      <button class="btn small" id="esci">Esci</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ELENCO OFFERTE -->
+    <section id="v-offerte">
+      <div class="row" style="margin-bottom:12px">
+        <h2 class="grow">Offerte</h2>
+        <input id="cerca-offerte" type="search" placeholder="Cerca riferimento o cliente" style="min-width:240px">
+        <button class="btn primary" id="nuova-offerta">+ Nuova offerta</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Riferimento</th><th>Cliente</th><th>Tipo</th><th>Prezzi</th><th class="num">Righe</th><th class="num">Totale</th><th>Modificata</th><th></th></tr></thead>
+          <tbody id="lista-offerte"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- OFFERTA -->
+    <section id="v-offerta" hidden>
+      <div class="row no-print" style="margin-bottom:10px">
+        <button class="btn small" id="torna-offerte">← Offerte</button>
+        <span class="salvataggio" id="stato-salvataggio"></span>
+        <span class="spacer"></span>
+        <button class="btn small" id="duplica-offerta">Duplica</button>
+        <button class="btn small danger" id="elimina-offerta">Elimina</button>
+      </div>
+
+      <div class="card">
+        <div class="grid-set">
+          <label class="f wide">Riferimento offerta
+            <input id="o-nome" placeholder="es. OF_TE25031087-FIRE">
+          </label>
+          <label class="f wide">Cliente
+            <select id="o-cliente"></select>
+          </label>
+          <label class="f">Linea di partenza
+            <input id="o-linea" type="number" min="0" step="10">
+          </label>
+          <label class="f">Magazzino spedizione
+            <input id="o-magazzino" maxlength="10">
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px;gap:18px">
+          <div class="f" style="display:flex;flex-direction:column;gap:3px">
+            <span class="muted small" style="font-weight:600">Tipo offerta</span>
+            <div class="seg" id="o-tipo"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span class="muted small" style="font-weight:600">Prezzi</span>
+            <div class="seg" id="o-prezzi"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span class="muted small" style="font-weight:600">Sottocapitoli in Oracle</span>
+            <div class="seg" id="o-sotto"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <span class="muted small" style="font-weight:600">Sconti e ricarico per tutta l'offerta</span>
+          <span class="muted small"> — vuoto = si usano quelli del catalogo</span>
+          <div class="row" id="o-globali" style="margin-top:4px;gap:14px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="totale-box" id="o-totali"></div>
+      </div>
+
+      <nav class="subtabs no-print" id="subtabs">
+        <button data-sub="righe" class="on">Righe<span class="conta" id="conta-righe"></span></button>
+        <button data-sub="aggiungi">Aggiungi articoli</button>
+        <button data-sub="gmv">Sconti per GMV e cartellino<span class="conta" id="conta-gmv"></span></button>
+        <button data-sub="export">Esporta per Oracle</button>
+        <button data-sub="note">Note</button>
+      </nav>
+
+      <div id="s-righe">
+        <div class="row no-print" style="margin-bottom:8px">
+          <span class="muted small grow">Modifica le quantità direttamente qui. Quantità 0 = la riga viene tolta.</span>
+          <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal catalogo</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
+            <th class="num">Prezzo base</th><th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th>
+            <th class="num">Aum.1</th><th class="num">Ric.</th><th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th><th></th>
+          </tr></thead>
+          <tbody id="righe-offerta"></tbody>
+        </table></div>
+      </div>
+
+      <div id="s-aggiungi" hidden>
+        <div class="row" style="margin-bottom:8px">
+          <select id="a-capitolo"></select>
+          <select id="a-sotto"></select>
+          <input id="a-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione o descrizione">
+          <label class="row small muted"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th class="num">Q.tà</th><th class="num">Giorni</th></tr></thead>
+          <tbody id="righe-picker"></tbody>
+        </table></div>
+        <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
+      </div>
+
+      <div id="s-gmv" hidden>
+        <p class="muted small" style="margin-top:0">Gli sconti scritti qui valgono solo per gli articoli di quel GMV e hanno la precedenza su tutto il resto.
+          Il controllo cartellino confronta lo sconto complessivo dell'offerta con quello del cliente.</p>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>GMV</th><th>Fornitore</th><th class="num">Righe</th><th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th>Ricarico</th>
+            <th class="num">Sconto offerta</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
+          <tbody id="righe-gmv"></tbody>
+        </table></div>
+      </div>
+
+      <div id="s-export" hidden>
+        <div id="export-avvisi"></div>
+        <div class="row no-print" style="margin-bottom:10px">
+          <button class="btn primary" id="scarica-xlsx">Scarica Excel per Oracle</button>
+          <button class="btn" id="scarica-csv">Scarica CSV</button>
+          <button class="btn" id="copia-righe">Copia righe</button>
+          <span class="muted small">Il foglio si chiama "Sheet1" e ha le stesse colonne del vecchio Excel.</span>
+        </div>
+        <div class="tbl-wrap"><table id="tab-export"></table></div>
+      </div>
+
+      <div id="s-note" hidden>
+        <div class="card">
+          <label class="f">Note dell'offerta (solo per uso interno, non vanno in Oracle)
+            <textarea id="o-note" rows="8"></textarea>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATALOGO -->
+    <section id="v-catalogo" hidden>
+      <div class="row" style="margin-bottom:10px">
+        <h2>Catalogo</h2>
+        <select id="c-capitolo"></select>
+        <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMV">
+        <button class="btn" id="c-impost">Impostazioni capitolo</button>
+        <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <div class="legenda">
+          <span><span class="dot fresco"></span>prezzi aggiornati da meno di 1 mese</span>
+          <span><span class="dot medio"></span>da 1 a 2 mesi</span>
+          <span><span class="dot vecchio"></span>da più di 2 mesi</span>
+          <span><span class="dot"></span>data non indicata</span>
+        </div>
+        <span class="spacer"></span><span class="muted small" id="c-info"></span>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th>
+          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th class="num">Ripar.</th><th>GMV</th><th>Aggiornato</th></tr></thead>
+        <tbody id="righe-catalogo"></tbody>
+      </table></div>
+      <div class="row" style="margin-top:8px"><button class="btn small" id="c-altri" hidden>Mostra altri</button></div>
+    </section>
+
+    <!-- CLIENTI -->
+    <section id="v-clienti" hidden>
+      <div class="row" style="margin-bottom:10px">
+        <h2 class="grow">Clienti e cartellini</h2>
+        <input id="cl-cerca" type="search" placeholder="Cerca cliente">
+        <button class="btn primary" id="cl-nuovo">+ Nuovo cliente</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Cliente</th><th>Codice</th><th class="num">Tariffa attività</th><th>Sconti di cartellino</th></tr></thead>
+        <tbody id="righe-clienti"></tbody>
+      </table></div>
+    </section>
+
+    <!-- IMPORTA -->
+    <section id="v-importa" hidden>
+      <div class="card stack">
+        <h2>Importa dal file Excel</h2>
+        <p class="muted" style="margin:0">Carica il file <b>Template_Import_Righe-OFFERTA</b> (.xlsm o .xlsx). Si leggono i fogli catalogo,
+          i capitoli con il ricarico automatico, i GMV e i cartellini clienti. Il file non viene modificato.</p>
+        <label class="drop" id="drop-xlsx">Trascina qui il file oppure fai clic per sceglierlo
+          <input type="file" id="file-xlsx" accept=".xlsm,.xlsx" hidden>
+        </label>
+        <div id="riepilogo-import"></div>
+      </div>
+
+      <div class="card stack">
+        <h2>Aggiorna i prezzi da Oracle</h2>
+        <p class="muted" style="margin:0">Dalla griglia delle righe offerta di Oracle seleziona tutto e copia (con la riga delle intestazioni), poi incolla qui.
+          Servono le colonne <b>Codice Articolo Fornitore</b> e <b>Prezzo Unitario</b>; se c'è la colonna <b>GMA</b> si aggiorna anche il GMV.
+          Va bene anche un file Excel con le stesse colonne.</p>
+        <textarea id="incolla-oracle" rows="5" placeholder="Incolla qui le righe copiate da Oracle"></textarea>
+        <div class="row">
+          <button class="btn" id="analizza-oracle">Confronta con il catalogo</button>
+          <label class="btn">Scegli file Excel<input type="file" id="file-oracle" accept=".xlsx,.xlsm" hidden></label>
+        </div>
+        <div id="riepilogo-oracle"></div>
+      </div>
+
+      <div class="card stack">
+        <h2>Copia di sicurezza</h2>
+        <p class="muted" style="margin:0">Scarica tutti i dati (catalogo, clienti, offerte) in un file da conservare, oppure ripristinali da una copia.</p>
+        <div class="row">
+          <button class="btn" id="scarica-backup">Scarica copia di sicurezza</button>
+          <label class="btn">Ripristina da copia<input type="file" id="file-backup" accept=".json" hidden></label>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <div class="dlg-head"><h2 class="grow" id="dlg-titolo"></h2><button class="icon" value="annulla" aria-label="Chiudi">✕</button></div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-foot" id="dlg-foot"></div>
+  </form>
+</dialog>
+
+<div id="toast" hidden></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

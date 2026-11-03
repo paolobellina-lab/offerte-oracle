@@ -1,0 +1,207 @@
+// Motore di calcolo: replica le formule dei fogli TIPO OFFERTA e Sheet1 dell'Excel
+// "Template_Import_Righe-OFFERTA_V22". Nessuna dipendenza: si usa sia nell'app sia nei test.
+
+export const TIPI = ["ACQUISTO", "LISTINO", "VENDITA CLIENTE", "LISTINO COMPUTO"];
+export const FONTI = ["DA ORACLE", "DA EXCEL"];
+export const CAMPI_SCONTO = ["sc3", "sc4", "sc5", "aum1"]; // colonne Q R S T del catalogo
+export const ETICHETTE = { sc3: "Sconto 3", sc4: "Sconto 4", sc5: "Sconto 5", aum1: "Aumento 1", ric: "Ricarico" };
+
+// Intestazioni di Sheet1, identiche all'Excel (anche lo spazio finale di "Prezzo Netto ").
+export const COLONNE_ORACLE = [
+  "Linea N", "Codice Articolo Fornitore", "Magazzino Spedizione", "Quantità Ordinata", "Nome Capitolato",
+  "Prezzo Netto ", "Sconto 3 [%]", "Sconto 4 [%]", "Sconto 5 [%]", "Sconto 3 [€]", "Sconto 4 [€]",
+  "Sconto 5 [€]", "Aumento 1 [%]", "Aumento 2 [%]", "Aumento 1 [€]", "Aumento 2 [€]",
+  "Note Pre-Linea", "Note Post-Linea",
+];
+
+/* Numero da qualunque valore: accetta "0,75", "1.234,50", "75%", "-" (= 0). */
+export function num(v) {
+  if (v === null || v === undefined || v === "" || v === "-") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/[€\s]/g, "");
+  const perc = s.endsWith("%");
+  if (perc) s = s.slice(0, -1);
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return 0;
+  return perc ? n / 100 : n;
+}
+
+const arrot = (n, dec = 6) => {
+  const f = 10 ** dec;
+  return Math.round((n + Number.EPSILON) * f) / f;
+};
+
+export const isAttivita = (r) => String(r.codice || "").trim().toUpperCase() === "ATT.TEC";
+export const isListino = (tipo) => tipo === "LISTINO" || tipo === "LISTINO COMPUTO";
+export const codiceOracle = (r) => `${r.precodice || ""}${r.codice || ""}`.trim();
+
+/* Colonna M del catalogo: valore riparametrizzato (solo se c'è la riparametrizzazione P). */
+export function riparametrizzato(r) {
+  const P = num(r.riparam);
+  if (!P || P === 1) return null;
+  return num(r.listinoAcquisto) * (1 - num(r.sc3)) * (1 - num(r.sc4)) * (1 - num(r.sc5)) * (1 - num(r.aum1)) / (1 - P);
+}
+
+/* Colonna K del catalogo: prezzo di listino, calcolato con le formule dell'Excel.
+   Articoli: IF(P<>0, M, N). Attività tecnica: ROUNDUP(M*giorni, -2). */
+export function listinoCalcolato(r) {
+  const M = riparametrizzato(r);
+  if (isAttivita(r)) {
+    const base = (M ?? num(r.listinoAcquisto)) * num(r.giorni);
+    return Math.ceil(arrot(base / 100, 9)) * 100;
+  }
+  return M ?? num(r.listinoAcquisto);
+}
+
+/* Prezzo di listino della riga: quello salvato nel catalogo (importato dalla colonna K o modificato a mano),
+   altrimenti quello calcolato con le formule. */
+export function prezzoListino(r) {
+  return num(r.listino) || listinoCalcolato(r);
+}
+
+/* Colonna M di TIPO OFFERTA: prezzo di partenza della riga in base al tipo di offerta. */
+export function prezzoBase(r, tipo) {
+  if (isAttivita(r)) {
+    if (tipo === "ACQUISTO") return num(r.listinoAcquisto);
+    if (isListino(tipo)) return prezzoListino(r);
+    if (tipo === "VENDITA CLIENTE") return num(r.listinoAcquisto) * num(r.giorni);
+    return num(r.listinoAcquisto);
+  }
+  if (tipo === "LISTINO COMPUTO") return prezzoListino(r);
+  return num(r.listinoAcquisto);
+}
+
+/* Colonna H di TIPO OFFERTA: per l'attività tecnica in ACQUISTO la quantità sono i giorni. */
+export function quantita(r, tipo) {
+  if (isAttivita(r) && tipo === "ACQUISTO") return num(r.giorni);
+  return num(r.qta);
+}
+
+/* Colonne O P Q R di TIPO OFFERTA. Priorità:
+   sconto del GMV → sconto globale → 0 per offerte a listino → 0 per l'attività tecnica → valore del catalogo. */
+export function sconto(campo, r, off) {
+  const perGmv = num(off.gmv?.[r.gmv]?.[campo]);
+  if (perGmv) return perGmv;
+  const globale = num(off.globali?.[campo]);
+  if (globale) return globale;
+  if (isListino(off.tipo)) return 0;
+  if (isAttivita(r)) return 0;
+  return num(r[campo]);
+}
+
+/* Colonna S di TIPO OFFERTA (Aumento 2): ricarico, solo per VENDITA CLIENTE.
+   Ricarico del GMV → ricarico dell'offerta → ricarico automatico del capitolo. */
+export function ricarico(r, off, ricaricoCapitolo = 0) {
+  if (off.tipo !== "VENDITA CLIENTE") return 0;
+  const perGmv = num(off.gmv?.[r.gmv]?.ric);
+  if (perGmv) return perGmv;
+  const globale = num(off.globali?.ric);
+  if (globale) return globale;
+  return num(ricaricoCapitolo);
+}
+
+/* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO: 0.28, ... } */
+export function calcolaRiga(r, off, ricarichi = {}) {
+  const tipo = off.tipo;
+  const base = prezzoBase(r, tipo);
+  const sc3 = sconto("sc3", r, off), sc4 = sconto("sc4", r, off), sc5 = sconto("sc5", r, off);
+  const aum1 = sconto("aum1", r, off);
+  const ric = ricarico(r, off, ricarichi[r.capitolo]);
+  const fattore = (1 - sc3) * (1 - sc4) * (1 - sc5) * (1 + aum1) * (1 + ric);
+  const unitario = base * fattore;
+  const qta = quantita(r, tipo);
+  return { base, sc3, sc4, sc5, aum1, ric, fattore, unitario, qta, totale: unitario * qta };
+}
+
+/* Ordine delle righe: come nell'Excel, nell'ordine del catalogo, capitolo per capitolo. */
+export function ordinaRighe(righe, ordineCapitoli = []) {
+  const pos = (c) => { const i = ordineCapitoli.indexOf(c); return i < 0 ? 999 : i; };
+  return [...righe].sort((a, b) =>
+    pos(a.capitolo) - pos(b.capitolo) || (a.capitolo || "").localeCompare(b.capitolo || "") ||
+    num(a.ordine) - num(b.ordine));
+}
+
+/* Righe effettive dell'offerta: solo quelle con quantità diversa da 0 (come il filtro su Q.tà ≠ 0). */
+export function calcolaOfferta(off, { ricarichi = {}, ordineCapitoli = [] } = {}) {
+  const righe = ordinaRighe((off.righe || []).filter((r) => num(r.qta) !== 0), ordineCapitoli)
+    .map((r) => ({ riga: r, c: calcolaRiga(r, off, ricarichi) }));
+  const totale = righe.reduce((s, x) => s + x.c.totale, 0);
+  return { righe, totale };
+}
+
+/* Tracciato Sheet1 per Oracle. Restituisce { righe: [array di 18 valori], avvisi: [...] }. */
+export function righeOracle(off, opz = {}) {
+  const { righe } = calcolaOfferta(off, opz);
+  const daExcel = off.prezzi === "DA EXCEL";
+  const start = num(off.lineaPartenza) || 10;
+  const out = [], avvisi = [];
+  let linea = start;
+  const perc = (v) => (v === 0 || daExcel ? "" : arrot(v * 100));
+  for (const { riga: r, c } of righe) {
+    const codice = codiceOracle(r);
+    if (!codice) {
+      avvisi.push(`Riga senza codice articolo esclusa: ${r.nOrdine || r.descrizione || "(senza descrizione)"} (${r.capitolo})`);
+      continue;
+    }
+    const prezzoNetto = (codice === "PITATT.TEC" || codice === "P000ARTICOLO_GEN" || daExcel) ? arrot(c.unitario) : "";
+    out.push([
+      linea, codice, off.magazzino || "BG", arrot(c.qta),
+      off.sottocapitoli ? (r.sottocapitolo || "") : "",
+      prezzoNetto,
+      perc(c.sc3), perc(c.sc4), perc(c.sc5), "", "", "",
+      perc(c.aum1), perc(c.ric), "", "",
+      r.notePre && r.notePre !== "0" ? r.notePre : "",
+      r.notePost && r.notePost !== "0" ? r.notePost : "",
+    ]);
+    linea += 10;
+  }
+  return { righe: out, avvisi };
+}
+
+/* Controllo cartellino cliente (foglio SC_CLIENTI e colonna K di TIPO OFFERTA).
+   Per ogni GMV dell'offerta confronta lo sconto complessivo con quello del cartellino del cliente;
+   per l'attività tecnica confronta il prezzo a giornata con la tariffa del cliente
+   (l'Excel confrontava il prezzo di tutti i giorni con la tariffa giornaliera). */
+export function controlloCartellino(off, cliente, opz = {}) {
+  if (!cliente) return [];
+  const { righe } = calcolaOfferta(off, opz);
+  const visti = new Map();
+  for (const x of righe) {
+    const g = x.riga.gmv || "";
+    if (!g || visti.has(g)) continue; // come CERCA.VERT: vale la prima riga del GMV
+    visti.set(g, x);
+  }
+  const esiti = [];
+  for (const [gmv, x] of visti) {
+    if (gmv === "ATT" || isAttivita(x.riga)) {
+      const att = righe.find((y) => isAttivita(y.riga)) || x;
+      const tariffa = cliente.att === undefined || cliente.att === "" ? null : num(cliente.att);
+      if (tariffa === null) continue;
+      // tariffa giornaliera: in LISTINO e VENDITA CLIENTE il prezzo dell'attività comprende tutti i giorni
+      const gg = num(att.riga.giorni);
+      const prezzo = off.tipo !== "ACQUISTO" && gg > 0 ? att.c.unitario / gg : att.c.unitario;
+      const stato = tariffa > prezzo + 1e-9 ? "ok" : Math.abs(tariffa - prezzo) < 1e-9 ? "pari" : "fuori";
+      esiti.push({ gmv, tipo: "attivita", offerta: prezzo, cartellino: tariffa, stato,
+        testo: stato === "ok" ? "OK" : stato === "pari" ? "Valore di cartellino" : "Superiore al valore di cartellino" });
+      continue;
+    }
+    const scontoOfferta = 1 - x.c.fattore;
+    const scCart = num(cliente.sconti?.[gmv]);
+    const stato = scCart < scontoOfferta - 1e-9 ? "ok" : Math.abs(scCart - scontoOfferta) < 1e-9 ? "pari" : "fuori";
+    esiti.push({ gmv, tipo: "sconto", offerta: scontoOfferta, cartellino: scCart, stato,
+      testo: stato === "ok" ? "OK" : stato === "pari" ? "Sconto di cartellino" : "Inferiore al valore di cartellino" });
+  }
+  return esiti;
+}
+
+/* Colore della data di aggiornamento prezzi (legenda dei fogli catalogo). */
+export function freschezza(iso, oggi = new Date()) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const mesi = (oggi - d) / (1000 * 60 * 60 * 24 * 30.44);
+  if (mesi < 1) return "fresco";
+  if (mesi <= 2) return "medio";
+  return "vecchio";
+}

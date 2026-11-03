@@ -1,0 +1,15 @@
+{
+  "name": "Offerte Oracle",
+  "short_name": "Offerte",
+  "description": "Righe offerta, prezzi e sconti da importare nel gestionale Oracle",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f4f1",
+  "theme_color": "#1f5f8b",
+  "lang": "it",
+  "icons": [
+    { "src": "icons/icona-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

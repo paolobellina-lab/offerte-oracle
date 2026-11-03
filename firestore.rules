@@ -1,0 +1,23 @@
+rules_version = '2';
+// Regole per l'app Offerte Oracle.
+// Entrano solo gli account Google nell'elenco qui sotto (email verificata).
+// Per aggiungere un collega: aggiungi la sua email (in minuscolo) all'elenco e pubblica le regole.
+//
+// Se usi lo STESSO progetto Firebase di un'altra app, non sostituire le sue regole:
+// copia soltanto le righe "match /oracle_..." dentro il blocco "match /databases/{database}/documents" esistente.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autorizzato() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'freeze.tacticalseals@gmail.com'
+        ];
+    }
+    match /oracle_catalogo/{id} { allow read, write: if autorizzato(); }
+    match /oracle_config/{id}   { allow read, write: if autorizzato(); }
+    match /oracle_clienti/{id}  { allow read, write: if autorizzato(); }
+    match /oracle_offerte/{id}  { allow read, write: if autorizzato(); }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
