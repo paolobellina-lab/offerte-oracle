@@ -597,3 +597,5 @@ tbody tr.testa-gruppo:focus-within .tg { background: var(--riga-attiva-bordo); b
 .gruppi-tutti { display: inline-flex; gap: 6px; align-self: flex-end; }
 /* separatore tra le voci generali e quelle dell'offerta */
 .sidebar.aperta #sb-offerta { border-top: 1px solid var(--line-strong); margin-top: 6px; padding-top: 6px; }
+tr.qta-zero td { color: var(--muted); }
+tr.qta-zero td.desc b, tr.qta-zero td.mono { opacity: .6; }

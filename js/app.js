@@ -744,7 +744,7 @@ function disegnaRighe(c) {
       capPrec = r.capitolato || "";
       testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
-    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
+    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
@@ -828,7 +828,7 @@ function cambioRiga(e) {
     modificata(); return ridisegnaOfferta();
   }
   r[campo] = num(inp.value);
-  if (campo === "qta" && !r.qta) c.righe = c.righe.filter((x) => x.id !== id);
+  // q.tà 0: la riga resta nell'offerta (non va in Oracle e non conta nei totali)
   modificata(); ridisegnaOfferta();
 }
 $("#righe-offerta").addEventListener("change", cambioRiga);
