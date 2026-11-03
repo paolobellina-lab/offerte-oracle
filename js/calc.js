@@ -122,9 +122,11 @@ export function ordinaRighe(righe, ordineCapitoli = []) {
     num(a.ordine) - num(b.ordine));
 }
 
-/* Righe effettive dell'offerta: solo quelle con quantità diversa da 0 (come il filtro su Q.tà ≠ 0). */
-export function calcolaOfferta(off, { ricarichi = {}, ordineCapitoli = [] } = {}) {
-  const righe = ordinaRighe((off.righe || []).filter((r) => num(r.qta) !== 0), ordineCapitoli)
+/* Righe effettive di un capitolo dell'offerta, nell'ordine scelto dall'utente:
+   solo quelle con quantità diversa da 0 (come il filtro su Q.tà ≠ 0).
+   "off" è un capitolo dell'offerta: { tipo, prezzi, globali, gmv, righe, ... }. */
+export function calcolaOfferta(off, { ricarichi = {} } = {}) {
+  const righe = (off.righe || []).filter((r) => num(r.qta) !== 0)
     .map((r) => ({ riga: r, c: calcolaRiga(r, off, ricarichi) }));
   const totale = righe.reduce((s, x) => s + x.c.totale, 0);
   return { righe, totale };
@@ -204,4 +206,49 @@ export function freschezza(iso, oggi = new Date()) {
   if (mesi < 1) return "fresco";
   if (mesi <= 2) return "medio";
   return "vecchio";
+}
+
+/* Riepilogo economico di un capitolo (ex foglio ANALISI PACCHETTO).
+   Venduto = totale del capitolo con il suo tipo di offerta.
+   Acquistato = le stesse righe calcolate come ACQUISTO, con gli stessi sconti ed extrasconti
+   (cioè il costo: listino acquisto meno sconti, senza ricarico). */
+export function riepilogoCapitolo(cap, opz = {}) {
+  const v = calcolaOfferta(cap, opz);
+  const a = calcolaOfferta({ ...cap, tipo: "ACQUISTO" }, opz);
+  const out = {
+    righe: v.righe.length, venduto: 0, acquistato: 0,
+    attivita: { venduto: 0, acquistato: 0 }, materiale: { venduto: 0, acquistato: 0 },
+    perGmv: new Map(),
+  };
+  v.righe.forEach((x, i) => {
+    const costo = a.righe[i].c.totale;
+    const vend = x.c.totale;
+    out.venduto += vend; out.acquistato += costo;
+    const parte = isAttivita(x.riga) ? out.attivita : out.materiale;
+    parte.venduto += vend; parte.acquistato += costo;
+    const g = x.riga.gmv || "";
+    if (!out.perGmv.has(g)) out.perGmv.set(g, { righe: 0, venduto: 0, acquistato: 0, prima: x });
+    const pg = out.perGmv.get(g);
+    pg.righe++; pg.venduto += vend; pg.acquistato += costo;
+  });
+  return out;
+}
+export const ricaricoPct = (venduto, acquistato) => (acquistato ? venduto / acquistato - 1 : 0);
+export const marginePct = (venduto, acquistato) => (venduto ? 1 - acquistato / venduto : 0);
+
+/* Ricarico dell'offerta che porta il capitolo (VENDITA CLIENTE) al prezzo target.
+   Le righe con un ricarico forzato sul GMV restano come sono. Restituisce null se non è possibile. */
+export function ricaricoPerTarget(cap, target, opz = {}) {
+  if (cap.tipo !== "VENDITA CLIENTE") return null;
+  const gmvSenzaRic = Object.fromEntries(Object.entries(cap.gmv || {}).map(([g, v]) => [g, { ...v, ric: 0 }]));
+  const costo = calcolaOfferta({ ...cap, tipo: "VENDITA CLIENTE", globali: { ...cap.globali, ric: 0 }, gmv: gmvSenzaRic },
+    { ...opz, ricarichi: {} });
+  let fisso = 0, variabile = 0;
+  for (const x of costo.righe) {
+    const ricGmv = num(cap.gmv?.[x.riga.gmv]?.ric);
+    if (ricGmv) fisso += x.c.totale * (1 + ricGmv); else variabile += x.c.totale;
+  }
+  if (!variabile) return null;
+  const ric = (num(target) - fisso) / variabile - 1;
+  return Number.isFinite(ric) ? ric : null;
 }

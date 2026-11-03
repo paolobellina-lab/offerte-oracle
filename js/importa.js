@@ -64,9 +64,20 @@ function leggiCatalogo(nome, righe) {
       dataAgg: dataDaSeriale(r[C.Z]),
       listino: numero(r[C.K]), // colonna K "Prezzo di Listino" come calcolata (o scritta) nell'Excel
       _qta: qta,
+      _blocco0: rif === "0",
     });
   }
-  return articoli;
+  /* Blocco 0 = zona di lavoro dell'offerta in testa al foglio (righe copiate dal database per l'offerta in corso).
+     Le sue righe non entrano nel database se lo stesso articolo c'è già più sotto. */
+  const chiave = (a) => `${a.precodice}${a.codice}|${a.nOrdine}`;
+  const nelDb = new Map();
+  for (const a of articoli) if (!a._blocco0 && !nelDb.has(chiave(a))) nelDb.set(chiave(a), a);
+  const db = [], lavoro = [];
+  for (const a of articoli) {
+    const doppio = a._blocco0 && nelDb.get(chiave(a));
+    if (doppio) { a._kCatalogo = doppio.k; lavoro.push(a); } else db.push(a);
+  }
+  return { articoli: db, lavoro };
 }
 
 /* Capitoli e ricarico automatico (foglio ELENCHI, tabella Capitoli). */
@@ -133,15 +144,19 @@ export async function analizzaFile(buf) {
   const capList = leggiCapitoli(await wb.foglio("ELENCHI"));
   const capitoli = [];
   const articoli = [];
+  const conQuantita = [];
   for (const nome of wb.nomi) {
     const righe = await wb.foglio(nome);
     if (!eFoglioCatalogo(righe)) continue;
     if (/^AGGIORNAMENTO/i.test(nome)) continue;
-    const art = leggiCatalogo(nome, righe);
+    const { articoli: art, lavoro } = leggiCatalogo(nome, righe);
     if (!art.length) continue;
     const def = capList.find((c) => c.nome === nome);
-    capitoli.push({ nome, ricarico: def ? def.ricarico : 0.28, ricaricoDaFile: !!def, articoli: art.length });
+    capitoli.push({ nome, ricarico: def ? def.ricarico : 0.28, ricaricoDaFile: !!def, articoli: art.length, blocco0: lavoro.length });
     articoli.push(...art);
+    // quantità: se il foglio ha righe di lavoro nel blocco 0 con quantità, l'offerta è quella; altrimenti le quantità sparse nel foglio
+    const lavQ = [...lavoro, ...art.filter((a) => a._blocco0)].filter((a) => a._qta).sort((a, b) => a.ordine - b.ordine);
+    conQuantita.push(...(lavQ.length ? lavQ : art.filter((a) => a._qta)));
   }
   // ordine dei capitoli: quello della tabella ELENCHI, poi gli altri
   capitoli.sort((a, b) => {
@@ -153,7 +168,6 @@ export async function analizzaFile(buf) {
   const noti = new Set(gmv.map((g) => g.codice));
   for (const a of articoli) if (a.gmv && !noti.has(a.gmv)) { noti.add(a.gmv); gmv.push({ codice: a.gmv, fornitore: "" }); }
   const clienti = leggiClienti(await wb.foglio("SC_CLIENTI"));
-  const conQuantita = articoli.filter((a) => a._qta);
   return { capitoli, articoli, gmv, clienti, conQuantita };
 }
 

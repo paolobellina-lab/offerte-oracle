@@ -207,3 +207,30 @@ ul.riep { margin: 6px 0; padding-left: 18px; }
   .tbl-wrap { max-height: none; overflow: visible; border: 0; }
   body { background: #fff; }
 }
+
+/* Capitoli dell'offerta */
+.captabs { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; flex-wrap: wrap; }
+.captabs-in { display: flex; gap: 6px; flex-wrap: wrap; }
+.captabs-in button {
+  font: inherit; font-weight: 700; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink);
+  border-radius: 9px; padding: 7px 12px; cursor: pointer; display: inline-flex; gap: 8px; align-items: baseline;
+}
+.captabs-in button .conta { font-weight: 500; color: var(--muted); font-size: .82rem; }
+.captabs-in button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.captabs-in button.on .conta { color: var(--accent-ink); opacity: .85; }
+select.add-cap { font-weight: 600; color: var(--accent); border-style: dashed; }
+.center { text-align: center; }
+.bulk {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 8px;
+  background: var(--accent-soft); border-radius: 8px; position: sticky; top: 52px; z-index: 6;
+}
+tr.sel td { background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+tr.aggiunta td { background: var(--ok-soft); transition: background .6s; }
+input.nota { width: 170px; min-height: 28px; padding: 3px 6px; font-size: .85rem; }
+button.icon.mini { font-size: .9rem; padding: 3px 5px; }
+button.icon.mini:hover { color: var(--accent); background: var(--accent-soft); }
+button.icon:disabled { opacity: .3; cursor: default; background: none; }
+.peso { display: inline-block; width: 60px; height: 6px; background: var(--line); border-radius: 3px; margin-right: 6px; vertical-align: middle; overflow: hidden; }
+.peso span { display: block; height: 100%; background: var(--accent); }
+#righe-offerta td.desc { min-width: 230px; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; font-style: italic; }

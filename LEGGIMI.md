@@ -14,7 +14,9 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
 | Excel | App |
 |---|---|
 | Quantità scritte nei fogli catalogo (il file si "sporca") | Le quantità stanno nell'offerta; il catalogo resta pulito |
-| Un capitolo per volta (con più capitoli selezionati il filtro sbagliava capitolo) | Un'offerta può contenere più capitoli |
+| Un capitolo per volta; cambiando capitolo si perdevano gli extra impostati | Più capitoli nella stessa offerta, ognuno con condizioni salvate e foglio Oracle proprio |
+| Righe copiate a mano in testa al foglio e cancellate a fine offerta | Righe dell'offerta separate dal database, ripetibili e duplicabili per posizione |
+| ANALISI PACCHETTO compilata a mano | Riepilogo automatico per capitolo (venduto, acquistato, margine) e peso dei GMA |
 | Max ~486 righe, max 1000 righe per catalogo | Nessun limite pratico |
 | Macro "allinea" e controllo "Elenco allineato" | Non servono: l'elenco per Oracle è sempre allineato |
 | Un file per offerta | Tutte le offerte salvate, duplicabili, condivise tra i dispositivi |
@@ -46,7 +48,7 @@ Unica differenza voluta: il controllo cartellino dell'attività tecnica confront
 | `oracle_catalogo` | Articoli, a blocchi per capitolo (un documento contiene centinaia di articoli: si consumano poche letture) |
 | `oracle_config` | `capitoli` (nome, ricarico automatico, ordine) e `gmv` (codice, fornitore) |
 | `oracle_clienti` | Ragione sociale, codice, tariffa attività tecnica, sconti di cartellino per GMV |
-| `oracle_offerte` | Testata dell'offerta, sconti, e le righe con una copia dei dati dell'articolo |
+| `oracle_offerte` | Testata dell'offerta e i suoi capitoli; ogni capitolo ha condizioni proprie e le righe (con una copia dei dati dell'articolo) |
 
 Le righe dell'offerta conservano una copia del prezzo e degli sconti. Così, se il catalogo cambia, le offerte già fatte non si muovono. Il pulsante **Aggiorna prezzi dal catalogo** le riallinea quando vuoi.
 
@@ -98,17 +100,23 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
 
 ## Uso
 
-1. **Importa e aggiorna:** carica l'Excel. Vengono letti catalogo, capitoli con ricarico, GMV e cartellini clienti. Puoi reimportarlo quando vuoi: i capitoli presenti nel file sostituiscono quelli dell'app, le offerte non cambiano.
-2. **Offerte → + Nuova offerta:**
-   - scrivi il riferimento e scegli cliente, tipo offerta, prezzi (DA ORACLE / DA EXCEL) e sottocapitoli;
-   - in **Aggiungi articoli** scegli il capitolo, cerca e scrivi le quantità. Invio o Tab passano alla riga successiva;
-   - in **Sconti per GMV e cartellino** puoi forzare sconti e ricarico per un singolo GMV e vedi subito se sei sotto il cartellino del cliente.
-3. **Esporta per Oracle:** scarica l'Excel (foglio `Sheet1`, stesse colonne del vecchio file), il CSV, oppure copia le righe.
-4. **Catalogo:** clicca un articolo per modificarlo. Il pallino indica da quanto non aggiorni il prezzo: verde meno di 1 mese, giallo 1–2 mesi, rosso più di 2 mesi.
-5. **Aggiorna i prezzi da Oracle:**
-   - copia la griglia delle righe offerta di Oracle, con le intestazioni, e incollala; vanno bene anche il foglio "AGGIORNAMENTO LISTINO" o un file Excel;
-   - l'app mostra le differenze e aggiorna listino acquisto, GMV e data.
-6. **Copia di sicurezza:** dalla stessa pagina scarichi tutti i dati in un file `.json` e puoi ripristinarli.
+1. **Importa e aggiorna**: carica il file Excel. Si leggono database articoli (un database per foglio capitolo), capitoli con ricarico automatico, GMV e cartellini clienti.
+   Le righe del **blocco 0** (quelle copiate in testa al foglio per l'offerta in corso) non entrano nel database se l'articolo c'è già più sotto.
+   Spuntando l'ultima casella si crea un'offerta con le quantità del file, un capitolo per foglio.
+2. **Offerte → + Nuova offerta**: riferimento e cliente, poi **+ Aggiungi capitolo** (FIRE, KNX, ANTINTRUSIONE…). Un'offerta può avere tutti i capitoli che vuoi.
+3. **Ogni capitolo è a sé stante**: tipo offerta, prezzi (DA ORACLE / DA EXCEL), sottocapitoli, n° partenza righe, extrasconti, ricarico, sconti per GMV.
+   Restano salvati: passando da un capitolo all'altro non si perde niente.
+   - *Prezzo target*: in VENDITA CLIENTE scrivi il totale che vuoi ottenere e l'app calcola il ricarico del capitolo.
+4. **Aggiungi articoli**: scegli il database (di solito quello del capitolo), cerca, scrivi la quantità e premi Invio o Tab: ogni volta si aggiunge una riga in fondo.
+   Con **Nota post-linea per le nuove righe** (es. "posizione A_1") le righe aggiunte prendono quella nota (se l'articolo non ne ha già una nel database).
+5. **Righe**: l'ordine è quello che vedi e va così in Oracle. Lo stesso articolo può comparire più volte.
+   Seleziona delle righe per **duplicarle in fondo con una nuova nota** (es. da "posizione A_1" a "posizione A_2"), cambiare la nota, spostarle o toglierle. ↑ ↓ ⧉ ✎ su ogni riga.
+6. **GMV**: per ogni GMA del capitolo vedi venduto, acquistato, **peso** sul capitolo e margine; puoi forzare sconti e ricarico e vedi il confronto con il cartellino del cliente.
+7. **Esporta per Oracle**: un foglio "Sheet1" per capitolo (Excel, CSV o copia). Dal **Riepilogo** scarichi quelli di tutti i capitoli.
+8. **Riepilogo** (ex ANALISI PACCHETTO): per capitolo venduto, acquistato, materiale, attività, ricarico e margine, con i totali dell'offerta.
+9. **Database**: clicca un articolo per modificarlo; il pallino indica da quanto non aggiorni il prezzo.
+   **Aggiorna i prezzi da Oracle**: incolla la griglia di Oracle (con intestazioni) e l'app aggiorna listino acquisto, GMV e data.
+10. **Copia di sicurezza**: scarichi tutti i dati in un file `.json` e puoi ripristinarli.
 
 ## File
 

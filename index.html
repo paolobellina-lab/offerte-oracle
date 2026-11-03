@@ -52,7 +52,7 @@
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Riferimento</th><th>Cliente</th><th>Tipo</th><th>Prezzi</th><th class="num">Righe</th><th class="num">Totale</th><th>Modificata</th><th></th></tr></thead>
+          <thead><tr><th>Riferimento</th><th>Cliente</th><th>Capitoli</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Margine</th><th>Modificata</th><th></th></tr></thead>
           <tbody id="lista-offerte"></tbody>
         </table>
       </div>
@@ -64,113 +64,159 @@
         <button class="btn small" id="torna-offerte">← Offerte</button>
         <span class="salvataggio" id="stato-salvataggio"></span>
         <span class="spacer"></span>
-        <button class="btn small" id="duplica-offerta">Duplica</button>
+        <button class="btn small" id="duplica-offerta">Duplica offerta</button>
         <button class="btn small danger" id="elimina-offerta">Elimina</button>
       </div>
 
       <div class="card">
         <div class="grid-set">
           <label class="f wide">Riferimento offerta
-            <input id="o-nome" placeholder="es. OF_TE25031087-FIRE">
+            <input id="o-nome" placeholder="es. OF_TE25031087">
           </label>
           <label class="f wide">Cliente
             <select id="o-cliente"></select>
           </label>
-          <label class="f">Linea di partenza
-            <input id="o-linea" type="number" min="0" step="10">
-          </label>
-          <label class="f">Magazzino spedizione
-            <input id="o-magazzino" maxlength="10">
-          </label>
         </div>
-        <div class="row" style="margin-top:12px;gap:18px">
-          <div class="f" style="display:flex;flex-direction:column;gap:3px">
-            <span class="muted small" style="font-weight:600">Tipo offerta</span>
-            <div class="seg" id="o-tipo"></div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <span class="muted small" style="font-weight:600">Prezzi</span>
-            <div class="seg" id="o-prezzi"></div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <span class="muted small" style="font-weight:600">Sottocapitoli in Oracle</span>
-            <div class="seg" id="o-sotto"></div>
-          </div>
-        </div>
-        <div style="margin-top:12px">
-          <span class="muted small" style="font-weight:600">Sconti e ricarico per tutta l'offerta</span>
-          <span class="muted small"> — vuoto = si usano quelli del catalogo</span>
-          <div class="row" id="o-globali" style="margin-top:4px;gap:14px"></div>
-        </div>
+        <div class="totale-box" id="o-totali" style="margin-top:14px"></div>
       </div>
 
-      <div class="card">
-        <div class="totale-box" id="o-totali"></div>
-      </div>
-
-      <nav class="subtabs no-print" id="subtabs">
-        <button data-sub="righe" class="on">Righe<span class="conta" id="conta-righe"></span></button>
-        <button data-sub="aggiungi">Aggiungi articoli</button>
-        <button data-sub="gmv">Sconti per GMV e cartellino<span class="conta" id="conta-gmv"></span></button>
-        <button data-sub="export">Esporta per Oracle</button>
-        <button data-sub="note">Note</button>
+      <nav class="captabs no-print">
+        <div class="captabs-in" id="cap-tabs"></div>
+        <select id="add-cap" class="add-cap"></select>
       </nav>
 
-      <div id="s-righe">
-        <div class="row no-print" style="margin-bottom:8px">
-          <span class="muted small grow">Modifica le quantità direttamente qui. Quantità 0 = la riga viene tolta.</span>
-          <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal catalogo</button>
+      <div id="p-vuota" hidden>
+        <div class="card center">
+          <h2>Da quali capitoli è fatta l'offerta?</h2>
+          <p class="muted">Scegli il primo capitolo con “+ Aggiungi capitolo” qui sopra (FIRE, KNX, ANTINTRUSIONE…).
+            Puoi aggiungerne quanti vuoi: ognuno ha le sue condizioni e il suo foglio per Oracle.</p>
         </div>
-        <div class="tbl-wrap"><table>
-          <thead><tr>
-            <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
-            <th class="num">Prezzo base</th><th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th>
-            <th class="num">Aum.1</th><th class="num">Ric.</th><th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th><th></th>
-          </tr></thead>
-          <tbody id="righe-offerta"></tbody>
-        </table></div>
       </div>
 
-      <div id="s-aggiungi" hidden>
+      <!-- RIEPILOGO DELL'OFFERTA -->
+      <div id="p-riepilogo" hidden>
         <div class="row" style="margin-bottom:8px">
-          <select id="a-capitolo"></select>
-          <select id="a-sotto"></select>
-          <input id="a-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione o descrizione">
-          <label class="row small muted"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+          <h2 class="grow">Riepilogo per capitolo</h2>
+          <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle di tutti i capitoli</button>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th class="num">Q.tà</th><th class="num">Giorni</th></tr></thead>
-          <tbody id="righe-picker"></tbody>
+          <thead><tr><th>Capitolo</th><th>Tipo · prezzi</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th>
+            <th class="num">Materiale</th><th class="num">Attività</th><th class="num">Ricarico</th><th class="num">Margine</th><th>Cartellino</th><th></th></tr></thead>
+          <tbody id="riepilogo-capitoli"></tbody>
         </table></div>
-        <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
-      </div>
-
-      <div id="s-gmv" hidden>
-        <p class="muted small" style="margin-top:0">Gli sconti scritti qui valgono solo per gli articoli di quel GMV e hanno la precedenza su tutto il resto.
-          Il controllo cartellino confronta lo sconto complessivo dell'offerta con quello del cliente.</p>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>GMV</th><th>Fornitore</th><th class="num">Righe</th><th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th>Ricarico</th>
-            <th class="num">Sconto offerta</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
-          <tbody id="righe-gmv"></tbody>
-        </table></div>
-      </div>
-
-      <div id="s-export" hidden>
-        <div id="export-avvisi"></div>
-        <div class="row no-print" style="margin-bottom:10px">
-          <button class="btn primary" id="scarica-xlsx">Scarica Excel per Oracle</button>
-          <button class="btn" id="scarica-csv">Scarica CSV</button>
-          <button class="btn" id="copia-righe">Copia righe</button>
-          <span class="muted small">Il foglio si chiama "Sheet1" e ha le stesse colonne del vecchio Excel.</span>
-        </div>
-        <div class="tbl-wrap"><table id="tab-export"></table></div>
-      </div>
-
-      <div id="s-note" hidden>
+        <p class="muted small">Venduto = totale del capitolo con il suo tipo di offerta. Acquistato = le stesse righe come ACQUISTO
+          (listino acquisto con sconti ed extrasconti, senza ricarico). Margine = 1 − acquistato / venduto.</p>
         <div class="card">
-          <label class="f">Note dell'offerta (solo per uso interno, non vanno in Oracle)
-            <textarea id="o-note" rows="8"></textarea>
+          <label class="f">Note dell'offerta (uso interno, non vanno in Oracle)
+            <textarea id="o-note" rows="5"></textarea>
           </label>
+        </div>
+      </div>
+
+      <!-- CAPITOLO -->
+      <div id="p-capitolo" hidden>
+        <div class="card">
+          <div class="row" style="gap:18px;align-items:flex-end">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span class="muted small" style="font-weight:600">Tipo offerta</span>
+              <div class="seg" id="c-tipo"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span class="muted small" style="font-weight:600">Prezzi</span>
+              <div class="seg" id="c-prezzi"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span class="muted small" style="font-weight:600">Sottocapitoli in Oracle</span>
+              <div class="seg" id="c-sotto"></div>
+            </div>
+            <label class="f">N° partenza righe<input id="c-linea" type="number" min="0" step="10" style="width:100px"></label>
+            <label class="f">Magazzino<input id="c-magazzino" maxlength="10" style="width:80px"></label>
+            <span class="spacer"></span>
+            <button class="btn small danger" id="c-togli">Togli capitolo</button>
+          </div>
+          <div style="margin-top:12px">
+            <span class="muted small" style="font-weight:600">Extrasconti e ricarico del capitolo</span>
+            <span class="muted small"> — vuoto = valgono quelli del database</span>
+            <div class="row" id="c-globali" style="margin-top:4px;gap:14px"></div>
+          </div>
+          <div class="row" id="c-target-box" style="margin-top:12px">
+            <label class="f">Prezzo target del capitolo €<input id="c-target" inputmode="decimal" style="width:150px" placeholder="es. 25000"></label>
+            <button class="btn" id="c-target-calcola" style="align-self:flex-end">Calcola il ricarico</button>
+            <span class="muted small" style="align-self:flex-end;padding-bottom:7px">Imposta il ricarico del capitolo per arrivare a quel totale (condizione a pacchetto).</span>
+          </div>
+          <div class="muted" id="c-totali" style="margin-top:12px"></div>
+        </div>
+
+        <nav class="subtabs no-print" id="subtabs">
+          <button data-sub="righe" class="on">Righe<span class="conta" id="conta-righe"></span></button>
+          <button data-sub="aggiungi">Aggiungi articoli</button>
+          <button data-sub="gmv">GMV: peso, sconti e cartellino<span class="conta" id="conta-gmv"></span></button>
+          <button data-sub="export">Esporta per Oracle</button>
+        </nav>
+
+        <div id="s-righe">
+          <div class="row no-print" style="margin-bottom:8px">
+            <span class="muted small grow">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).</span>
+            <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
+          </div>
+          <div class="bulk no-print" id="bulk" hidden>
+            <b id="bulk-n"></b>
+            <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:230px">
+            <button class="btn small primary" data-bulk="dup">Duplica in fondo con questa nota</button>
+            <button class="btn small" data-bulk="nota">Applica la nota</button>
+            <button class="btn small" data-bulk="su">Porta in cima</button>
+            <button class="btn small" data-bulk="giu">Porta in fondo</button>
+            <button class="btn small danger" data-bulk="togli">Togli</button>
+            <button class="btn small" data-bulk="nessuna">Deseleziona</button>
+          </div>
+          <div class="tbl-wrap"><table>
+            <thead><tr>
+              <th><input type="checkbox" id="sel-tutte" title="Seleziona tutte"></th><th class="num">Linea</th>
+              <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
+              <th class="num">Prezzo base</th><th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th>
+              <th class="num">Aum.1</th><th class="num">Ric.</th><th class="num">Unitario</th><th class="num">Totale</th><th>GMV</th>
+              <th>Nota post-linea</th><th></th>
+            </tr></thead>
+            <tbody id="righe-offerta"></tbody>
+          </table></div>
+        </div>
+
+        <div id="s-aggiungi" hidden>
+          <div class="row" style="margin-bottom:8px">
+            <label class="f">Database<select id="a-db"></select></label>
+            <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
+            <label class="f grow">Cerca<input id="a-cerca" type="search" placeholder="codice, n° ordinazione o descrizione"></label>
+            <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:200px"></label>
+            <label class="row small muted" style="align-self:flex-end;padding-bottom:7px"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+          </div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th>In offerta</th><th class="num">Aggiungi</th></tr></thead>
+            <tbody id="righe-picker"></tbody>
+          </table></div>
+          <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
+        </div>
+
+        <div id="s-gmv" hidden>
+          <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. Gli sconti scritti qui valgono solo per gli articoli di quel GMV
+            e hanno la precedenza su tutto. Il controllo cartellino confronta lo sconto complessivo con quello del cliente.</p>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>GMV</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th><th class="num">Peso</th><th class="num">Margine</th>
+              <th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th>Ricarico</th>
+              <th class="num">Sconto offerta</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
+            <tbody id="righe-gmv"></tbody>
+          </table></div>
+        </div>
+
+        <div id="s-export" hidden>
+          <h3 id="export-titolo" style="margin-bottom:8px"></h3>
+          <div id="export-avvisi"></div>
+          <div class="row no-print" style="margin-bottom:10px">
+            <button class="btn primary" id="scarica-xlsx">Scarica Excel per Oracle</button>
+            <button class="btn" id="scarica-csv">Scarica CSV</button>
+            <button class="btn" id="copia-righe">Copia righe</button>
+            <span class="muted small">Foglio "Sheet1" con le stesse colonne del vecchio Excel, solo per questo capitolo.</span>
+          </div>
+          <div class="tbl-wrap"><table id="tab-export"></table></div>
         </div>
       </div>
     </section>
