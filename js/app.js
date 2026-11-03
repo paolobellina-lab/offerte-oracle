@@ -396,6 +396,8 @@ function disegnaImpostCapitolo() {
     <label class="f" ${k === "ric" ? 'title="Solo per VENDITA CLIENTE. Vuoto = ricarico automatico del capitolo."' : ""}>${ETICHETTE[k]}${k === "ric" ? " *" : ""}
       <span class="pct-wrap"><input class="pct" data-glob="${k}" inputmode="decimal" value="${esc(pctVal(c.globali[k]))}"
         ${k === "ric" ? (c.tipo !== "VENDITA CLIENTE" ? "disabled" : 'placeholder="auto"') : ""}></span></label>`).join("") +
+    `<div style="display:flex;flex-direction:column;gap:3px"><span class="muted small" style="font-weight:600">Gli extrasconti sono</span>
+      <div class="seg" id="c-extra"><button type="button" data-v="F" class="${c.extraCliente ? "" : "on"}" title="Abbassano il prezzo di acquisto: il ricarico si calcola sopra">del fornitore</button><button type="button" data-v="C" class="${c.extraCliente ? "on" : ""}" title="Abbassano solo il prezzo al cliente: il costo non cambia, cala il margine">al cliente</button></div></div>` +
     `<span class="muted small" style="align-self:flex-end;padding-bottom:7px">* ricarico solo per vendita cliente; vuoto = automatico del capitolo (${pctTxt(ricAuto) || "0%"})</span>`;
   $("#c-target-box").hidden = c.tipo !== "VENDITA CLIENTE";
 }
@@ -420,6 +422,10 @@ $("#c-globali").addEventListener("change", suCap((c, e) => {
   if (v) c.globali[k] = v; else delete c.globali[k];
   e.target.value = pctVal(v);
   modificata(); ridisegnaOfferta();
+}));
+$("#c-globali").addEventListener("click", suCap((c, e) => {
+  const b = e.target.closest("#c-extra button"); if (!b) return;
+  c.extraCliente = b.dataset.v === "C"; modificata(); disegnaOfferta();
 }));
 $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
@@ -758,7 +764,7 @@ function disegnaGmv(c, rc) {
     const comuni = `<td class="num">${info.righe}</td><td class="num">${euro(info.venduto)}</td><td class="num">${euro(info.acquistato)}</td>
       <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
       <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>`;
-    if (!g) return `<tr><td class="muted">(senza GMV)</td><td></td>${comuni}<td colspan="8" class="muted small">Senza GMV valgono gli sconti del capitolo o del database.</td></tr>`;
+    if (!g) return `<tr><td class="muted">(senza GMV)</td><td></td>${comuni}<td colspan="9" class="muted small">Senza GMV valgono gli sconti del capitolo o del database.</td></tr>`;
     const v = c.gmv[g] || {};
     const e = esiti.get(g);
     const inp = (k) => `<span class="pct-wrap"><input class="pct" data-gmv="${esc(g)}" data-k="${k}" inputmode="decimal" value="${esc(pctVal(v[k]))}"
@@ -767,13 +773,23 @@ function disegnaGmv(c, rc) {
     const badge = !e ? '<span class="muted small">—</span>' :
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
     return `<tr><td class="mono"><b>${esc(g)}</b></td><td>${esc(fornitore(g))}</td>${comuni}
-      <td>${inp("sc3")}</td><td>${inp("sc4")}</td><td>${inp("sc5")}</td><td>${inp("aum1")}</td><td>${inp("ric")}</td>
+      <td>${inp("sc3")}</td><td>${inp("sc4")}</td><td>${inp("sc5")}</td><td>${inp("aum1")}</td>
+      <td><select class="extra-di" data-gmv-extra="${esc(g)}" title="Di chi è l'extrasconto di questo GMV"><option value="F">fornitore</option><option value="C" ${v.cliente ? "selected" : ""}>cliente</option></select></td>
+      <td>${inp("ric")}</td>
       <td class="num">${att ? euro(e.offerta) + "/g" : pctTxt(1 - info.prima.c.fattore) || "0%"}</td>
       <td class="num">${e ? (att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
   }).join("");
-  $("#righe-gmv").innerHTML = html || `<tr><td colspan="15" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMV.</td></tr>`;
+  $("#righe-gmv").innerHTML = html || `<tr><td colspan="16" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMV.</td></tr>`;
 }
 $("#righe-gmv").addEventListener("change", suCap((c, e) => {
+  const sel = e.target.closest("select[data-gmv-extra]");
+  if (sel) {
+    const g = sel.dataset.gmvExtra;
+    c.gmv[g] ||= {};
+    if (sel.value === "C") c.gmv[g].cliente = true; else delete c.gmv[g].cliente;
+    if (!Object.keys(c.gmv[g]).length) delete c.gmv[g];
+    modificata(); return ridisegnaOfferta();
+  }
   const inp = e.target.closest("input[data-gmv]"); if (!inp) return;
   const g = inp.dataset.gmv, k = inp.dataset.k;
   const v = daPct(inp.value);

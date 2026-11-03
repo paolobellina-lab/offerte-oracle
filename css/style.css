@@ -234,3 +234,4 @@ button.icon:disabled { opacity: .3; cursor: default; background: none; }
 .peso span { display: block; height: 100%; background: var(--accent); }
 #righe-offerta td.desc { min-width: 230px; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; font-style: italic; }
+select.extra-di { min-height: 28px; padding: 2px 4px; font-size: .85rem; }

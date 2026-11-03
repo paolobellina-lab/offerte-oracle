@@ -208,13 +208,21 @@ export function freschezza(iso, oggi = new Date()) {
   return "vecchio";
 }
 
+/* Il costo (acquistato) usa gli extrasconti del fornitore; quelli segnati come "al cliente"
+   abbassano solo il prezzo di vendita, quindi nel costo valgono gli sconti del database. */
+export function capitoloCosto(cap) {
+  const gmv = {};
+  for (const [g, v] of Object.entries(cap.gmv || {})) if (!v.cliente) gmv[g] = v;
+  return { ...cap, tipo: "ACQUISTO", globali: cap.extraCliente ? {} : (cap.globali || {}), gmv };
+}
+
 /* Riepilogo economico di un capitolo (ex foglio ANALISI PACCHETTO).
    Venduto = totale del capitolo con il suo tipo di offerta.
-   Acquistato = le stesse righe calcolate come ACQUISTO, con gli stessi sconti ed extrasconti
-   (cioè il costo: listino acquisto meno sconti, senza ricarico). */
+   Acquistato = le stesse righe calcolate come ACQUISTO con gli sconti del database e gli extrasconti
+   del fornitore (il costo vero, senza ricarico). */
 export function riepilogoCapitolo(cap, opz = {}) {
   const v = calcolaOfferta(cap, opz);
-  const a = calcolaOfferta({ ...cap, tipo: "ACQUISTO" }, opz);
+  const a = calcolaOfferta(capitoloCosto(cap), opz);
   const out = {
     righe: v.righe.length, venduto: 0, acquistato: 0,
     attivita: { venduto: 0, acquistato: 0 }, materiale: { venduto: 0, acquistato: 0 },

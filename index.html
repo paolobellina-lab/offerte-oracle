@@ -104,8 +104,8 @@
             <th class="num">Materiale</th><th class="num">Attività</th><th class="num">Ricarico</th><th class="num">Margine</th><th>Cartellino</th><th></th></tr></thead>
           <tbody id="riepilogo-capitoli"></tbody>
         </table></div>
-        <p class="muted small">Venduto = totale del capitolo con il suo tipo di offerta. Acquistato = le stesse righe come ACQUISTO
-          (listino acquisto con sconti ed extrasconti, senza ricarico). Margine = 1 − acquistato / venduto.</p>
+        <p class="muted small">Venduto = totale del capitolo con il suo tipo di offerta. Acquistato = il costo vero: listino acquisto con gli sconti
+          del database e gli extrasconti del fornitore, senza ricarico (gli extrasconti "al cliente" non abbassano l'acquistato). Margine = 1 − acquistato / venduto.</p>
         <div class="card">
           <label class="f">Note dell'offerta (uso interno, non vanno in Oracle)
             <textarea id="o-note" rows="5"></textarea>
@@ -201,7 +201,7 @@
             e hanno la precedenza su tutto. Il controllo cartellino confronta lo sconto complessivo con quello del cliente.</p>
           <div class="tbl-wrap"><table>
             <thead><tr><th>GMV</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th><th class="num">Peso</th><th class="num">Margine</th>
-              <th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th>Ricarico</th>
+              <th>Sconto 3</th><th>Sconto 4</th><th>Sconto 5</th><th>Aumento 1</th><th title="Extrasconti del fornitore (abbassano l'acquisto) o al cliente (abbassano solo il venduto)">Extra di</th><th>Ricarico</th>
               <th class="num">Sconto offerta</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
             <tbody id="righe-gmv"></tbody>
           </table></div>
