@@ -167,6 +167,7 @@ td.vuoto { text-align: center; color: var(--muted); padding: 28px; }
 .login .card { max-width: 380px; width: 100%; text-align: center; padding: 28px 24px; }
 .login .brand-mark { width: 48px; height: 48px; font-size: 18px; border-radius: 12px; margin: 0 auto 12px; }
 .err { color: var(--bad); min-height: 1.2em; margin-top: 10px; font-size: .9rem; }
+.err.info { color: var(--muted); }
 
 /* Finestra di modifica */
 dialog {

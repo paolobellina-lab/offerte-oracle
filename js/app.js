@@ -81,9 +81,20 @@ $("#dlg-form").addEventListener("submit", async (e) => {
 
 /* ================= Avvio ================= */
 let ascoltatori = [];
+function schermataLogin(messaggio = "", verifica = false) {
+  $("#app").hidden = true;
+  $("#login").hidden = false;
+  $("#google-login").hidden = verifica;
+  $("#login .err").textContent = messaggio;
+  $("#login .err").classList.toggle("info", verifica);
+}
 db.avvia({
+  onVerifica: () => schermataLogin("Verifica dell'account…", true),
+  onNegato: (email) => schermataLogin(`L'account ${email || ""} non è abilitato a usare questa app. Entra con un account autorizzato.`),
   onLogin(u) {
     S.utente = u;
+    $("#google-login").hidden = false;
+    $("#login .err").textContent = "";
     $("#login").hidden = true;
     $("#app").hidden = false;
     $("#banner-prova").hidden = !u.prova;
@@ -93,10 +104,12 @@ db.avvia({
   onLogout() {
     ascoltatori.forEach((f) => f());
     ascoltatori = [];
+    S.utente = null; S.off = null; S.offerte = []; S.catalogo = []; S.clienti = [];
     $("#app").hidden = true;
     $("#login").hidden = false;
+    $("#google-login").hidden = false;
   },
-  onErrore: (e) => ($("#login .err").textContent = "Accesso non riuscito: " + (e.message || e)),
+  onErrore: (e) => schermataLogin("Accesso non riuscito: " + (e.message || e)),
 }).catch((e) => {
   $("#login").hidden = false;
   $("#login .err").textContent = "Firebase non raggiungibile: " + (e.message || e);

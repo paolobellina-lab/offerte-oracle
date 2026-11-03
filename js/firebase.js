@@ -67,7 +67,7 @@ const prova = (() => {
 })();
 
 /* ---------- Avvio e login ---------- */
-export async function avvia({ onLogin, onLogout, onErrore }) {
+export async function avvia({ onLogin, onLogout, onVerifica, onNegato, onErrore }) {
   if (!configurato) {
     onLogin({ email: "modalità prova", prova: true });
     return;
@@ -80,7 +80,21 @@ export async function avvia({ onLogin, onLogout, onErrore }) {
   auth = a.getAuth(app);
   // Cache locale: le letture ripetute non consumano la quota e l'app regge brevi cadute di rete.
   db = f.initializeFirestore(app, { localCache: f.persistentLocalCache({ tabManager: f.persistentMultipleTabManager() }) });
-  a.onAuthStateChanged(auth, (u) => (u ? onLogin(u) : onLogout()));
+  // Dopo il login Google si entra nell'app solo se le regole di Firestore riconoscono l'account:
+  // un account non abilitato viene disconnesso subito e non vede nessuna schermata dell'app.
+  a.onAuthStateChanged(auth, async (u) => {
+    if (!u) return onLogout();
+    onVerifica?.(u);
+    try {
+      await f.getDocFromServer(f.doc(db, "oracle_config", "accesso"));
+      onLogin(u);
+    } catch (e) {
+      const email = u.email;
+      await a.signOut(auth);
+      if (e.code === "permission-denied") onNegato?.(email);
+      else onErrore?.(new Error("impossibile verificare l'account (" + (e.code || e.message) + "). Controlla la connessione e riprova."));
+    }
+  });
   try { await a.getRedirectResult(auth); } catch (e) { onErrore?.(e); }
 }
 
