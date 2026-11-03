@@ -587,3 +587,10 @@ tbody tr:not(.testa-gruppo):focus-within td:last-child { box-shadow: inset -4px 
 .tg:focus { outline: 2px solid #fff; outline-offset: 1px; }
 /* Menu compresso: niente voci generali (Offerte, Catalogo, Clienti, Importa, Tutte le offerte); si vedono da aperto */
 .sidebar:not(.aperta) #tabs, .sidebar:not(.aperta) #torna-offerte { display: none !important; }
+/* intestazione di gruppo selezionata (dopo aver cliccato − / +): gialla come le righe */
+tbody tr.testa-gruppo:focus-within td {
+  background: var(--riga-attiva) !important; color: var(--ink) !important;
+  border-top: 2px solid var(--riga-attiva-bordo); border-bottom: 2px solid var(--riga-attiva-bordo);
+}
+tbody tr.testa-gruppo:focus-within span { color: var(--ink) !important; }
+tbody tr.testa-gruppo:focus-within .tg { background: var(--riga-attiva-bordo); border-color: var(--riga-attiva-bordo); color: #fff; outline: none; }
