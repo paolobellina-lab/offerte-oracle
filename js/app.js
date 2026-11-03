@@ -152,6 +152,7 @@ db.avvia({
     $("#login").hidden = true;
     $("#app").hidden = false;
     $("#banner-prova").hidden = !u.prova;
+    altezzaBarra();
     $("#utente").textContent = u.email;
     collega();
   },
@@ -221,6 +222,7 @@ function collega() {
 function vai(vista) {
   if (S.vista === "offerta" && vista !== "offerta") salvaOraSeServe();
   S.vista = vista;
+  $("#sb-offerta").hidden = vista !== "offerta";
   for (const v of ["offerte", "offerta", "catalogo", "clienti", "importa"]) $("#v-" + v).hidden = v !== vista;
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.vista === (vista === "offerta" ? "offerte" : vista)));
   if (vista !== "offerta" && location.hash) history.replaceState(null, "", location.pathname);
@@ -446,13 +448,14 @@ $("#sb-toggle").addEventListener("click", () => menuAperto(!$("#sidebar").classL
 $("#sb-add").addEventListener("click", () => { menuAperto(true); setTimeout(() => { $("#add-cap").focus(); $("#add-cap").showPicker?.(); }, 180); });
 $("#sidebar").addEventListener("click", (e) => {
   // scelta una voce di navigazione, il menu si richiude
-  if (e.target.closest("[data-cap], [data-sub], #torna-offerte")) menuAperto(false);
+  if (e.target.closest("[data-cap], [data-sub], [data-vista], #torna-offerte")) menuAperto(false);
 });
 document.addEventListener("click", (e) => {
   if ($("#sidebar").classList.contains("aperta") && !e.target.closest("#sidebar") && !e.target.closest("dialog")) menuAperto(false);
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") menuAperto(false); });
-const altezzaBarra = () => document.documentElement.style.setProperty("--topbar-h", ($(".topbar")?.offsetHeight || 52) + "px");
+// spazio occupato dal banner della modalità prova, così il menu laterale entra tutto nello schermo
+const altezzaBarra = () => document.documentElement.style.setProperty("--banner-h", ($("#banner-prova")?.hidden ? 0 : $("#banner-prova").offsetHeight) + "px");
 window.addEventListener("resize", altezzaBarra);
 setTimeout(altezzaBarra, 0);
 

@@ -32,22 +32,45 @@
 </section>
 
 <div id="app" hidden>
-  <header class="topbar no-print">
-    <div class="topbar-in">
-      <div class="brand"><div class="brand-mark">OF</div><h1>Offerte Oracle</h1></div>
-      <nav class="tabs" id="tabs">
-        <button data-vista="offerte" class="on">Offerte</button>
-        <button data-vista="catalogo">Catalogo</button>
-        <button data-vista="clienti">Clienti</button>
-        <button data-vista="importa">Importa e aggiorna</button>
-      </nav>
-      <span class="spacer"></span>
-      <button class="btn small" id="tema" title="Tema chiaro / scuro">Tema</button>
-      <span class="utente" id="utente"></span>
-      <button class="btn small" id="esci">Esci</button>
-    </div>
-  </header>
 
+
+  <div class="app-layout">
+      <aside class="sidebar no-print" id="sidebar">
+        <div class="sb-pannello">
+          <div class="sb-brand"><div class="brand-mark">OF</div><span class="sb-testo">Offerte Oracle</span></div>
+          <button type="button" class="sb-voce" id="sb-toggle" title="Apri o chiudi il menu"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span class="sb-testo">Chiudi il menu</span></button>
+          <nav class="sb-lista" id="tabs">
+            <button type="button" class="sb-voce on" data-vista="offerte" title="Offerte"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg></span><span class="sb-testo">Offerte</span></button>
+            <button type="button" class="sb-voce" data-vista="catalogo" title="Catalogo (database articoli)"><span class="sb-ico"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span><span class="sb-testo">Catalogo</span></button>
+            <button type="button" class="sb-voce" data-vista="clienti" title="Clienti e cartellini"><span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.2 4.4 2 4.8 5.4"/></svg></span><span class="sb-testo">Clienti</span></button>
+            <button type="button" class="sb-voce" data-vista="importa" title="Importa e aggiorna"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg></span><span class="sb-testo">Importa e aggiorna</span></button>
+          </nav>
+          <div id="sb-offerta" hidden>
+          <button type="button" class="sb-voce" id="torna-offerte" title="Tutte le offerte"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="sb-testo">Tutte le offerte</span></button>
+          <div class="sb-info sb-testo"><b class="o-titolo" id="o-titolo"></b><span class="salvataggio" id="stato-salvataggio"></span></div>
+          <div class="sb-sez"><span class="sb-testo">Offerta</span></div>
+          <div class="sb-lista" id="cap-tabs"></div>
+          <button type="button" class="sb-voce sb-add" id="sb-add" title="Aggiungi capitolo"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="sb-testo">Aggiungi capitolo</span></button>
+          <select id="add-cap" class="add-cap sb-testo"></select>
+          <div id="sb-capitolo">
+            <div class="sb-sez"><span class="sb-testo" id="sb-cap-nome">Capitolo</span></div>
+            <nav class="sb-lista" id="subtabs">
+              <button type="button" class="sb-voce on" data-sub="righe" title="1 · Righe"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg></span><span class="sb-testo">1 · Righe <span class="conta" id="conta-righe"></span></span></button>
+              <button type="button" class="sb-voce" data-sub="prezzi" title="2 · Sconti e ricarichi"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg></span><span class="sb-testo">2 · Sconti e ricarichi <span class="conta" id="conta-gmv"></span></span></button>
+              <button type="button" class="sb-voce" data-sub="export" title="3 · Esporta per Oracle"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></span><span class="sb-testo">3 · Esporta per Oracle</span></button>
+            </nav>
+          </div>
+            <div class="sb-sez"></div>
+            <button type="button" class="sb-voce" id="duplica-offerta" title="Duplica offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><span class="sb-testo">Duplica offerta</span></button>
+            <button type="button" class="sb-voce sb-danger" id="elimina-offerta" title="Elimina offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="sb-testo">Elimina offerta</span></button>
+          </div>
+          <div class="sb-fondo">
+            <button type="button" class="sb-voce" id="tema" title="Tema chiaro / scuro"><span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></span><span class="sb-testo">Tema chiaro / scuro</span></button>
+            <div class="sb-utente sb-testo" id="utente"></div>
+            <button type="button" class="sb-voce" id="esci" title="Esci"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></span><span class="sb-testo">Esci</span></button>
+          </div>
+        </div>
+      </aside>
   <main>
     <!-- ELENCO OFFERTE -->
     <section id="v-offerte">
@@ -67,29 +90,7 @@
     <!-- OFFERTA -->
     <section id="v-offerta" hidden>
       <div class="off-layout">
-      <aside class="sidebar no-print" id="sidebar">
-        <div class="sb-pannello">
-          <button type="button" class="sb-voce" id="sb-toggle" title="Apri o chiudi il menu"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span class="sb-testo">Chiudi il menu</span></button>
-          <button type="button" class="sb-voce" id="torna-offerte" title="Tutte le offerte"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="sb-testo">Tutte le offerte</span></button>
-          <div class="sb-info sb-testo"><b class="o-titolo" id="o-titolo"></b><span class="salvataggio" id="stato-salvataggio"></span></div>
-          <div class="sb-sez"><span class="sb-testo">Offerta</span></div>
-          <div class="sb-lista" id="cap-tabs"></div>
-          <button type="button" class="sb-voce sb-add" id="sb-add" title="Aggiungi capitolo"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="sb-testo">Aggiungi capitolo</span></button>
-          <select id="add-cap" class="add-cap sb-testo"></select>
-          <div id="sb-capitolo">
-            <div class="sb-sez"><span class="sb-testo" id="sb-cap-nome">Capitolo</span></div>
-            <nav class="sb-lista" id="subtabs">
-              <button type="button" class="sb-voce on" data-sub="righe" title="1 · Righe"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg></span><span class="sb-testo">1 · Righe <span class="conta" id="conta-righe"></span></span></button>
-              <button type="button" class="sb-voce" data-sub="prezzi" title="2 · Sconti e ricarichi"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg></span><span class="sb-testo">2 · Sconti e ricarichi <span class="conta" id="conta-gmv"></span></span></button>
-              <button type="button" class="sb-voce" data-sub="export" title="3 · Esporta per Oracle"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></span><span class="sb-testo">3 · Esporta per Oracle</span></button>
-            </nav>
-          </div>
-          <div class="sb-fondo">
-            <button type="button" class="sb-voce" id="duplica-offerta" title="Duplica offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><span class="sb-testo">Duplica offerta</span></button>
-            <button type="button" class="sb-voce sb-danger" id="elimina-offerta" title="Elimina offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="sb-testo">Elimina offerta</span></button>
-          </div>
-        </div>
-      </aside>
+
       <div class="off-contenuto">
       <div class="card" id="o-testata">
         <div class="grid-set">
@@ -338,6 +339,7 @@
       </div>
     </section>
   </main>
+  </div>
 </div>
 
 <dialog id="dlg">
