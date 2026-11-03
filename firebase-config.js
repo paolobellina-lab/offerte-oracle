@@ -1,12 +1,10 @@
-// Configurazione del progetto Firebase (vedi LEGGIMI.md, "Configurazione di Firebase").
-// Incolla qui l'oggetto firebaseConfig che trovi in Firebase → ⚙️ Impostazioni progetto → Le tue app.
+// Configurazione del progetto Firebase "offerte-oracle".
 // Non è un segreto: la sicurezza è data dal login Google e dalle regole di Firestore (firestore.rules).
-// Finché qui resta "INCOLLA_QUI" l'app funziona in MODALITÀ PROVA: i dati restano solo in questo browser.
 export const firebaseConfig = {
-  apiKey: "INCOLLA_QUI",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyDrXB7-HFrVRVbWqJsVAmw6lHTT4TE1aeY",
+  authDomain: "offerte-oracle.firebaseapp.com",
+  projectId: "offerte-oracle",
+  storageBucket: "offerte-oracle.firebasestorage.app",
+  messagingSenderId: "833395544534",
+  appId: "1:833395544534:web:c92333d06ba441300e1477"
 };
