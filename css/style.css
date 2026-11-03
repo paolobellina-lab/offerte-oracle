@@ -506,3 +506,4 @@ tbody tr.testa-gruppo:hover td { background: var(--accent) !important; }
 th { background: var(--th-fondo) !important; color: var(--th-testo) !important; border-bottom: 1px solid color-mix(in srgb, var(--th-testo) 25%, transparent) !important; }
 tbody tr:nth-child(odd) td { background: var(--row); }
 tbody tr:nth-child(even) td { background: var(--row-alt); }
+.tbl-wrap.senza-limite { max-height: none; }

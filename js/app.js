@@ -590,7 +590,7 @@ function disegnaRiepilogo() {
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
     tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
     return `<tr><td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button></td>
-      <td class="small">${esc(c.tipo)} · ${esc(c.prezzi)}</td><td class="num">${r.righe}</td>
+      <td class="small nowrap">${esc(c.tipo)} · ${esc(c.prezzi)}</td><td class="num">${r.righe}</td>
       <td class="num"><b>${euro(r.venduto)}</b></td><td class="num">${euro(r.acquistato)}</td>
       <td class="num">${euro(r.materiale.venduto)}</td><td class="num">${euro(r.attivita.venduto)}</td>
       <td class="num">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
