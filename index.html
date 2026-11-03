@@ -66,15 +66,31 @@
 
     <!-- OFFERTA -->
     <section id="v-offerta" hidden>
-      <div class="row no-print" style="margin-bottom:10px">
-        <button class="btn small" id="torna-offerte">← Offerte</button>
-        <b class="o-titolo" id="o-titolo"></b>
-        <span class="salvataggio" id="stato-salvataggio"></span>
-        <span class="spacer"></span>
-        <button class="btn small" id="duplica-offerta">Duplica offerta</button>
-        <button class="btn small danger" id="elimina-offerta">Elimina</button>
-      </div>
-
+      <div class="off-layout">
+      <aside class="sidebar no-print" id="sidebar">
+        <div class="sb-pannello">
+          <button type="button" class="sb-voce" id="sb-toggle" title="Apri o chiudi il menu"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span class="sb-testo">Chiudi il menu</span></button>
+          <button type="button" class="sb-voce" id="torna-offerte" title="Tutte le offerte"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="sb-testo">Tutte le offerte</span></button>
+          <div class="sb-info sb-testo"><b class="o-titolo" id="o-titolo"></b><span class="salvataggio" id="stato-salvataggio"></span></div>
+          <div class="sb-sez"><span class="sb-testo">Offerta</span></div>
+          <div class="sb-lista" id="cap-tabs"></div>
+          <button type="button" class="sb-voce sb-add" id="sb-add" title="Aggiungi capitolo"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="sb-testo">Aggiungi capitolo</span></button>
+          <select id="add-cap" class="add-cap sb-testo"></select>
+          <div id="sb-capitolo">
+            <div class="sb-sez"><span class="sb-testo" id="sb-cap-nome">Capitolo</span></div>
+            <nav class="sb-lista" id="subtabs">
+              <button type="button" class="sb-voce on" data-sub="righe" title="1 · Righe"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg></span><span class="sb-testo">1 · Righe <span class="conta" id="conta-righe"></span></span></button>
+              <button type="button" class="sb-voce" data-sub="prezzi" title="2 · Sconti e ricarichi"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg></span><span class="sb-testo">2 · Sconti e ricarichi <span class="conta" id="conta-gmv"></span></span></button>
+              <button type="button" class="sb-voce" data-sub="export" title="3 · Esporta per Oracle"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></span><span class="sb-testo">3 · Esporta per Oracle</span></button>
+            </nav>
+          </div>
+          <div class="sb-fondo">
+            <button type="button" class="sb-voce" id="duplica-offerta" title="Duplica offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><span class="sb-testo">Duplica offerta</span></button>
+            <button type="button" class="sb-voce sb-danger" id="elimina-offerta" title="Elimina offerta"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="sb-testo">Elimina offerta</span></button>
+          </div>
+        </div>
+      </aside>
+      <div class="off-contenuto">
       <div class="card" id="o-testata">
         <div class="grid-set">
           <label class="f wide">Riferimento offerta
@@ -86,11 +102,6 @@
         </div>
         <div class="totale-box" id="o-totali" style="margin-top:14px"></div>
       </div>
-
-      <nav class="captabs no-print">
-        <div class="captabs-in" id="cap-tabs"></div>
-        <select id="add-cap" class="add-cap"></select>
-      </nav>
 
       <div id="p-vuota" hidden>
         <div class="card center">
@@ -126,11 +137,6 @@
           <div class="grow cap-kpi" id="c-totali"></div>
         </div>
 
-        <nav class="subtabs no-print" id="subtabs">
-          <button data-sub="righe" class="on">1 · Righe<span class="conta" id="conta-righe"></span></button>
-          <button data-sub="prezzi">2 · Sconti e ricarichi<span class="conta" id="conta-gmv"></span></button>
-          <button data-sub="export">3 · Esporta per Oracle</button>
-        </nav>
 
         <!-- PAGINA 1: RIGHE (aggiungere, quantità, ordine) -->
         <div id="s-righe">
@@ -250,6 +256,8 @@
           </div>
           <div class="tbl-wrap"><table id="tab-export"></table></div>
         </div>
+      </div>
+      </div>
       </div>
     </section>
 

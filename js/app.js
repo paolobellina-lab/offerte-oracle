@@ -427,13 +427,35 @@ $("#o-cliente").addEventListener("change", (e) => { S.off.cliente = e.target.val
 function disegnaBarraCapitoli() {
   const o = S.off;
   const tot = (c) => riepilogoCapitolo(c, opzCap(c)).venduto;
+  // sigla: una lettera per parola (KNX_MDT → KM, CONTROLLO_ACCESSI → CA), oppure le prime tre lettere (FIRE → FIR)
+  const sigla = (n) => { const p = n.split(/[_\s.-]+/).filter(Boolean); return (p.length > 1 ? p.map((x) => x[0]).join("") : n).slice(0, 3).toUpperCase(); };
   $("#cap-tabs").innerHTML =
-    `<button data-cap="" class="${S.capAtt === "" ? "on" : ""}">Riepilogo</button>` +
-    o.capitoli.map((c) => `<button data-cap="${esc(c.nome)}" class="${S.capAtt === c.nome ? "on" : ""}">${esc(c.nome)}<span class="conta">${euro(tot(c))}</span></button>`).join("");
+    `<button type="button" data-cap="" class="sb-voce ${S.capAtt === "" ? "on" : ""}" title="Riepilogo dell'offerta"><span class="sb-ico">${ICONA_RIEP}</span><span class="sb-testo">Riepilogo</span></button>` +
+    o.capitoli.map((c) => `<button type="button" data-cap="${esc(c.nome)}" class="sb-voce ${S.capAtt === c.nome ? "on" : ""}" title="${esc(c.nome)} · ${euro(tot(c))}">
+      <span class="sb-sigla">${esc(sigla(c.nome))}</span><span class="sb-testo sb-cap"><span>${esc(c.nome)}</span><span class="conta">${euro(tot(c))}</span></span></button>`).join("");
   const liberi = S.capitoli.filter((c) => !o.capitoli.some((x) => x.nome === c.nome));
-  $("#add-cap").innerHTML = `<option value="">+ Aggiungi capitolo</option>` + liberi.map((c) => `<option>${esc(c.nome)}</option>`).join("");
+  $("#add-cap").innerHTML = `<option value="">Scegli il capitolo da aggiungere…</option>` + liberi.map((c) => `<option>${esc(c.nome)}</option>`).join("");
+  $("#sb-add").hidden = !liberi.length;
   $("#add-cap").hidden = !liberi.length;
 }
+const ICONA_RIEP = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>';
+
+/* ----- Menu laterale: chiuso = solo icone; aperto = si allarga sopra la pagina ----- */
+const menuAperto = (v) => $("#sidebar").classList.toggle("aperta", v);
+$("#sb-toggle").addEventListener("click", () => menuAperto(!$("#sidebar").classList.contains("aperta")));
+$("#sb-add").addEventListener("click", () => { menuAperto(true); setTimeout(() => { $("#add-cap").focus(); $("#add-cap").showPicker?.(); }, 180); });
+$("#sidebar").addEventListener("click", (e) => {
+  // scelta una voce di navigazione, il menu si richiude
+  if (e.target.closest("[data-cap], [data-sub], #torna-offerte")) menuAperto(false);
+});
+document.addEventListener("click", (e) => {
+  if ($("#sidebar").classList.contains("aperta") && !e.target.closest("#sidebar") && !e.target.closest("dialog")) menuAperto(false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") menuAperto(false); });
+const altezzaBarra = () => document.documentElement.style.setProperty("--topbar-h", ($(".topbar")?.offsetHeight || 52) + "px");
+window.addEventListener("resize", altezzaBarra);
+setTimeout(altezzaBarra, 0);
+
 $("#cap-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cap]"); if (!b) return;
   S.capAtt = b.dataset.cap; S.sel = new Set();
@@ -445,6 +467,7 @@ $("#add-cap").addEventListener("change", (e) => {
   // il nuovo capitolo parte con tipo offerta e prezzi del capitolo attuale, ma senza sconti
   S.off.capitoli.push(nuovoCapitolo(nome, modello ? { tipo: modello.tipo, prezzi: modello.prezzi, sottocapitoli: modello.sottocapitoli } : {}));
   S.capAtt = nome; S.sub = "righe"; S.sel = new Set();
+  menuAperto(false);
   modificata(); disegnaOfferta(true);
 });
 
@@ -557,7 +580,9 @@ function disegnaOffertaIn(cambioSub) {
   const c = capAtt();
   // riferimento, cliente e totali dell'offerta: solo nel riepilogo generale
   $("#o-testata").hidden = !!c;
-  $("#o-titolo").textContent = c ? `${o.nome || "(senza riferimento)"}${cli ? " · " + cli.nome : ""}` : "";
+  $("#o-titolo").textContent = `${o.nome || "(senza riferimento)"}${cli ? " · " + cli.nome : ""}`;
+  $("#sb-capitolo").hidden = !c;
+  if (c) $("#sb-cap-nome").textContent = c.nome;
   $("#p-vuota").hidden = S.capAtt !== null;
   $("#p-riepilogo").hidden = S.capAtt !== "";
   $("#p-capitolo").hidden = !c;
@@ -597,7 +622,7 @@ function disegnaRiepilogo() {
       <td class="num">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td>${!cli ? "" : fuori ? `<span class="badge bad">${fuori} fuori</span>` : '<span class="badge ok">OK</span>'}</td>
       <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"}>Excel Oracle</button>
-        <button class="btn small danger" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">Togli</button></td></tr>`;
+        <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
   $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
       <td class="num">${euro(tot.venduto)}</td><td class="num">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>

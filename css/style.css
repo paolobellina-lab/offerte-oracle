@@ -507,3 +507,48 @@ th { background: var(--th-fondo) !important; color: var(--th-testo) !important; 
 tbody tr:nth-child(odd) td { background: var(--row); }
 tbody tr:nth-child(even) td { background: var(--row-alt); }
 .tbl-wrap.senza-limite { max-height: none; }
+
+/* ===================== Menu laterale dell'offerta (stile Gemini) ===================== */
+.off-layout { display: flex; gap: 16px; align-items: flex-start; }
+.off-contenuto { flex: 1; min-width: 0; }
+.sidebar { position: sticky; top: calc(var(--topbar-h, 52px) + 10px); flex: 0 0 60px; width: 60px; height: calc(100vh - var(--topbar-h, 52px) - 24px); z-index: 30; }
+.sb-pannello {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 60px; overflow-x: hidden; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 8px; display: flex; flex-direction: column; gap: 3px; transition: width .18s ease, box-shadow .18s ease;
+}
+.sidebar.aperta .sb-pannello { width: 300px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.sb-testo { display: none !important; }
+.sidebar.aperta .sb-testo { display: inline-flex !important; }
+.sidebar.aperta .sb-info.sb-testo, .sidebar.aperta select.sb-testo { display: block !important; }
+.sb-voce {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 8px 9px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap;
+}
+.sb-voce:hover { background: var(--card-2); }
+.sb-voce.on { background: var(--accent); color: var(--accent-ink); }
+.sb-voce.on .conta { color: var(--accent-ink); opacity: .85; }
+.sb-voce .conta { font-weight: 500; color: var(--muted); font-size: .8rem; margin-left: 6px; }
+.sb-ico { flex: 0 0 22px; width: 22px; height: 22px; display: grid; place-items: center; }
+.sb-ico svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.sb-sigla {
+  flex: 0 0 24px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; font-size: .62rem; font-weight: 800;
+  background: var(--card-2); border: 1px solid var(--line-strong); color: var(--ink); letter-spacing: 0;
+}
+.sb-voce.on .sb-sigla { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.5); color: var(--accent-ink); }
+.sb-cap { flex: 1; justify-content: space-between; min-width: 0; }
+.sb-cap > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.sb-sez { border-top: 1px solid var(--line); margin: 6px 2px 2px; padding-top: 6px; min-height: 1px; }
+.sb-sez .sb-testo { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 0 8px; }
+.sb-info { padding: 4px 9px 2px; white-space: normal; }
+.sb-info .o-titolo { display: block; font-size: .95rem; margin: 0; }
+.sb-info .salvataggio { display: block; }
+.sb-lista { display: flex; flex-direction: column; gap: 3px; }
+.sb-add { color: var(--accent); }
+select.add-cap.sb-testo { margin: 2px 4px 4px; width: calc(100% - 8px); }
+.sb-fondo { margin-top: auto; border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.sb-danger { color: var(--bad); }
+.sb-danger:hover { background: var(--bad-soft); }
+@media (max-width: 700px) { .off-layout { gap: 8px; } }
+@media print { .sidebar { display: none !important; } }
+.sidebar.aperta .sb-testo[hidden], .sidebar.aperta select.sb-testo[hidden] { display: none !important; }
