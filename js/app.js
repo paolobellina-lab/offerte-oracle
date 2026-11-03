@@ -510,6 +510,9 @@ function disegnaOffertaIn(cambioSub) {
       fuori ? `<span class="badge bad">${fuori} GMV fuori cartellino</span>` : `<span class="badge ok">nessun problema</span>`}</span></div>` : ""}`;
   disegnaBarraCapitoli();
   const c = capAtt();
+  // riferimento, cliente e totali dell'offerta: solo nel riepilogo generale
+  $("#o-testata").hidden = !!c;
+  $("#o-titolo").textContent = c ? `${o.nome || "(senza riferimento)"}${cli ? " · " + cli.nome : ""}` : "";
   $("#p-vuota").hidden = S.capAtt !== null;
   $("#p-riepilogo").hidden = S.capAtt !== "";
   $("#p-capitolo").hidden = !c;
@@ -517,11 +520,12 @@ function disegnaOffertaIn(cambioSub) {
   if (!c) return;
   disegnaImpostCapitolo();
   const rc = riepilogoCapitolo(c, opzCap(c));
-  $("#c-totali").innerHTML = `<span class="cap-nome">${esc(c.nome)}</span>
+  // venduto / acquistato / margine del capitolo: solo nella pagina Sconti e ricarichi
+  $("#c-totali").innerHTML = `<span class="cap-nome">${esc(c.nome)}</span>` + (S.sub !== "prezzi" ? "" : `
     <span class="mini-kpi"><span>Venduto</span><b>${euro(rc.venduto)}</b></span>
     <span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
     <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>
-    <span class="mini-kpi"><span>Tipo</span><b>${esc(c.tipo)} · ${esc(c.prezzi)}</b></span>`;
+    <span class="mini-kpi"><span>Tipo</span><b>${esc(c.tipo)} · ${esc(c.prezzi)}</b></span>`);
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
   for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
   $("#conta-righe").textContent = c.righe.length ? `(${c.righe.length})` : "";
