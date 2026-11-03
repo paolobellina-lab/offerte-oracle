@@ -612,3 +612,4 @@ input.sel-gruppo { margin: 0 8px 0 0; vertical-align: -2px; accent-color: #fff; 
 input.sel-gruppo { vertical-align: middle; width: 16px; height: 16px; min-height: 0; position: relative; top: -1px; }
 /* anteprima Oracle: tutte le righe alte uguali, testi lunghi su una riga (il testo intero passando sopra) */
 #tab-export td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; height: 34px; }
+input.qta.qta-alta { background: var(--bad-soft) !important; border-color: var(--bad) !important; color: var(--bad); }

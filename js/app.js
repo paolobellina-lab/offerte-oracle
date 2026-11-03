@@ -538,9 +538,23 @@ $("#c-target-calcola").addEventListener("click", suCap((c) => {
   if (!target) return toast("Scrivi il prezzo target del capitolo.");
   const ric = ricaricoPerTarget(c, target, opzCap(c));
   if (ric === null) return toast("Non riesco a calcolarlo: servono righe senza ricarico forzato sul GMV.");
-  c.globali.ric = Math.round(ric * 1e6) / 1e6;
-  modificata(); disegnaOfferta();
-  toast(`Ricarico impostato a ${pctTxt(ric)} per arrivare a ${euro(target)}.`, 5000);
+  const applica = () => {
+    c.globali.ric = Math.round(ric * 1e6) / 1e6;
+    modificata(); disegnaOfferta();
+    toast(`Ricarico impostato a ${pctTxt(ric)} per arrivare a ${euro(target)}.`, 5000);
+  };
+  if (ric >= 0) return applica();
+  // prezzo target sotto il costo: si vende in perdita (di solito c'è una quantità sbagliata)
+  const rc = riepilogoCapitolo(c, opzCap(c));
+  const grandi = c.righe.filter((r) => num(r.qta) >= 1000).map((r) => `${esc(r.nOrdine || codiceArticolo(r))}: q.tà ${esc(numIt(r.qta))}`);
+  dialogo({
+    titolo: "Il prezzo target è sotto il costo",
+    html: `<p>Per arrivare a <b>${euro(target)}</b> servirebbe un ricarico di <b>${pctTxt(ric)}</b>, cioè vendere sotto il prezzo di acquisto
+      (acquistato del capitolo: <b>${euro(rc.acquistato)}</b>).</p>
+      ${grandi.length ? `<p>Controlla le quantità: ${grandi.length === 1 ? "questa riga ha" : "queste righe hanno"} una quantità molto alta:</p><ul class="riep">${grandi.slice(0, 8).map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}`,
+    pulsanti: [{ label: "Non applicare", value: "annulla" }, { label: "Applica comunque", value: "ok", cls: "danger" }],
+    onConferma: applica,
+  });
 }));
 function togliCapitolo(c) {
   dialogo({
@@ -776,7 +790,7 @@ function disegnaRighe(c) {
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
-      <td class="num"><input class="qta" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}">${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
+      <td class="num"><input class="qta${num(r.qta) >= 1000 ? " qta-alta" : ""}" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"${num(r.qta) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
