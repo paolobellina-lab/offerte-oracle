@@ -479,4 +479,4 @@ tbody input:not([type=checkbox]), tbody select { background: var(--field); box-s
 /* pulsante del tema */
 #tema { min-width: 36px; justify-content: center; }
 label.f, .muted.small[style*="font-weight:600"] { text-transform: none !important; font-size: .78rem !important; }
-#tema { font-size: 1rem; }
+tr.totale td { background: var(--accent-soft) !important; color: var(--ink) !important; font-weight: 800; font-size: .92rem; text-transform: none; letter-spacing: 0; border-top: 2px solid var(--line-strong); }

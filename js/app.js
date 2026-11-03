@@ -455,7 +455,7 @@ $("#c-target-calcola").addEventListener("click", suCap((c) => {
   modificata(); disegnaOfferta();
   toast(`Ricarico impostato a ${pctTxt(ric)} per arrivare a ${euro(target)}.`, 5000);
 }));
-$("#c-togli").addEventListener("click", suCap((c) => {
+function togliCapitolo(c) {
   dialogo({
     titolo: `Togliere ${c.nome} dall'offerta?`,
     html: `<p>Il capitolo ha ${c.righe.length} righe: verranno tolte dall'offerta insieme ai suoi sconti. Il database articoli non cambia.</p>`,
@@ -466,7 +466,7 @@ $("#c-togli").addEventListener("click", suCap((c) => {
       modificata(); disegnaOfferta(true);
     },
   });
-}));
+}
 
 $("#subtabs").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -526,7 +526,8 @@ function disegnaOffertaIn(cambioSub) {
   disegnaImpostCapitolo();
   const rc = riepilogoCapitolo(c, opzCap(c));
   // venduto / acquistato / margine del capitolo: solo nella pagina Sconti e ricarichi
-  $("#c-totali").innerHTML = `<span class="cap-nome">${esc(c.nome)}</span>` + (S.sub !== "prezzi" ? "" : `
+  $(".cap-testa").hidden = S.sub !== "prezzi";
+  $("#c-totali").innerHTML = (S.sub !== "prezzi" ? "" : `
     <span class="mini-kpi"><span>Venduto</span><b>${euro(rc.venduto)}</b></span>
     <span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
     <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>
@@ -555,9 +556,10 @@ function disegnaRiepilogo() {
       <td class="num">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td class="num">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td>${!cli ? "" : fuori ? `<span class="badge bad">${fuori} fuori</span>` : '<span class="badge ok">OK</span>'}</td>
-      <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"}>Excel Oracle</button></td></tr>`;
+      <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"}>Excel Oracle</button>
+        <button class="btn small danger" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">Togli</button></td></tr>`;
   }).join("");
-  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="sotto"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
+  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
       <td class="num">${euro(tot.venduto)}</td><td class="num">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>
       <td class="num">${tot.acquistato ? pctTxt(ricaricoPct(tot.venduto, tot.acquistato)) || "0%" : ""}</td>
       <td class="num">${tot.venduto ? pctTxt(marginePct(tot.venduto, tot.acquistato)) || "0%" : ""}</td><td></td><td></td></tr>`
@@ -567,6 +569,8 @@ function disegnaRiepilogo() {
 $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const v = e.target.closest("[data-vai-cap]");
   if (v) { S.capAtt = v.dataset.vaiCap; S.sub = "righe"; S.sel = new Set(); return disegnaOfferta(true); }
+  const t = e.target.closest("[data-togli-cap]");
+  if (t) return togliCapitolo(S.off.capitoli.find((c) => c.nome === t.dataset.togliCap));
   const x = e.target.closest("[data-xlsx-cap]");
   if (x) scaricaXlsx(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
 });
