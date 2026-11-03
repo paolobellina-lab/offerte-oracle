@@ -93,6 +93,46 @@ $("#dlg-form").addEventListener("submit", async (e) => {
   } catch (x) { errore(x); }
 });
 
+/* ================= Gruppi apri/chiudi nelle tabelle ================= */
+/* Le righe di intestazione (data-gruppo) hanno un − / + che nasconde o mostra le righe sottostanti,
+   fino all'intestazione successiva o alla riga dei totali. Lo stato resta finché la pagina è aperta. */
+const chiusi = new Set();
+const ambitoDi = (tb) => tb.id + (tb.id === "righe-offerta" || tb.id === "riepilogo-righe" ? "|" + (S.off?.id || "") + "|" + S.capAtt : "|" + (S.pickDb || $("#c-capitolo")?.value || ""));
+function applicaGruppi(tb) {
+  if (!tb) return;
+  const amb = ambitoDi(tb);
+  let chiuso = false, testa = null, n = 0;
+  const chiudiConta = () => { if (testa) testa.querySelector(".tg-n").textContent = n === 1 ? "1 riga" : `${n} righe`; };
+  for (const tr of tb.rows) {
+    if (tr.dataset.gruppo !== undefined) {
+      chiudiConta();
+      testa = tr; n = 0;
+      chiuso = chiusi.has(amb + "|" + tr.dataset.gruppo);
+      tr.classList.add("testa-gruppo");
+      const td = tr.cells[0];
+      if (!td.querySelector(".tg")) td.insertAdjacentHTML("afterbegin", `<button type="button" class="tg"></button>`);
+      if (!td.querySelector(".tg-n")) td.insertAdjacentHTML("beforeend", `<span class="tg-n"></span>`);
+      const b = td.querySelector(".tg");
+      b.textContent = chiuso ? "+" : "−";
+      b.title = chiuso ? "Mostra le righe" : "Nascondi le righe";
+      tr.classList.toggle("chiuso", chiuso);
+      continue;
+    }
+    if (tr.classList.contains("sotto") || tr.classList.contains("totale")) { chiudiConta(); testa = null; chiuso = false; tr.hidden = false; continue; }
+    if (testa) n++;
+    tr.hidden = chiuso;
+  }
+  chiudiConta();
+}
+document.addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-gruppo]");
+  if (!tr || e.target.closest("input, select, a")) return;
+  const tb = tr.parentElement;
+  const k = ambitoDi(tb) + "|" + tr.dataset.gruppo;
+  chiusi.has(k) ? chiusi.delete(k) : chiusi.add(k);
+  applicaGruppi(tb);
+});
+
 /* ================= Avvio ================= */
 let ascoltatori = [];
 function schermataLogin(messaggio = "", verifica = false) {
@@ -663,7 +703,7 @@ function disegnaRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
@@ -683,6 +723,7 @@ function disegnaRighe(c) {
         <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button>${isGenerico(r) ? "" : '<button class="icon mini" data-az="note" title="Note pre e post linea">✎</button>'}<button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
       </td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="8" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
+  applicaGruppi(tb);
 }
 
 /* Pagina 2: riepilogo delle righe con sconti e ricarico applicati (come la vista di controllo dell'Excel). */
@@ -698,7 +739,7 @@ function disegnaRiepilogoRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo"><td colspan="13">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="13">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     return testa + `<tr data-id="${esc(r.id)}">
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
@@ -711,6 +752,7 @@ function disegnaRiepilogoRighe(c) {
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
       <td class="mono">${esc(r.gmv)}</td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="11" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td></td></tr>`;
+  applicaGruppi(tb);
 }
 /* Stato del prezzo di una riga: si guarda l'articolo nel database (data aggiornata), altrimenti la copia nella riga. */
 function statoRiga(r) {
@@ -859,7 +901,7 @@ function disegnaPicker(c, reset = false) {
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
       sotto = a.sottocapitolo || "";
-      html += `<tr class="sotto"><td colspan="9">${esc(sotto || "—")}</td></tr>`;
+      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="9">${esc(sotto || "—")}</td></tr>`;
     }
     const att = isAttivita(a);
     html += `<tr data-k="${esc(a.k)}">
@@ -872,6 +914,7 @@ function disegnaPicker(c, reset = false) {
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
   $("#righe-picker").innerHTML = html || `<tr><td colspan="9" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
+  applicaGruppi($("#righe-picker"));
   $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` :
     `${lista.length} articoli. Scrivi la quantità e premi Invio o Tab: ogni volta si aggiunge una riga nuova in fondo all'offerta.`;
 }
@@ -1070,7 +1113,7 @@ function disegnaCatalogo() {
   let gruppo = null, html = "";
   for (const a of vis) {
     const g = (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
-    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto"><td colspan="12">${esc(g)}</td></tr>`; }
+    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="12">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
@@ -1080,6 +1123,7 @@ function disegnaCatalogo() {
       <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
   $("#righe-catalogo").innerHTML = html || `<tr><td colspan="12" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
+  applicaGruppi($("#righe-catalogo"));
   $("#c-info").textContent = `${vis.length} di ${lista.length} articoli`;
   $("#c-altri").hidden = vis.length >= lista.length;
 }

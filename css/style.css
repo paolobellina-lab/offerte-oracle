@@ -480,3 +480,22 @@ tbody input:not([type=checkbox]), tbody select { background: var(--field); box-s
 #tema { min-width: 36px; justify-content: center; }
 label.f, .muted.small[style*="font-weight:600"] { text-transform: none !important; font-size: .78rem !important; }
 tr.totale td { background: var(--accent-soft) !important; color: var(--ink) !important; font-weight: 800; font-size: .92rem; text-transform: none; letter-spacing: 0; border-top: 2px solid var(--line-strong); }
+
+/* Intestazioni dei gruppi: barra blu con − / + */
+tr.testa-gruppo td {
+  background: var(--accent) !important; color: #fff !important; font-weight: 800; font-size: .82rem;
+  text-transform: uppercase; letter-spacing: .04em; border-left: 0 !important; cursor: pointer; user-select: none;
+  padding-top: 7px; padding-bottom: 7px;
+}
+:root[data-theme="scuro"] tr.testa-gruppo td { background: #2f6aa6 !important; }
+tr.testa-gruppo:hover td { filter: brightness(1.08); }
+tr.testa-gruppo span { color: #fff !important; }
+.tg {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 10px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.6); background: rgba(255,255,255,.15); color: #fff; font: 800 1rem/1 system-ui, sans-serif;
+  cursor: pointer; vertical-align: middle; padding: 0;
+}
+.tg:hover { background: rgba(255,255,255,.3); }
+.tg-n { margin-left: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; opacity: .85; font-size: .78rem; }
+tbody tr.testa-gruppo:hover td { background: var(--accent) !important; }
+:root[data-theme="scuro"] tbody tr.testa-gruppo:hover td { background: #2f6aa6 !important; }
