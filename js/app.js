@@ -2,7 +2,7 @@ import * as db from "./firebase.js";
 import {
   TIPI, FONTI, CAMPI_SCONTO, ETICHETTE, COLONNE_ORACLE, num, isAttivita, codiceOracle, prezzoListino,
   listinoCalcolato, prezzoBase, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
-  riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget,
+  riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget, isGenerico, notePreRiga, notePostRiga,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
@@ -588,9 +588,10 @@ function disegnaRighe(c) {
       <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td class="mono">${esc(r.gmv)}</td>
-      <td><input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea"></td>
+      <td>${isGenerico(r) ? `<span class="nota-auto" title="Articolo generico: in Oracle nota pre-linea = ${esc(r.nOrdine)}, nota post-linea = descrizione">auto: ${esc(r.nOrdine)}</span>`
+        : `<input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea">`}</td>
       <td class="nowrap">
-        <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button><button class="icon mini" data-az="note" title="Note pre e post linea">✎</button><button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
+        <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button>${isGenerico(r) ? "" : '<button class="icon mini" data-az="note" title="Note pre e post linea">✎</button>'}<button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
       </td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="14" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="4"></td></tr>`;
 }
@@ -642,12 +643,12 @@ $("#bulk").addEventListener("click", (e) => {
   const az = b.dataset.bulk;
   if (az === "dup") {
     // le copie vanno in fondo, nello stesso ordine, con la nuova nota (se scritta)
-    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(), ...(nota ? { notePost: nota } : {}) }));
+    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(), ...(nota && !isGenerico(r) ? { notePost: nota } : {}) }));
     c.righe.push(...copie);
     S.sel = new Set(copie.map((r) => r.id));
     toast(`Duplicate ${copie.length} righe${nota ? ` con nota “${nota}”` : ""}: le trovi in fondo, già selezionate.`, 4500);
   } else if (az === "nota") {
-    scelte.forEach((r) => (r.notePost = nota));
+    scelte.filter((r) => !isGenerico(r)).forEach((r) => (r.notePost = nota));
   } else if (az === "su" || az === "giu") {
     const resto = c.righe.filter((r) => !S.sel.has(r.id));
     c.righe = az === "su" ? [...scelte, ...resto] : [...resto, ...scelte];
@@ -676,7 +677,8 @@ $("#aggiorna-da-catalogo").addEventListener("click", () => {
 function rigaDaArticolo(a) {
   const { _chunk, _qta, _kCatalogo, _blocco0, ...r } = a;
   if (_kCatalogo) r.k = _kCatalogo;
-  r.descrizione = (r.descrizione || "").slice(0, 400);
+  // la descrizione completa serve solo ai generici (diventa la nota post-linea); per gli altri basta un estratto
+  if (!isGenerico(r)) r.descrizione = (r.descrizione || "").slice(0, 400);
   r.listino = prezzoListino(a);
   return r;
 }
@@ -740,8 +742,8 @@ $("#righe-picker").addEventListener("change", (e) => {
   if (!q) { inp.value = ""; return; }
   const r = { ...rigaDaArticolo(a), id: db.nuovoId(), qta: q };
   if (isAttivita(a)) r.giorni = num(tr.querySelector('[data-pick="giorni"]')?.value);
-  // la nota per le nuove righe va solo sugli articoli che nel database non hanno già una nota post-linea
-  if (c.notaNuove && !r.notePost) r.notePost = c.notaNuove;
+  // nota per le nuove righe: sugli articoli senza una nota già scritta nel database; mai sui generici (le loro note sono automatiche)
+  if (c.notaNuove && !r.notePost && !isGenerico(r)) r.notePost = c.notaNuove;
   c.righe.push(r);
   inp.value = "";
   tr.querySelector("[data-conta]").innerHTML = badgeConta(contaInOfferta(c).get(a.k));
@@ -930,10 +932,11 @@ function modificaArticolo(a) {
     <label class="row small" style="margin-top:8px"><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}>
       Prezzo di listino calcolato automaticamente (come la colonna K dell'Excel)</label>
     <label class="f" style="margin-top:10px">Descrizione<textarea id="m-des" rows="4">${esc(a.descrizione)}</textarea></label>
-    <div class="grid-set" style="margin-top:10px">
+    <div class="grid-set" style="margin-top:10px" id="m-note-box">
       <label class="f wide">Note pre-linea<textarea id="m-npre" rows="2">${esc(a.notePre)}</textarea></label>
       <label class="f wide">Note post-linea<textarea id="m-npost" rows="2">${esc(a.notePost)}</textarea></label>
-    </div>`,
+    </div>
+    <p class="muted small" id="m-note-gen">Articolo generico (P000 ARTICOLO_GEN): in Oracle la nota pre-linea è il n° di ordinazione e la nota post-linea è la descrizione.</p>`,
     pulsanti: [...(nuovo ? [] : [{ label: "Elimina articolo", value: "del", cls: "danger" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(b) {
@@ -942,8 +945,9 @@ function modificaArticolo(a) {
         li.disabled = $("#m-auto", b).checked;
         if (li.disabled) li.value = String(Math.round(listinoCalcolato(leggi(b)) * 10000) / 10000).replace(".", ",");
       };
-      b.addEventListener("input", sync);
-      sync();
+      const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
+      b.addEventListener("input", () => { sync(); gen(); });
+      sync(); gen();
     },
     async onConferma(v, b) {
       const vecchioCap = a.capitolo;

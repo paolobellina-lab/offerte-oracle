@@ -59,8 +59,9 @@ function leggiCatalogo(nome, righe) {
       sc5: numero(r[C.S]),
       aum1: numero(r[C.T]),
       gmv: gmvPulito(r[C.U]),
-      notePre: testo(r[C.W]) === "0" ? "" : testo(r[C.W]),
-      notePost: testo(r[C.X]) === "0" ? "" : testo(r[C.X]),
+      // per gli ARTICOLO_GEN le note sono formule (=G, =H): l'app le ricava da sola, non si salvano
+      notePre: cod.toUpperCase() === "ARTICOLO_GEN" || testo(r[C.W]) === "0" ? "" : testo(r[C.W]),
+      notePost: cod.toUpperCase() === "ARTICOLO_GEN" || testo(r[C.X]) === "0" ? "" : testo(r[C.X]),
       dataAgg: dataDaSeriale(r[C.Z]),
       listino: numero(r[C.K]), // colonna K "Prezzo di Listino" come calcolata (o scritta) nell'Excel
       _qta: qta,

@@ -235,3 +235,4 @@ button.icon:disabled { opacity: .3; cursor: default; background: none; }
 #righe-offerta td.desc { min-width: 230px; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; font-style: italic; }
 select.extra-di { min-height: 28px; padding: 2px 4px; font-size: .85rem; }
+.nota-auto { font-size: .8rem; color: var(--muted); font-style: italic; white-space: nowrap; max-width: 170px; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }

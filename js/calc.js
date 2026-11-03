@@ -35,6 +35,12 @@ const arrot = (n, dec = 6) => {
 export const isAttivita = (r) => String(r.codice || "").trim().toUpperCase() === "ATT.TEC";
 export const isListino = (tipo) => tipo === "LISTINO" || tipo === "LISTINO COMPUTO";
 export const codiceOracle = (r) => `${r.precodice || ""}${r.codice || ""}`.trim();
+/* Articoli generici (P000 ARTICOLO_GEN): in Oracle il codice è sempre lo stesso, quindi l'articolo vero
+   va nelle note: nota pre-linea = numero di ordinazione, nota post-linea = descrizione. Per tutti gli altri
+   articoli le note sono testo libero scritto a mano. */
+export const isGenerico = (r) => String(r.codice || "").trim().toUpperCase() === "ARTICOLO_GEN";
+export const notePreRiga = (r) => (isGenerico(r) ? (r.nOrdine || "") : (r.notePre || ""));
+export const notePostRiga = (r) => (isGenerico(r) ? (r.descrizione || "") : (r.notePost || ""));
 
 /* Colonna M del catalogo: valore riparametrizzato (solo se c'è la riparametrizzazione P). */
 export function riparametrizzato(r) {
@@ -153,8 +159,8 @@ export function righeOracle(off, opz = {}) {
       prezzoNetto,
       perc(c.sc3), perc(c.sc4), perc(c.sc5), "", "", "",
       perc(c.aum1), perc(c.ric), "", "",
-      r.notePre && r.notePre !== "0" ? r.notePre : "",
-      r.notePost && r.notePost !== "0" ? r.notePost : "",
+      notePreRiga(r) !== "0" ? notePreRiga(r).trim() : "",
+      notePostRiga(r) !== "0" ? notePostRiga(r).trim() : "",
     ]);
     linea += 10;
   }
