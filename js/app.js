@@ -1030,7 +1030,6 @@ function disegnaPicker(c, reset = false) {
   // il database proposto è quello del capitolo; se ne scegli un altro resta finché non cambi capitolo
   if (S.pickCap !== c.nome || !dbs.includes(S.pickDb)) { S.pickCap = c.nome; S.pickDb = dbs.includes(c.nome) ? c.nome : dbs[0] || ""; reset = true; }
   $("#a-db").innerHTML = dbs.map((d) => `<option value="${esc(d)}" ${d === S.pickDb ? "selected" : ""}>${esc(d)}${d === c.nome ? " (questo capitolo)" : ""}</option>`).join("");
-  $("#a-nota").value = c.notaNuove || "";
   $("#a-cap").innerHTML = `<option value="">— nessuno —</option>` + c.capitolati.map((n) => `<option ${n === c.capNuove ? "selected" : ""}>${esc(n)}</option>`).join("") +
     `<option value="__nuovo">+ nuovo capitolato…</option>`;
   const nelDb = S.catalogo.filter((a) => a.capitolo === S.pickDb);
@@ -1039,7 +1038,7 @@ function disegnaPicker(c, reset = false) {
   const prev = reset ? "" : sottoSel.value;
   sottoSel.innerHTML = `<option value="">Tutti i sottocapitoli</option>` + sotti.map((s) => `<option ${s === prev ? "selected" : ""}>${esc(s)}</option>`).join("");
   const q = $("#a-cerca").value.trim().toLowerCase();
-  const solo = $("#a-solo").checked;
+  const solo = false;
   const conta = contaInOfferta(c);
   const lista = nelDb.filter((a) => (!sottoSel.value || a.sottocapitolo === sottoSel.value) &&
     (!solo || conta.has(a.k)) &&
@@ -1074,8 +1073,6 @@ const badgeConta = (x) => (x ? `<span class="badge info" title="Righe già nell'
 $("#a-db").addEventListener("change", (e) => { S.pickDb = e.target.value; const c = capAtt(); if (c) disegnaPicker(c, true); });
 $("#a-sotto").addEventListener("change", () => { const c = capAtt(); if (c) disegnaPicker(c); });
 $("#a-cerca").addEventListener("input", () => { const c = capAtt(); if (c) disegnaPicker(c); });
-$("#a-solo").addEventListener("change", () => { const c = capAtt(); if (c) disegnaPicker(c); });
-$("#a-nota").addEventListener("input", suCap((c, e) => { c.notaNuove = e.target.value; modificata(); }));
 $("#a-cap").addEventListener("change", suCap((c, e) => {
   if (e.target.value !== "__nuovo") { c.capNuove = e.target.value; modificata(); return; }
   dialogo({
@@ -1101,7 +1098,6 @@ $("#righe-picker").addEventListener("change", (e) => {
   const r = { ...rigaDaArticolo(a), id: db.nuovoId(), qta: q };
   if (isAttivita(a)) r.giorni = num(tr.querySelector('[data-pick="giorni"]')?.value);
   // nota per le nuove righe: sugli articoli senza una nota già scritta nel database; mai sui generici (le loro note sono automatiche)
-  if (c.notaNuove && !r.notePost && !isGenerico(r)) r.notePost = c.notaNuove;
   r.capitolato = c.capNuove || "";
   c.righe.push(r);
   inp.value = "";
