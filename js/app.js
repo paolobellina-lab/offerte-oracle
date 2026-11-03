@@ -152,7 +152,7 @@ db.avvia({
     $("#login").hidden = true;
     $("#app").hidden = false;
     $("#banner-prova").hidden = !u.prova;
-    altezzaBarra();
+    setTimeout(() => altezzaBarra(), 0);
     $("#utente").textContent = u.email;
     collega();
   },
