@@ -133,6 +133,17 @@ document.addEventListener("click", (e) => {
   applicaGruppi(tb);
 });
 
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tutti]"); if (!b) return;
+  const tb = document.getElementById(b.dataset.tutti); if (!tb) return;
+  const amb = ambitoDi(tb);
+  for (const tr of tb.querySelectorAll("tr[data-gruppo]")) {
+    const k = amb + "|" + tr.dataset.gruppo;
+    if (b.dataset.az === "chiudi") chiusi.add(k); else chiusi.delete(k);
+  }
+  applicaGruppi(tb);
+});
+
 /* ================= Avvio ================= */
 let ascoltatori = [];
 function schermataLogin(messaggio = "", verifica = false) {

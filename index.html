@@ -150,6 +150,7 @@
               <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
               <label class="f">Nota post-linea per le nuove righe<input id="a-nota" placeholder="es. posizione A_1" style="min-width:180px"></label>
               <label class="row small muted" style="align-self:flex-end;padding-bottom:7px"><input type="checkbox" id="a-solo"> solo già in offerta</label>
+              <span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-picker" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-picker" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span>
             </div>
             <div class="tbl-wrap picker-wrap"><table>
               <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th class="num">Aggiungi</th></tr></thead>
@@ -160,6 +161,7 @@
 
           <div class="row no-print" style="margin-bottom:8px">
             <h3 class="grow titolo-sez" style="margin:0">Righe dell'offerta</h3>
+<span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-offerta" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-offerta" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span>
             <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
           </div>
           <p class="muted small" style="margin-top:0">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga viene tolta. Lo stesso articolo può comparire più volte (es. una riga per posizione).
@@ -219,7 +221,7 @@
             <tbody id="righe-gmv"></tbody>
           </table></div>
 
-          <h3 class="titolo-sez" style="margin-top:20px">Riepilogo delle righe</h3>
+          <div class="row" style="margin-top:20px;margin-bottom:6px"><h3 class="titolo-sez grow" style="margin:0">Riepilogo delle righe</h3><span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="riepilogo-righe" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="riepilogo-righe" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span></div>
           <p class="muted small" style="margin-top:0">Sconti e ricarico effettivamente applicati a ogni riga. Per i generici puoi cambiare qui il prezzo (si aggiorna anche il database).</p>
           <div class="tbl-wrap"><table>
             <thead><tr><th class="num">Linea</th><th>Codice</th><th>Articolo</th><th class="num">Q.tà</th><th class="num">Prezzo base</th>
@@ -281,7 +283,7 @@
           <span><span class="dot"></span>data non indicata</span>
           <span>(regole per precodice in “Scadenze prezzi”; passa sul pallino per il dettaglio)</span>
         </div>
-        <span class="spacer"></span><span class="muted small" id="c-info"></span>
+        <span class="spacer"></span><span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-catalogo" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-catalogo" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span><span class="muted small" id="c-info"></span>
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th>
