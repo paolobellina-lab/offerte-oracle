@@ -578,9 +578,10 @@ main { max-width: none; padding: 14px 20px 40px 14px; }
 /* Riga evidenziata mentre si scrive in un suo campo (quantità, giorni, note…) */
 :root[data-theme="chiaro"] { --riga-attiva: #fff3c4; --riga-attiva-bordo: #e0a800; }
 :root[data-theme="scuro"] { --riga-attiva: #4a3f1a; --riga-attiva-bordo: #e6bb63; }
-tbody tr:focus-within td {
+tbody tr:not(.testa-gruppo):focus-within td {
   background: var(--riga-attiva) !important;
   border-top: 2px solid var(--riga-attiva-bordo); border-bottom: 2px solid var(--riga-attiva-bordo);
 }
-tbody tr:focus-within td:first-child { box-shadow: inset 4px 0 0 var(--riga-attiva-bordo); }
-tbody tr:focus-within td:last-child { box-shadow: inset -4px 0 0 var(--riga-attiva-bordo); }
+tbody tr:not(.testa-gruppo):focus-within td:first-child { box-shadow: inset 4px 0 0 var(--riga-attiva-bordo); }
+tbody tr:not(.testa-gruppo):focus-within td:last-child { box-shadow: inset -4px 0 0 var(--riga-attiva-bordo); }
+.tg:focus { outline: 2px solid #fff; outline-offset: 1px; }
