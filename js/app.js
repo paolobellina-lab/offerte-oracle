@@ -2,7 +2,7 @@ import * as db from "./firebase.js";
 import {
   TIPI, FONTI, CAMPI_SCONTO, ETICHETTE, COLONNE_ORACLE, num, isAttivita, codiceOracle, prezzoListino,
   listinoCalcolato, prezzoBase, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
-  riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget, isGenerico, notePreRiga, notePostRiga,
+  riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
@@ -563,7 +563,7 @@ function lineeOracle(c) {
   // numero di linea Oracle di ogni riga (le righe senza codice o a quantità 0 non hanno linea)
   const m = new Map();
   let l = num(c.lineaPartenza) || 10;
-  for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r)) { m.set(r.id, l); l += 10; }
+  for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r) && !esclusoDaExport(r, c)) { m.set(r.id, l); l += 10; }
   return m;
 }
 function disegnaCapitolati(c) {
@@ -593,6 +593,7 @@ $("#capitolati").addEventListener("click", suCap((c, e) => {
     c.capitolati.splice(+x.dataset.capx, 1);
     c.righe.forEach((r) => { if (r.capitolato === nome) r.capitolato = ""; });
     if (c.capNuove === nome) c.capNuove = "";
+    c.esclusiExport = (c.esclusiExport || []).filter((x) => x !== nome);
     modificata(); return disegnaOfferta();
   }
   const b = e.target.closest("[data-capi]");
@@ -608,6 +609,7 @@ $("#capitolati").addEventListener("click", suCap((c, e) => {
         c.capitolati[i] = nuovo;
         c.righe.forEach((r) => { if (r.capitolato === vecchio) r.capitolato = nuovo; });
         if (c.capNuove === vecchio) c.capNuove = nuovo;
+        c.esclusiExport = (c.esclusiExport || []).map((x) => (x === vecchio ? nuovo : x));
         modificata(); disegnaOfferta();
       },
     });
@@ -899,20 +901,53 @@ $("#righe-gmv").addEventListener("change", suCap((c, e) => {
 /* --- Esportazione per Oracle (un foglio per capitolo) --- */
 const datiOracle = (c) => righeOracle(c, opzCap(c));
 function disegnaExport(c) {
+  // scelta dei capitolati da caricare in questa offerta Oracle
+  const gruppi = [];
+  for (const r of c.righe) {
+    if (!num(r.qta)) continue;
+    const n = r.capitolato || "";
+    let g = gruppi.find((x) => x.nome === n);
+    if (!g) { g = { nome: n, righe: 0, totale: 0 }; gruppi.push(g); }
+    g.righe++; g.totale += calcolaRiga(r, c, opzCap(c).ricarichi).totale;
+  }
+  const escl = new Set(c.esclusiExport || []);
+  $("#export-capitolati").innerHTML = gruppi.length > 1 || escl.size ? `<span class="muted small" style="font-weight:600">Capitolati da caricare in questa offerta Oracle:</span>` +
+    gruppi.map((g) => `<label class="chip-check"><input type="checkbox" data-escl="${esc(g.nome)}" ${escl.has(g.nome) ? "" : "checked"}>
+      <b>${g.nome ? esc(g.nome) : "senza capitolato"}</b> <span class="muted">${g.righe} righe · ${euro(g.totale)}</span></label>`).join("") +
+    `<button class="btn small" id="export-tutti" type="button">Tutti</button>` : "";
   const { righe, avvisi } = datiOracle(c);
   const av = [];
+  if (escl.size) av.push(`<div class="avviso info">Esportazione parziale: ${[...escl].map((n) => `“${esc(n || "senza capitolato")}”`).join(", ")} ${escl.size === 1 ? "escluso" : "esclusi"}. Le linee ripartono da ${num(c.lineaPartenza) || 10}.</div>`);
   if (!righe.length) av.push(`<div class="avviso">Nessuna riga da esportare.</div>`);
   if (avvisi.length) av.push(`<div class="avviso bad"><b>${avvisi.length} righe escluse:</b><ul class="riep">${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`);
   const fuori = controlloCartellino(c, clienteOff(), opzCap(c)).filter((x) => x.stato === "fuori");
   if (fuori.length) av.push(`<div class="avviso">Attenzione: ${fuori.map((f) => esc(f.gmv)).join(", ")} fuori cartellino del cliente (vedi “GMV e cartellino”).</div>`);
-  const senzaCap = c.sottocapitoli ? c.righe.filter((r) => num(r.qta) && !r.capitolato).length : 0;
+  const senzaCap = c.sottocapitoli ? c.righe.filter((r) => num(r.qta) && !r.capitolato && !esclusoDaExport(r, c)).length : 0;
   if (senzaCap) av.push(`<div class="avviso">“Capitolati in Oracle” è SI ma ${senzaCap} righe non hanno un capitolato: in Oracle avranno “Nome Capitolato” vuoto.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
     <tbody>${righe.map((r) => `<tr>${r.map((v, i) => `<td class="${typeof v === "number" ? "num" : i === 1 ? "mono nowrap" : ""}">${esc(typeof v === "number" ? numIt(v) : v)}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
-const nomeFile = (c, est) => `Import_Righe_${(S.off.nome || "offerta").replace(/[^\w.-]+/g, "_")}_${c.nome}.${est}`;
+const nomeFile = (c, est) => {
+  // con un'esportazione parziale nel nome del file vanno i capitolati inclusi
+  const escl = new Set(c.esclusiExport || []);
+  const inclusi = escl.size ? [...new Set(c.righe.filter((r) => num(r.qta) && !escl.has(r.capitolato || "")).map((r) => r.capitolato || "senza-capitolato"))] : [];
+  const parte = inclusi.length ? "_" + inclusi.join("+") : "";
+  return `Import_Righe_${`${S.off.nome || "offerta"}_${c.nome}${parte}`.replace(/[^\w.+-]+/g, "_")}.${est}`;
+};
+$("#export-capitolati").addEventListener("change", suCap((c, e) => {
+  const cb = e.target.closest("[data-escl]"); if (!cb) return;
+  const n = cb.dataset.escl;
+  const escl = new Set(c.esclusiExport || []);
+  if (cb.checked) escl.delete(n); else escl.add(n);
+  c.esclusiExport = [...escl];
+  modificata(); disegnaOfferta();
+}));
+$("#export-capitolati").addEventListener("click", suCap((c, e) => {
+  if (e.target.id !== "export-tutti") return;
+  c.esclusiExport = []; modificata(); disegnaOfferta();
+}));
 function scaricaXlsx(c) {
   if (!c) return;
   const { righe } = datiOracle(c);

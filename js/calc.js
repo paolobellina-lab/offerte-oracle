@@ -144,8 +144,12 @@ export function calcolaOfferta(off, { ricarichi = {} } = {}) {
 }
 
 /* Tracciato Sheet1 per Oracle. Restituisce { righe: [array di 18 valori], avvisi: [...] }. */
+/* Capitolati esclusi dall'esportazione (per caricarli in un'altra offerta Oracle). "" = righe senza capitolato. */
+export const esclusoDaExport = (r, off) => (off.esclusiExport || []).includes(r.capitolato || "");
+
 export function righeOracle(off, opz = {}) {
-  const { righe } = calcolaOfferta(off, opz);
+  // solo i capitolati spuntati; le linee ripartono dal n° di partenza
+  const { righe } = calcolaOfferta({ ...off, righe: (off.righe || []).filter((r) => !esclusoDaExport(r, off)) }, opz);
   const daExcel = off.prezzi === "DA EXCEL";
   const start = num(off.lineaPartenza) || 10;
   const out = [], avvisi = [];

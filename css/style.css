@@ -247,3 +247,5 @@ select.capsel { min-height: 28px; padding: 2px 4px; font-size: .85rem; max-width
 #righe-offerta tr.gruppo td { position: static; }
 label.giornate { display: block; font-size: .75rem; color: var(--muted); margin-top: 3px; white-space: nowrap; cursor: pointer; }
 label.giornate input { min-height: 0; vertical-align: -2px; }
+.chip-check { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); border-radius: 99px; padding: 3px 12px 3px 8px; background: var(--card); font-size: .85rem; cursor: pointer; }
+.chip-check input { min-height: 0; }
