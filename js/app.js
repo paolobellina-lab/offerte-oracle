@@ -126,7 +126,7 @@ function applicaGruppi(tb) {
 }
 document.addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-gruppo]");
-  if (!tr || e.target.closest("input, select, a")) return;
+  if (!tr || e.target.closest("input, select, a, .tg-ed")) return;
   const tb = tr.parentElement;
   const k = ambitoDi(tb) + "|" + tr.dataset.gruppo;
   chiusi.has(k) ? chiusi.delete(k) : chiusi.add(k);
@@ -698,74 +698,50 @@ function lineeOracle(c) {
   for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r) && !esclusoDaExport(r, c)) { m.set(r.id, l); l += 10; }
   return m;
 }
-function disegnaCapitolati(c) {
-  const conta = (n) => c.righe.filter((r) => r.capitolato === n).length;
-  $("#capitolati").innerHTML = `<span class="muted small" style="font-weight:600">Capitolati per Oracle:</span>` +
-    c.capitolati.map((n, i) => `<span class="chip"><button type="button" class="chip-x" data-capsu="${i}" title="Sposta prima" ${i === 0 ? "disabled" : ""}>‹</button><button type="button" class="chip-nome" data-capi="${i}" title="Rinomina">${esc(n)}</button><span class="muted">${conta(n)}</span><button type="button" class="chip-x" data-capgiu="${i}" title="Sposta dopo" ${i === c.capitolati.length - 1 ? "disabled" : ""}>›</button><button type="button" class="chip-x" data-capx="${i}" title="Elimina il capitolato">✕</button></span>`).join("") +
-    `<input id="nuovo-capitolato" placeholder="nuovo capitolato, es. PIANO TERRA" style="min-width:220px"><button class="btn small" id="aggiungi-capitolato" type="button">+ Aggiungi</button>`;
-  const opz = `<option value="">— capitolato —</option>` + c.capitolati.map((n) => `<option>${esc(n)}</option>`).join("");
-  const prev = $("#bulk-cap").value;
-  $("#bulk-cap").innerHTML = opz;
-  if (c.capitolati.includes(prev)) $("#bulk-cap").value = prev;
-}
 function aggiungiCapitolato(c, nome) {
   nome = (nome || "").trim();
   if (!nome) return false;
   if (!c.capitolati.includes(nome)) c.capitolati.push(nome);
   return true;
 }
-$("#capitolati").addEventListener("click", suCap((c, e) => {
-  if (e.target.id === "aggiungi-capitolato") {
-    if (!aggiungiCapitolato(c, $("#nuovo-capitolato").value)) return toast("Scrivi il nome del capitolato.");
-    modificata(); return disegnaOfferta();
-  }
-  const su = e.target.closest("[data-capsu]"), giu = e.target.closest("[data-capgiu]");
-  if (su || giu) {
-    const i = +(su || giu).dataset[su ? "capsu" : "capgiu"], j = su ? i - 1 : i + 1;
-    if (j < 0 || j >= c.capitolati.length) return;
-    [c.capitolati[i], c.capitolati[j]] = [c.capitolati[j], c.capitolati[i]];
-    modificata(); return disegnaOfferta();
-  }
-  const x = e.target.closest("[data-capx]");
-  if (x) {
-    const nome = c.capitolati[+x.dataset.capx];
-    c.capitolati.splice(+x.dataset.capx, 1);
-    c.righe.forEach((r) => { if (r.capitolato === nome) r.capitolato = ""; });
-    if (c.capNuove === nome) c.capNuove = "";
-    c.esclusiExport = (c.esclusiExport || []).filter((x) => x !== nome);
-    modificata(); return disegnaOfferta();
-  }
-  const b = e.target.closest("[data-capi]");
-  if (b) {
-    const i = +b.dataset.capi, vecchio = c.capitolati[i];
-    dialogo({
-      titolo: "Rinomina capitolato",
-      html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="r-cap" value="${esc(vecchio)}"></label>`,
-      pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Rinomina", value: "ok", cls: "primary" }],
-      onConferma(v, body) {
-        const nuovo = $("#r-cap", body).value.trim();
-        if (!nuovo) return false;
-        c.capitolati[i] = nuovo;
-        c.righe.forEach((r) => { if (r.capitolato === vecchio) r.capitolato = nuovo; });
-        if (c.capNuove === vecchio) c.capNuove = nuovo;
-        c.esclusiExport = (c.esclusiExport || []).map((x) => (x === vecchio ? nuovo : x));
-        modificata(); disegnaOfferta();
-      },
-    });
-  }
-}));
-$("#capitolati").addEventListener("keydown", (e) => {
-  if (e.target.id === "nuovo-capitolato" && e.key === "Enter") { e.preventDefault(); $("#aggiungi-capitolato").click(); }
-});
+/* Capitolati: rinomina (✎) e sposta il blocco (▲ ▼) dalla barra blu del capitolato nelle righe dell'offerta */
+function rinominaCapitolato(c, vecchio) {
+  dialogo({
+    titolo: "Rinomina capitolato",
+    html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="r-cap" value="${esc(vecchio)}"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Rinomina", value: "ok", cls: "primary" }],
+    onApri: (d) => setTimeout(() => { $("#r-cap", d).focus(); $("#r-cap", d).select(); }, 50),
+    onConferma(v, body) {
+      const nuovo = $("#r-cap", body).value.trim();
+      if (!nuovo) return false;
+      if (nuovo !== vecchio && c.capitolati.includes(nuovo)) { // unisce i due capitolati
+        c.capitolati = c.capitolati.filter((x) => x !== vecchio);
+      } else {
+        c.capitolati = c.capitolati.map((x) => (x === vecchio ? nuovo : x));
+      }
+      c.righe.forEach((r) => { if (r.capitolato === vecchio) r.capitolato = nuovo; });
+      if (c.capNuove === vecchio) c.capNuove = nuovo;
+      c.esclusiExport = (c.esclusiExport || []).map((x) => (x === vecchio ? nuovo : x));
+      modificata(); disegnaOfferta();
+    },
+  });
+}
+function spostaCapitolato(c, nome, verso) {
+  // solo tra i capitolati che hanno righe, così ogni clic sposta davvero il blocco
+  const usati = c.capitolati.filter((k) => c.righe.some((r) => r.capitolato === k));
+  const i = usati.indexOf(nome), j = i + verso;
+  if (i < 0 || j < 0 || j >= usati.length) return;
+  [usati[i], usati[j]] = [usati[j], usati[i]];
+  c.capitolati = [...usati, ...c.capitolati.filter((k) => !usati.includes(k))];
+  modificata(); disegnaOfferta();
+}
 
 function disegnaRighe(c) {
-  disegnaCapitolati(c);
   const tb = $("#righe-offerta");
   const sel = S.sel;
   for (const id of [...sel]) if (!c.righe.some((r) => r.id === id)) sel.delete(id);
   $("#bulk-n").textContent = !sel.size ? "Nessuna riga selezionata" : sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
   $("#bulk").classList.toggle("attiva", sel.size > 0);
-  $$("#bulk [data-bulk]").forEach((b) => { if (!b.hasAttribute("data-sempre")) b.disabled = !sel.size; });
   $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
   if (!c.righe.length) {
     tb.innerHTML = `<tr><td colspan="12" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
@@ -782,7 +758,9 @@ function disegnaRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12"><input type="checkbox" class="sel-gruppo" data-selgruppo title="Seleziona tutte le righe di questo capitolato"> ${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12"><input type="checkbox" class="sel-gruppo" data-selgruppo title="Seleziona tutte le righe di questo capitolato"> ${capPrec
+        ? `${esc(capPrec)}<button type="button" class="tg-ed" data-rinomina="${esc(capPrec)}" title="Rinomina il capitolato">✎</button><button type="button" class="tg-ed" data-capsposta="-1" title="Sposta il capitolato prima">▲</button><button type="button" class="tg-ed" data-capsposta="1" title="Sposta il capitolato dopo">▼</button>`
+        : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
@@ -880,6 +858,74 @@ function cambioRiga(e) {
 }
 $("#righe-offerta").addEventListener("change", cambioRiga);
 $("#riepilogo-righe").addEventListener("change", cambioRiga);
+/* ----- Menu del tasto destro sulle righe dell'offerta ----- */
+function chiudiMenuDx() { $("#menu-dx").hidden = true; }
+function apriMenuDx(x, y) {
+  const c = capAtt(); if (!c) return;
+  const n = S.sel.size, m = $("#menu-dx");
+  const caps = c.capitolati.map((k) => `<button type="button" data-dx="cap" data-cap-dx="${esc(k)}">${esc(k)}</button>`).join("");
+  m.innerHTML = `
+    <div class="dx-titolo">${n === 1 ? "1 riga selezionata" : `${n} righe selezionate`}</div>
+    <button type="button" data-dx="tutte">Seleziona tutte</button>
+    <button type="button" data-dx="nessuna">Deseleziona</button>
+    <hr>
+    <button type="button" data-dx="su1">↑ Sposta su</button>
+    <button type="button" data-dx="giu1">↓ Sposta giù</button>
+    <button type="button" data-dx="su">⤒ Porta in cima</button>
+    <button type="button" data-dx="giu">⤓ Porta in fondo</button>
+    <hr>
+    <button type="button" data-dx="dupqui">⧉ Duplica</button>
+    <button type="button" data-dx="dupcon">⧉ Duplica in fondo con capitolato e nota…</button>
+    <div class="dx-sub"><button type="button" class="dx-apri">▸ Assegna il capitolato</button>
+      <div class="dx-lista">${caps || '<span class="dx-vuoto">nessun capitolato</span>'}<button type="button" data-dx="capnuovo">+ Nuovo capitolato…</button><button type="button" data-dx="cap" data-cap-dx="">— nessun capitolato</button></div></div>
+    <button type="button" data-dx="note">✎ Note…</button>
+    <button type="button" data-dx="nota">Applica la nota post-linea…</button>
+    <hr>
+    <button type="button" data-dx="togli" class="dx-danger">✕ Elimina</button>`;
+  m.hidden = false;
+  menuDxAperto = Date.now();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(x, innerWidth - w - 8) + "px";
+  m.classList.toggle("sx", Math.min(x, innerWidth - w - 8) + w + 230 > innerWidth);
+  m.style.top = Math.min(y, innerHeight - h - 8) + "px";
+}
+$("#righe-offerta").addEventListener("contextmenu", (e) => {
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  e.preventDefault();
+  if (!S.sel.has(tr.dataset.id)) { S.sel = new Set([tr.dataset.id]); S.ultimoSel = tr.dataset.id; disegnaOfferta(); }
+  apriMenuDx(e.clientX, e.clientY);
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#menu-dx")) chiudiMenuDx(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") chiudiMenuDx(); });
+let menuDxAperto = 0;
+window.addEventListener("scroll", () => { if (Date.now() - menuDxAperto > 400) chiudiMenuDx(); }, true);
+$("#menu-dx").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dx]"); if (!b) return;
+  const az = b.dataset.dx, c = capAtt();
+  chiudiMenuDx();
+  if (!c) return;
+  const sceltaCap = (sel = "") => `<label class="f">Capitolato<select id="dx-cap"><option value="">— lascia com'è —</option>${c.capitolati.map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label>`;
+  if (az === "cap") return azioneRighe("cap", { cap: b.dataset.capDx, vuoto: true });
+  if (az === "capnuovo") return dialogo({
+    titolo: "Nuovo capitolato", html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="dx-nuovo" placeholder="es. PIANO TERRA"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Crea e assegna", value: "ok", cls: "primary" }],
+    onApri: (d) => setTimeout(() => $("#dx-nuovo", d).focus(), 50),
+    onConferma(v, d) { const n = $("#dx-nuovo", d).value.trim(); if (!aggiungiCapitolato(c, n)) return false; azioneRighe("cap", { cap: n }); },
+  });
+  if (az === "dupcon") return dialogo({
+    titolo: "Duplica in fondo", html: `${sceltaCap()}<label class="f" style="margin-top:10px">Nota post-linea delle copie<input id="dx-nota" placeholder="es. posizione A_2"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Duplica", value: "ok", cls: "primary" }],
+    onConferma(v, d) { azioneRighe("dup", { cap: $("#dx-cap", d).value, nota: $("#dx-nota", d).value }); },
+  });
+  if (az === "nota") return dialogo({
+    titolo: "Nota post-linea", html: `<label class="f">Nota per le righe selezionate (vuoto = cancella)<input id="dx-nota" placeholder="es. posizione A_2"></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Applica", value: "ok", cls: "primary" }],
+    onApri: (d) => setTimeout(() => $("#dx-nota", d).focus(), 50),
+    onConferma(v, d) { azioneRighe("nota", { nota: $("#dx-nota", d).value }); },
+  });
+  azioneRighe(az);
+});
+
 /* righe del blocco sotto un'intestazione di capitolato (fino alla successiva) */
 function righeDelBlocco(h) {
   const ids = [];
@@ -889,6 +935,10 @@ function righeDelBlocco(h) {
 /* Selezione: casella, clic su codice/descrizione, Maiusc+clic per un intervallo, casella del capitolato. */
 $("#righe-offerta").addEventListener("click", (e) => {
   const c = capAtt(); if (!c) return;
+  const ed = e.target.closest("[data-rinomina]");
+  if (ed) return rinominaCapitolato(c, ed.dataset.rinomina);
+  const sp = e.target.closest("[data-capsposta]");
+  if (sp) return spostaCapitolato(c, sp.closest("tr").dataset.gruppo, +sp.dataset.capsposta);
   const g = e.target.closest("[data-selgruppo]");
   if (g) {
     const ids = righeDelBlocco(g.closest("tr"));
@@ -954,13 +1004,12 @@ $("#sel-tutte").addEventListener("change", (e) => {
   S.sel = e.target.checked ? new Set(c.righe.map((r) => r.id)) : new Set();
   disegnaOfferta();
 });
-$("#bulk").addEventListener("click", (e) => {
-  const b = e.target.closest("[data-bulk]"); if (!b) return;
+/* Azioni sulle righe selezionate (menu del tasto destro). opz = { cap, nota } */
+function azioneRighe(az, opz = {}) {
   const c = capAtt(); if (!c) return;
   const scelte = c.righe.filter((r) => S.sel.has(r.id));
-  const nota = $("#bulk-nota").value.trim();
-  const capSc = $("#bulk-cap").value;
-  const az = b.dataset.bulk;
+  const nota = (opz.nota || "").trim();
+  const capSc = opz.cap || "";
   if (az === "dup") {
     // le copie vanno in fondo, nello stesso ordine, con il capitolato e la nota scelti (se indicati)
     const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(),
@@ -969,7 +1018,7 @@ $("#bulk").addEventListener("click", (e) => {
     S.sel = new Set(copie.map((r) => r.id));
     toast(`Duplicate ${copie.length} righe${capSc ? ` nel capitolato “${capSc}”` : ""}${nota ? ` con nota “${nota}”` : ""}: le trovi in fondo, già selezionate.`, 4500);
   } else if (az === "cap") {
-    if (!capSc) return toast("Scegli il capitolato (o crealo nella barra “Capitolati per Oracle”).");
+    if (!capSc && !opz.vuoto) return toast("Scegli il capitolato.");
     scelte.forEach((r) => (r.capitolato = capSc));
   } else if (az === "nota") {
     scelte.filter((r) => !isGenerico(r)).forEach((r) => (r.notePost = nota));
@@ -993,12 +1042,16 @@ $("#bulk").addEventListener("click", (e) => {
   } else if (az === "tutte") {
     S.sel = new Set(c.righe.map((r) => r.id));
   } else if (az === "togli") {
-    if (scelte.length > 1 && !confirm(`Eliminare ${scelte.length} righe dall'offerta?`)) return;
+    if (scelte.length > 1 && !opz.confermato) {
+      return dialogo({ titolo: `Eliminare ${scelte.length} righe?`, html: `<p>Le ${scelte.length} righe selezionate verranno tolte dall'offerta.</p>`,
+        pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Elimina", value: "ok", cls: "danger" }],
+        onConferma: () => azioneRighe("togli", { confermato: true }) });
+    }
     c.righe = c.righe.filter((r) => !S.sel.has(r.id));
     S.sel = new Set();
   } else if (az === "nessuna") S.sel = new Set();
   modificata(); disegnaOfferta();
-});
+}
 $("#aggiorna-da-catalogo").addEventListener("click", () => {
   const c = capAtt(); if (!c) return;
   let n = 0, mancanti = 0;

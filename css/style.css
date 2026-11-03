@@ -613,3 +613,29 @@ input.sel-gruppo { vertical-align: middle; width: 16px; height: 16px; min-height
 /* anteprima Oracle: tutte le righe alte uguali, testi lunghi su una riga (il testo intero passando sopra) */
 #tab-export td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; height: 34px; }
 input.qta.qta-alta { background: var(--bad-soft) !important; border-color: var(--bad) !important; color: var(--bad); }
+
+/* Menu del tasto destro */
+.bulk { flex-direction: row; align-items: center; gap: 14px; padding: 8px 12px; }
+.menu-dx {
+  position: fixed; z-index: 60; min-width: 250px; background: var(--card); border: 1px solid var(--line-strong);
+  border-radius: 10px; box-shadow: 0 12px 36px rgba(0,0,0,.28); padding: 6px; display: flex; flex-direction: column;
+}
+.menu-dx[hidden] { display: none; }
+.menu-dx button { border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.menu-dx button:hover { background: var(--accent-soft); }
+.menu-dx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.menu-dx .dx-titolo { font-size: .75rem; font-weight: 700; color: var(--muted); padding: 4px 10px 6px; text-transform: uppercase; letter-spacing: .04em; }
+.menu-dx .dx-danger { color: var(--bad); }
+.menu-dx .dx-danger:hover { background: var(--bad-soft); }
+.dx-sub { position: relative; }
+.dx-sub > .dx-apri { width: 100%; }
+.dx-lista { display: none; position: absolute; left: 100%; top: -6px; min-width: 220px; max-height: 50vh; overflow: auto; background: var(--card);
+  border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 12px 36px rgba(0,0,0,.28); padding: 6px; flex-direction: column; }
+.dx-sub:hover .dx-lista, .dx-sub:focus-within .dx-lista { display: flex; }
+.dx-vuoto { color: var(--muted); font-size: .85rem; padding: 6px 10px; }
+.menu-dx.sx .dx-lista { left: auto; right: 100%; }
+.tg-ed { border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.12); color: #fff; border-radius: 6px; cursor: pointer;
+  font: 700 .78rem/1 system-ui, sans-serif; padding: 3px 6px; margin-left: 6px; vertical-align: 1px; }
+.tg-ed:first-of-type { margin-left: 10px; }
+.tg-ed:hover { background: rgba(255,255,255,.3); }
+tbody tr.testa-gruppo:focus-within .tg-ed { color: var(--ink); border-color: var(--riga-attiva-bordo); background: transparent; }

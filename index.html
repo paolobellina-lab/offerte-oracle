@@ -163,30 +163,10 @@
             <button class="btn small" id="aggiorna-da-catalogo">Aggiorna prezzi dal database</button>
           </div>
           
-          <div class="capitolati no-print" id="capitolati"></div>
           <div class="bulk no-print" id="bulk">
-            <div class="bulk-riga">
-              <b id="bulk-n" class="bulk-n">Nessuna riga selezionata</b>
-              <button class="btn small" data-bulk="tutte" data-sempre>Seleziona tutte</button>
-              <button class="btn small" data-bulk="nessuna">Deseleziona</button>
-              <span class="bulk-sep"></span>
-              <button class="btn small" data-bulk="su1" title="Sposta le righe selezionate di una posizione in su">↑ Su</button>
-              <button class="btn small" data-bulk="giu1" title="Sposta le righe selezionate di una posizione in giù">↓ Giù</button>
-              <button class="btn small" data-bulk="su" title="Porta le righe selezionate in cima">⤒ In cima</button>
-              <button class="btn small" data-bulk="giu" title="Porta le righe selezionate in fondo">⤓ In fondo</button>
-              <span class="bulk-sep"></span>
-              <button class="btn small" data-bulk="dupqui" title="Duplica le righe selezionate subito sotto">⧉ Duplica</button>
-              <button class="btn small" data-bulk="note" title="Note pre-linea e post-linea delle righe selezionate">✎ Note</button>
-              <button class="btn small danger" data-bulk="togli" title="Elimina le righe selezionate">✕ Elimina</button>
-            </div>
-            <div class="bulk-riga">
-              <select id="bulk-cap" title="Capitolato per Oracle"></select>
-              <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:210px">
-              <button class="btn small primary" data-bulk="dup">Duplica in fondo con capitolato e nota</button>
-              <button class="btn small" data-bulk="cap">Assegna il capitolato</button>
-              <button class="btn small" data-bulk="nota">Applica la nota</button>
-              <span class="muted small">Seleziona con le caselle, cliccando su codice o descrizione, con Maiusc+clic per un intervallo, o con la casella sulla barra blu per un intero capitolato.</span>
-            </div>
+            <b id="bulk-n" class="bulk-n">Nessuna riga selezionata</b>
+            <span class="muted small">Tasto destro su una riga per i comandi (sposta, duplica, capitolato, note, elimina).
+              Seleziona con le caselle, cliccando su codice o descrizione, Maiusc+clic per un intervallo, o la casella sulla barra blu per un capitolato intero.</span>
           </div>
           <div class="tbl-wrap"><table>
             <thead><tr>
@@ -206,6 +186,10 @@
               <div style="display:flex;flex-direction:column;gap:3px">
                 <span class="muted small" style="font-weight:600">Tipo offerta</span>
                 <div class="seg" id="c-tipo"></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;margin-left:40px">
+                <span class="muted small" style="font-weight:600">Prezzi verso Oracle</span>
+                <div class="seg" id="c-prezzi"></div>
               </div>
             </div>
             <div style="margin-top:12px">
@@ -245,10 +229,6 @@
           <div class="card">
             <h3 class="titolo-sez">Impostazioni dell'output per Oracle</h3>
             <div class="row" style="gap:18px;align-items:flex-end">
-              <div style="display:flex;flex-direction:column;gap:3px">
-                <span class="muted small" style="font-weight:600">Prezzi</span>
-                <div class="seg" id="c-prezzi"></div>
-              </div>
               <div style="display:flex;flex-direction:column;gap:3px">
                 <span class="muted small" style="font-weight:600" title="SI = nella colonna Nome Capitolato va il capitolato assegnato alla riga">Capitolati in Oracle</span>
                 <div class="seg" id="c-sotto"></div>
@@ -361,6 +341,7 @@
   </form>
 </dialog>
 
+<div id="menu-dx" class="menu-dx" hidden></div>
 <div id="toast" hidden></div>
 <script type="module" src="js/app.js"></script>
 </body>
