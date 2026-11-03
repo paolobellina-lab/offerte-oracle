@@ -599,3 +599,14 @@ tbody tr.testa-gruppo:focus-within .tg { background: var(--riga-attiva-bordo); b
 .sidebar.aperta #sb-offerta { border-top: 1px solid var(--line-strong); margin-top: 6px; padding-top: 6px; }
 tr.qta-zero td { color: var(--muted); }
 tr.qta-zero td.desc b, tr.qta-zero td.mono { opacity: .6; }
+
+/* Barra dei comandi sulle righe selezionate (sempre visibile) */
+.bulk { display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--line); }
+.bulk.attiva { border: 1px solid var(--accent); background: var(--accent-soft); }
+.bulk-riga { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bulk-n { min-width: 170px; }
+.bulk-sep { width: 1px; height: 22px; background: var(--line-strong); margin: 0 4px; }
+.bulk button:disabled { opacity: .4; }
+input.sel-gruppo { margin: 0 8px 0 0; vertical-align: -2px; accent-color: #fff; }
+#righe-offerta td.desc, #righe-offerta td.mono { cursor: pointer; }
+input.sel-gruppo { vertical-align: middle; width: 16px; height: 16px; min-height: 0; position: relative; top: -1px; }

@@ -167,23 +167,35 @@
           <p class="muted small" style="margin-top:0">Le righe vanno in Oracle in quest'ordine. Q.tà 0 = la riga resta qui ma non va in Oracle e non conta nei totali (per toglierla usa ✕). Lo stesso articolo può comparire più volte (es. una riga per posizione).
             Sconti, ricarichi e dettaglio dei prezzi sono nella pagina “2 · Sconti e ricarichi”.</p>
           <div class="capitolati no-print" id="capitolati"></div>
-          <div class="bulk no-print" id="bulk" hidden>
-            <b id="bulk-n"></b>
-            <select id="bulk-cap" title="Capitolato per Oracle"></select>
-            <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:210px">
-            <button class="btn small primary" data-bulk="dup">Duplica in fondo con capitolato e nota</button>
-            <button class="btn small" data-bulk="cap">Assegna il capitolato</button>
-            <button class="btn small" data-bulk="nota">Applica la nota</button>
-            <button class="btn small" data-bulk="su">Porta in cima</button>
-            <button class="btn small" data-bulk="giu">Porta in fondo</button>
-            <button class="btn small danger" data-bulk="togli">Togli</button>
-            <button class="btn small" data-bulk="nessuna">Deseleziona</button>
+          <div class="bulk no-print" id="bulk">
+            <div class="bulk-riga">
+              <b id="bulk-n" class="bulk-n">Nessuna riga selezionata</b>
+              <button class="btn small" data-bulk="tutte" data-sempre>Seleziona tutte</button>
+              <button class="btn small" data-bulk="nessuna">Deseleziona</button>
+              <span class="bulk-sep"></span>
+              <button class="btn small" data-bulk="su1" title="Sposta le righe selezionate di una posizione in su">↑ Su</button>
+              <button class="btn small" data-bulk="giu1" title="Sposta le righe selezionate di una posizione in giù">↓ Giù</button>
+              <button class="btn small" data-bulk="su" title="Porta le righe selezionate in cima">⤒ In cima</button>
+              <button class="btn small" data-bulk="giu" title="Porta le righe selezionate in fondo">⤓ In fondo</button>
+              <span class="bulk-sep"></span>
+              <button class="btn small" data-bulk="dupqui" title="Duplica le righe selezionate subito sotto">⧉ Duplica</button>
+              <button class="btn small" data-bulk="note" title="Note pre-linea e post-linea delle righe selezionate">✎ Note</button>
+              <button class="btn small danger" data-bulk="togli" title="Elimina le righe selezionate">✕ Elimina</button>
+            </div>
+            <div class="bulk-riga">
+              <select id="bulk-cap" title="Capitolato per Oracle"></select>
+              <input id="bulk-nota" placeholder="nota post-linea, es. posizione A_2" style="min-width:210px">
+              <button class="btn small primary" data-bulk="dup">Duplica in fondo con capitolato e nota</button>
+              <button class="btn small" data-bulk="cap">Assegna il capitolato</button>
+              <button class="btn small" data-bulk="nota">Applica la nota</button>
+              <span class="muted small">Seleziona con le caselle, cliccando su codice o descrizione, con Maiusc+clic per un intervallo, o con la casella sulla barra blu per un intero capitolato.</span>
+            </div>
           </div>
           <div class="tbl-wrap"><table>
             <thead><tr>
               <th><input type="checkbox" id="sel-tutte" title="Seleziona tutte"></th><th class="num">Linea</th>
               <th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Giorni</th>
-              <th class="num">Unitario</th><th class="num">Totale</th><th>Capitolato</th><th>Nota post-linea</th><th></th>
+              <th class="num">Unitario</th><th class="num">Totale</th><th>Capitolato</th><th>Nota pre-linea</th><th>Nota post-linea</th>
             </tr></thead>
             <tbody id="righe-offerta"></tbody>
           </table></div>

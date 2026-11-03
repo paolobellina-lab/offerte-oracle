@@ -724,8 +724,9 @@ function disegnaRighe(c) {
   const tb = $("#righe-offerta");
   const sel = S.sel;
   for (const id of [...sel]) if (!c.righe.some((r) => r.id === id)) sel.delete(id);
-  $("#bulk").hidden = !sel.size;
-  $("#bulk-n").textContent = sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
+  $("#bulk-n").textContent = !sel.size ? "Nessuna riga selezionata" : sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
+  $("#bulk").classList.toggle("attiva", sel.size > 0);
+  $$("#bulk [data-bulk]").forEach((b) => { if (!b.hasAttribute("data-sempre")) b.disabled = !sel.size; });
   $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
   if (!c.righe.length) {
     tb.innerHTML = `<tr><td colspan="12" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
@@ -742,7 +743,7 @@ function disegnaRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12"><input type="checkbox" class="sel-gruppo" data-selgruppo title="Seleziona tutte le righe di questo capitolato"> ${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
@@ -756,13 +757,19 @@ function disegnaRighe(c) {
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
-      <td>${isGenerico(r) ? `<span class="nota-auto" title="Articolo generico: in Oracle nota pre-linea = ${esc(r.nOrdine)}, nota post-linea = descrizione">auto: ${esc(r.nOrdine)}</span>`
-        : `<input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea">`}</td>
-      <td class="nowrap">
-        <button class="icon mini" data-az="su" title="Sposta su" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon mini" data-az="giu" title="Sposta giù" ${i === c.righe.length - 1 ? "disabled" : ""}>↓</button>${isGenerico(r) ? "" : '<button class="icon mini" data-az="note" title="Note pre e post linea">✎</button>'}<button class="icon mini" data-az="dup" title="Duplica la riga">⧉</button><button class="icon" data-az="togli" title="Togli la riga">✕</button>
-      </td></tr>`;
+      ${isGenerico(r)
+        ? `<td><span class="nota-auto" title="Articolo generico: nota pre-linea automatica = n° di ordinazione">auto: ${esc(r.nOrdine)}</span></td>
+           <td><span class="nota-auto" title="Articolo generico: nota post-linea automatica = descrizione">auto: descrizione</span></td>`
+        : `<td><input class="nota" data-campo="notePre" value="${esc(r.notePre)}" placeholder="nota pre-linea"></td>
+           <td><input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea"></td>`}</tr>`;
   }).join("") + `<tr class="sotto"><td colspan="8" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
   applicaGruppi(tb);
+  // casella del capitolato spuntata se tutte le sue righe sono selezionate
+  for (const h of tb.querySelectorAll("tr[data-gruppo]")) {
+    const ids = righeDelBlocco(h);
+    const cb = h.querySelector("[data-selgruppo]");
+    if (cb) { cb.checked = ids.length > 0 && ids.every((id) => sel.has(id)); cb.indeterminate = !cb.checked && ids.some((id) => sel.has(id)); }
+  }
 }
 
 /* Pagina 2: riepilogo delle righe con sconti e ricarico applicati (come la vista di controllo dell'Excel). */
@@ -810,9 +817,10 @@ const rigaDi = (el) => { const c = capAtt(); const id = el.closest("tr[data-id]"
 function cambioRiga(e) {
   const inp = e.target;
   const { c, id, r } = rigaDi(inp); if (!r) return;
-  if (inp.matches("[data-sel]")) { inp.checked ? S.sel.add(id) : S.sel.delete(id); return disegnaOfferta(); }
+  if (inp.matches("[data-sel], [data-selgruppo]")) return;
   const campo = inp.dataset.campo; if (!campo) return;
   if (campo === "notePost") { r.notePost = inp.value.trim(); modificata(); return; }
+  if (campo === "notePre") { r.notePre = inp.value.trim(); modificata(); return; }
   if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
   if (campo === "aGiornate") { r.aGiornate = inp.checked; modificata(); return ridisegnaOfferta(); }
   if (campo === "prezzoGen") {
@@ -833,18 +841,63 @@ function cambioRiga(e) {
 }
 $("#righe-offerta").addEventListener("change", cambioRiga);
 $("#riepilogo-righe").addEventListener("change", cambioRiga);
+/* righe del blocco sotto un'intestazione di capitolato (fino alla successiva) */
+function righeDelBlocco(h) {
+  const ids = [];
+  for (let tr = h.nextElementSibling; tr && !tr.hasAttribute("data-gruppo") && !tr.classList.contains("sotto"); tr = tr.nextElementSibling) if (tr.dataset.id) ids.push(tr.dataset.id);
+  return ids;
+}
+/* Selezione: casella, clic su codice/descrizione, Maiusc+clic per un intervallo, casella del capitolato. */
 $("#righe-offerta").addEventListener("click", (e) => {
-  const b = e.target.closest("[data-az]"); if (!b) return;
-  const { c, id, r } = rigaDi(b); if (!r) return;
-  const i = c.righe.indexOf(r);
-  const az = b.dataset.az;
-  if (az === "togli") c.righe.splice(i, 1);
-  else if (az === "dup") c.righe.splice(i + 1, 0, { ...structuredClone(r), id: db.nuovoId() });
-  else if (az === "su" && i > 0) [c.righe[i - 1], c.righe[i]] = [c.righe[i], c.righe[i - 1]];
-  else if (az === "giu" && i < c.righe.length - 1) [c.righe[i + 1], c.righe[i]] = [c.righe[i], c.righe[i + 1]];
-  else if (az === "note") return modificaNoteRiga(r);
-  modificata(); disegnaOfferta();
+  const c = capAtt(); if (!c) return;
+  const g = e.target.closest("[data-selgruppo]");
+  if (g) {
+    const ids = righeDelBlocco(g.closest("tr"));
+    ids.forEach((id) => (g.checked ? S.sel.add(id) : S.sel.delete(id)));
+    return disegnaOfferta();
+  }
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  const suCasella = e.target.matches("[data-sel]");
+  const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono, td.num:nth-child(2)");
+  if (!suCasella && !suTesto) return;
+  const id = tr.dataset.id;
+  if (e.shiftKey && S.ultimoSel && S.ultimoSel !== id) {
+    const a = c.righe.findIndex((r) => r.id === S.ultimoSel), b = c.righe.findIndex((r) => r.id === id);
+    if (a >= 0 && b >= 0) { const [x, y] = a < b ? [a, b] : [b, a]; for (let k = x; k <= y; k++) S.sel.add(c.righe[k].id); }
+    window.getSelection?.().removeAllRanges();
+  } else if (suCasella) {
+    e.target.checked ? S.sel.add(id) : S.sel.delete(id);
+  } else {
+    S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);
+  }
+  S.ultimoSel = id;
+  disegnaOfferta();
 });
+
+/* Note di più righe insieme: un campo vuoto lascia le note com'erano. */
+function noteRigheSelezionate(scelte) {
+  const modificabili = scelte.filter((r) => !isGenerico(r));
+  if (!modificabili.length) return toast("Le note degli articoli generici sono automatiche (n° di ordinazione e descrizione).");
+  if (modificabili.length === 1) return modificaNoteRiga(modificabili[0]);
+  dialogo({
+    titolo: `Note di ${modificabili.length} righe`,
+    html: `<p class="muted small" style="margin-top:0">Quello che scrivi va su tutte le righe selezionate (gli articoli generici restano automatici).
+      Lascia vuoto un campo per non cambiarlo; spunta "svuota" per cancellarlo.</p>
+      <label class="f">Note pre-linea<textarea id="n-pre" rows="3"></textarea></label>
+      <label class="row small"><input type="checkbox" id="n-pre-x"> svuota le note pre-linea</label>
+      <label class="f" style="margin-top:10px">Note post-linea<textarea id="n-post" rows="3"></textarea></label>
+      <label class="row small"><input type="checkbox" id="n-post-x"> svuota le note post-linea</label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Applica", value: "ok", cls: "primary" }],
+    onConferma(v, b) {
+      const pre = $("#n-pre", b).value.trim(), post = $("#n-post", b).value.trim();
+      for (const r of modificabili) {
+        if ($("#n-pre-x", b).checked) r.notePre = ""; else if (pre) r.notePre = pre;
+        if ($("#n-post-x", b).checked) r.notePost = ""; else if (post) r.notePost = post;
+      }
+      modificata(); disegnaOfferta();
+    },
+  });
+}
 function modificaNoteRiga(r) {
   dialogo({
     titolo: `Note · ${codiceArticolo(r)} ${r.nOrdine}`,
@@ -884,7 +937,24 @@ $("#bulk").addEventListener("click", (e) => {
   } else if (az === "su" || az === "giu") {
     const resto = c.righe.filter((r) => !S.sel.has(r.id));
     c.righe = az === "su" ? [...scelte, ...resto] : [...resto, ...scelte];
+  } else if (az === "su1") {
+    // ogni riga selezionata sale di una posizione (il gruppo selezionato si muove insieme)
+    for (let k = 1; k < c.righe.length; k++) if (S.sel.has(c.righe[k].id) && !S.sel.has(c.righe[k - 1].id)) [c.righe[k - 1], c.righe[k]] = [c.righe[k], c.righe[k - 1]];
+  } else if (az === "giu1") {
+    for (let k = c.righe.length - 2; k >= 0; k--) if (S.sel.has(c.righe[k].id) && !S.sel.has(c.righe[k + 1].id)) [c.righe[k + 1], c.righe[k]] = [c.righe[k], c.righe[k + 1]];
+  } else if (az === "dupqui") {
+    // le copie vanno subito sotto l'ultima riga selezionata, nello stesso ordine
+    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId() }));
+    const ultimo = Math.max(...scelte.map((r) => c.righe.indexOf(r)));
+    c.righe.splice(ultimo + 1, 0, ...copie);
+    S.sel = new Set(copie.map((r) => r.id));
+    toast(`Duplicate ${copie.length} righe: le copie sono sotto, già selezionate.`);
+  } else if (az === "note") {
+    return noteRigheSelezionate(scelte);
+  } else if (az === "tutte") {
+    S.sel = new Set(c.righe.map((r) => r.id));
   } else if (az === "togli") {
+    if (scelte.length > 1 && !confirm(`Eliminare ${scelte.length} righe dall'offerta?`)) return;
     c.righe = c.righe.filter((r) => !S.sel.has(r.id));
     S.sel = new Set();
   } else if (az === "nessuna") S.sel = new Set();
