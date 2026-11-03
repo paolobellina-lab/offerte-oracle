@@ -245,3 +245,5 @@ select.extra-di { min-height: 28px; padding: 2px 4px; font-size: .85rem; }
 .chip-x:hover { color: var(--bad); background: var(--bad-soft); }
 select.capsel { min-height: 28px; padding: 2px 4px; font-size: .85rem; max-width: 160px; }
 #righe-offerta tr.gruppo td { position: static; }
+label.giornate { display: block; font-size: .75rem; color: var(--muted); margin-top: 3px; white-space: nowrap; cursor: pointer; }
+label.giornate input { min-height: 0; vertical-align: -2px; }

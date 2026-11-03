@@ -108,15 +108,20 @@ export function ricarico(r, off, ricaricoCapitolo = 0) {
 }
 
 /* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO: 0.28, ... } */
+/* Attività "a giornate": in vendita e a listino il prezzo dell'attività è complessivo (quantità 1);
+   con questa scelta va in Oracle come valore giornaliero × numero di giorni. In acquisto è sempre così. */
+export const aGiornate = (r, tipo) => isAttivita(r) && !!r.aGiornate && tipo !== "ACQUISTO" && num(r.giorni) > 0;
+
 export function calcolaRiga(r, off, ricarichi = {}) {
   const tipo = off.tipo;
-  const base = prezzoBase(r, tipo);
+  const giornate = aGiornate(r, tipo);
+  const base = giornate ? prezzoBase(r, tipo) / num(r.giorni) : prezzoBase(r, tipo);
   const sc3 = sconto("sc3", r, off), sc4 = sconto("sc4", r, off), sc5 = sconto("sc5", r, off);
   const aum1 = sconto("aum1", r, off);
   const ric = ricarico(r, off, ricarichi[r.capitolo]);
   const fattore = (1 - sc3) * (1 - sc4) * (1 - sc5) * (1 + aum1) * (1 + ric);
   const unitario = base * fattore;
-  const qta = quantita(r, tipo);
+  const qta = giornate ? num(r.giorni) * num(r.qta) : quantita(r, tipo);
   return { base, sc3, sc4, sc5, aum1, ric, fattore, unitario, qta, totale: unitario * qta };
 }
 
@@ -191,7 +196,7 @@ export function controlloCartellino(off, cliente, opz = {}) {
       if (tariffa === null) continue;
       // tariffa giornaliera: in LISTINO e VENDITA CLIENTE il prezzo dell'attività comprende tutti i giorni
       const gg = num(att.riga.giorni);
-      const prezzo = off.tipo !== "ACQUISTO" && gg > 0 ? att.c.unitario / gg : att.c.unitario;
+      const prezzo = off.tipo !== "ACQUISTO" && gg > 0 && !aGiornate(att.riga, off.tipo) ? att.c.unitario / gg : att.c.unitario;
       const stato = tariffa > prezzo + 1e-9 ? "ok" : Math.abs(tariffa - prezzo) < 1e-9 ? "pari" : "fuori";
       esiti.push({ gmv, tipo: "attivita", offerta: prezzo, cartellino: tariffa, stato,
         testo: stato === "ok" ? "OK" : stato === "pari" ? "Valore di cartellino" : "Superiore al valore di cartellino" });

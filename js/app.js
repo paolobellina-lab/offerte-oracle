@@ -648,8 +648,10 @@ function disegnaRighe(c) {
       <td class="mono nowrap">${esc(codiceOracle(r)) || '<span class="badge bad">senza codice</span>'}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
-      <td class="num"><input class="qta" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"></td>
-      <td class="num">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">` : ""}</td>
+      <td class="num"><input class="qta" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}">${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
+      <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
+        <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
+          <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
       <td class="num">${euro(x.base)}</td>
       <td class="num">${pctTxt(x.sc3)}</td><td class="num">${pctTxt(x.sc4)}</td><td class="num">${pctTxt(x.sc5)}</td>
       <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
@@ -671,6 +673,7 @@ $("#righe-offerta").addEventListener("change", (e) => {
   const campo = inp.dataset.campo; if (!campo) return;
   if (campo === "notePost") { r.notePost = inp.value.trim(); modificata(); return; }
   if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
+  if (campo === "aGiornate") { r.aGiornate = inp.checked; modificata(); return ridisegnaOfferta(); }
   r[campo] = num(inp.value);
   if (campo === "qta" && !r.qta) c.righe = c.righe.filter((x) => x.id !== id);
   modificata(); ridisegnaOfferta();
