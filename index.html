@@ -157,8 +157,12 @@
               <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
               <span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-picker" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-picker" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span>
             </div>
+            <div class="pick-bar" id="pick-bar" hidden><b id="pick-n"></b>
+              <button type="button" class="btn small primary" id="pick-aggiungi">+ Aggiungi all'offerta…</button>
+              <button type="button" class="btn small" id="pick-nessuno">Deseleziona</button>
+              <span class="muted small">Seleziona con le caselle, cliccando su codice o descrizione, Maiusc+clic per un intervallo; poi tasto destro › Aggiungi. La selezione resta anche se cambi ricerca.</span></div>
             <div class="tbl-wrap picker-wrap"><table>
-              <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th class="num">Aggiungi</th></tr></thead>
+              <thead><tr><th class="sel-col"><input type="checkbox" id="pick-tutti" title="Seleziona tutti gli articoli visibili"></th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th class="num">Listino</th><th>GMV</th><th>Agg.</th><th class="num">Aggiungi</th></tr></thead>
               <tbody id="righe-picker"></tbody>
             </table></div>
             <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>

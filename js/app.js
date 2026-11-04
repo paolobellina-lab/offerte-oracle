@@ -14,7 +14,7 @@ const S = {
   capitoli: [], gmv: [], clienti: [], chunks: [], catalogo: [], perK: new Map(), offerte: [],
   off: null, vista: "offerte", sub: "righe", dirty: false, salvando: false, utente: null,
   limiteCat: 300, limitePick: 300, pickCap: "", pickDb: "", importato: null, aggOracle: null,
-  capAtt: "", sel: new Set(), precodici: [],
+  capAtt: "", sel: new Set(), precodici: [], pickSel: new Set(), pickUltimo: "", pickVis: [],
 };
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
@@ -83,6 +83,12 @@ function dialogo({ titolo, html, pulsanti = [{ label: "Chiudi", value: "annulla"
   onApri?.($("#dlg-body"));
   $("#dlg").showModal();
 }
+// Invio in un campo del dialogo = pulsante principale (non "Annulla")
+$("#dlg-form").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !e.target.matches("input:not([type=checkbox])")) return;
+  const ok = $("#dlg-foot .primary") || $("#dlg-foot .danger"); if (!ok) return;
+  e.preventDefault(); ok.click();
+});
 $("#dlg-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const v = e.submitter?.value || "annulla";
@@ -773,6 +779,16 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && S.appunti?.taglio && !document.querySelector("dialog[open]")) { S.appunti = null; if (capAtt()) disegnaOfferta(); }
 });
 
+/* Esc: chiude il menu se è aperto, altrimenti deseleziona le righe dell'offerta e gli articoli del database */
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+  if (!$("#menu-dx").hidden) return; // il primo Esc chiude solo il menu
+  if (S.vista !== "offerta" || !capAtt()) return;
+  const cerano = S.sel.size || S.pickSel.size;
+  S.sel = new Set(); S.pickSel.clear();
+  if (cerano) disegnaOfferta();
+}, true);
+
 function disegnaRighe(c) {
   applicaVistaRighe(c);
   const tb = $("#righe-offerta");
@@ -1167,10 +1183,12 @@ function disegnaPicker(c, reset = false) {
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
       sotto = a.sottocapitolo || "";
-      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="8">${esc(sotto || "—")}</td></tr>`;
+      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="9"><input type="checkbox" class="sel-gruppo" data-pickgruppo title="Seleziona tutti gli articoli di questo sottocapitolo"> ${esc(sotto || "—")}</td></tr>`;
     }
     const att = isAttivita(a);
-    html += `<tr data-k="${esc(a.k)}">
+    const pSel = S.pickSel.has(a.k);
+    html += `<tr data-k="${esc(a.k)}" class="${pSel ? "sel" : ""}">
+      <td class="sel-col"><input type="checkbox" data-pick-sel ${pSel ? "checked" : ""}></td>
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
@@ -1178,10 +1196,125 @@ function disegnaPicker(c, reset = false) {
       <td>${pallino(a)}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
-  $("#righe-picker").innerHTML = html || `<tr><td colspan="8" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
+  $("#righe-picker").innerHTML = html || `<tr><td colspan="9" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
   applicaGruppi($("#righe-picker"));
+  S.pickVis = vis.map((a) => a.k);
+  aggiornaPickSel();
   $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : "";
 }
+/* --- Selezione di più articoli del database e aggiunta in un colpo solo --- */
+function aggiornaPickSel() {
+  const n = S.pickSel.size, tb = $("#righe-picker");
+  $("#pick-bar").hidden = !n;
+  $("#pick-n").textContent = n === 1 ? "1 articolo selezionato" : `${n} articoli selezionati`;
+  for (const tr of tb.querySelectorAll("tr[data-k]")) {
+    const on = S.pickSel.has(tr.dataset.k);
+    tr.classList.toggle("sel", on);
+    const cb = tr.querySelector("[data-pick-sel]"); if (cb) cb.checked = on;
+  }
+  for (const h of tb.querySelectorAll("tr[data-gruppo]")) {
+    const ks = kDelBloccoPick(h), cb = h.querySelector("[data-pickgruppo]"); if (!cb) continue;
+    const quanti = ks.filter((k) => S.pickSel.has(k)).length;
+    cb.checked = ks.length > 0 && quanti === ks.length; cb.indeterminate = quanti > 0 && quanti < ks.length;
+  }
+  const vis = S.pickVis || [], qv = vis.filter((k) => S.pickSel.has(k)).length;
+  const t = $("#pick-tutti"); t.checked = vis.length > 0 && qv === vis.length; t.indeterminate = qv > 0 && qv < vis.length;
+}
+function kDelBloccoPick(h) {
+  const ks = [];
+  for (let tr = h.nextElementSibling; tr && !tr.hasAttribute("data-gruppo"); tr = tr.nextElementSibling) if (tr.dataset.k) ks.push(tr.dataset.k);
+  return ks;
+}
+$("#righe-picker").addEventListener("click", (e) => {
+  const g = e.target.closest("[data-pickgruppo]");
+  if (g) { kDelBloccoPick(g.closest("tr")).forEach((k) => (g.checked ? S.pickSel.add(k) : S.pickSel.delete(k))); return aggiornaPickSel(); }
+  const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+  const suCasella = e.target.matches("[data-pick-sel]");
+  const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono");
+  if (!suCasella && !suTesto) return;
+  const k = tr.dataset.k, vis = S.pickVis || [];
+  if (e.shiftKey && S.pickUltimo && S.pickUltimo !== k && vis.includes(S.pickUltimo)) {
+    const a = vis.indexOf(S.pickUltimo), b = vis.indexOf(k);
+    const [x, y] = a < b ? [a, b] : [b, a];
+    for (let i = x; i <= y; i++) S.pickSel.add(vis[i]);
+    window.getSelection?.().removeAllRanges();
+  } else if (suCasella) e.target.checked ? S.pickSel.add(k) : S.pickSel.delete(k);
+  else S.pickSel.has(k) ? S.pickSel.delete(k) : S.pickSel.add(k);
+  S.pickUltimo = k;
+  aggiornaPickSel();
+});
+$("#pick-tutti").addEventListener("change", (e) => { (S.pickVis || []).forEach((k) => (e.target.checked ? S.pickSel.add(k) : S.pickSel.delete(k))); aggiornaPickSel(); });
+$("#pick-nessuno").addEventListener("click", () => { S.pickSel.clear(); aggiornaPickSel(); });
+$("#pick-aggiungi").addEventListener("click", () => aggiungiSelezionati());
+$("#righe-picker").addEventListener("contextmenu", (e) => {
+  const tr = e.target.closest("tr[data-k]"); if (!tr || e.target.closest("input:not([type=checkbox])")) return;
+  e.preventDefault();
+  if (!S.pickSel.has(tr.dataset.k)) { S.pickSel.add(tr.dataset.k); S.pickUltimo = tr.dataset.k; aggiornaPickSel(); }
+  const n = S.pickSel.size, m = $("#menu-dx");
+  m.innerHTML = `<div class="dx-titolo">${n === 1 ? "1 articolo selezionato" : `${n} articoli selezionati`}</div>
+    <button type="button" data-dxp="aggiungi"><b>+ Aggiungi all'offerta…</b></button>
+    <hr>
+    <button type="button" data-dxp="tutti">Seleziona tutti quelli visibili</button>
+    <button type="button" data-dxp="nessuno">Deseleziona tutti</button>`;
+  m.hidden = false; menuDxAperto = Date.now();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
+  m.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
+});
+$("#menu-dx").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dxp]"); if (!b) return;
+  chiudiMenuDx();
+  const az = b.dataset.dxp;
+  if (az === "aggiungi") return aggiungiSelezionati();
+  if (az === "tutti") (S.pickVis || []).forEach((k) => S.pickSel.add(k));
+  if (az === "nessuno") S.pickSel.clear();
+  aggiornaPickSel();
+});
+function aggiungiSelezionati() {
+  const c = capAtt(); if (!c) return;
+  const arts = S.catalogo.filter((a) => S.pickSel.has(a.k)); // nell'ordine del database
+  if (!arts.length) return toast("Seleziona prima gli articoli.");
+  const conAtt = arts.some(isAttivita), conGen = arts.some(isGenerico);
+  const opzCapit = `<option value="">— nessuno —</option>` + c.capitolati.map((n) => `<option ${n === c.capNuove ? "selected" : ""}>${esc(n)}</option>`).join("") + `<option value="__nuovo">+ nuovo capitolato…</option>`;
+  dialogo({
+    titolo: arts.length === 1 ? "Aggiungi 1 articolo" : `Aggiungi ${arts.length} articoli`,
+    html: `<p class="muted small" style="margin-top:0">Quantità, capitolato e note valgono per tutte le righe che aggiungi. Le righe vanno in fondo, nell'ordine del database.</p>
+      <div class="row">
+        <label class="f">Quantità (per ogni articolo)<input id="ps-qta" inputmode="decimal" placeholder="es. 2" style="width:140px"></label>
+        ${conAtt ? `<label class="f">Giorni delle attività<input id="ps-gg" inputmode="decimal" placeholder="quelli del database" style="width:160px"></label>` : ""}
+      </div>
+      <label class="f" style="margin-top:10px">Capitolato<select id="ps-cap">${opzCapit}</select></label>
+      <label class="f" id="ps-nuovo-box" hidden style="margin-top:6px">Nome del nuovo capitolato<input id="ps-nuovo" placeholder="es. PIANO TERRA"></label>
+      <label class="f" style="margin-top:10px">Nota pre-linea<input id="ps-pre" placeholder="vuoto = quella del database"></label>
+      <label class="f" style="margin-top:10px">Nota post-linea<input id="ps-post" placeholder="vuoto = quella del database"></label>
+      ${conGen ? `<p class="muted small">Gli articoli generici tengono le note automatiche (n° di ordinazione e descrizione).</p>` : ""}`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiungi", value: "ok", cls: "primary" }],
+    onApri(d) {
+      $("#ps-cap", d).addEventListener("change", (e) => { $("#ps-nuovo-box", d).hidden = e.target.value !== "__nuovo"; if (e.target.value === "__nuovo") $("#ps-nuovo", d).focus(); });
+      setTimeout(() => $("#ps-qta", d).focus(), 50);
+    },
+    onConferma(v, d) {
+      const q = num($("#ps-qta", d).value);
+      if (!q) { toast("Scrivi la quantità."); $("#ps-qta", d).focus(); return false; }
+      let cap = $("#ps-cap", d).value;
+      if (cap === "__nuovo") { cap = $("#ps-nuovo", d).value.trim(); if (!aggiungiCapitolato(c, cap)) return false; }
+      const gg = conAtt ? $("#ps-gg", d).value.trim() : "";
+      const pre = $("#ps-pre", d).value.trim(), post = $("#ps-post", d).value.trim();
+      const nuove = arts.map((a) => {
+        const r = { ...rigaDaArticolo(a), id: db.nuovoId(), qta: q, capitolato: cap };
+        if (isAttivita(a) && gg) r.giorni = num(gg);
+        if (!isGenerico(r)) { if (pre) r.notePre = pre; if (post) r.notePost = post; }
+        return r;
+      });
+      c.righe.push(...nuove);
+      if (cap) c.capNuove = cap;
+      S.pickSel.clear();
+      modificata(); disegnaOfferta();
+      toast(`Aggiunte ${nuove.length} righe${cap ? ` nel capitolato “${cap}”` : ""}, quantità ${numIt(q)}.`, 4000);
+    },
+  });
+}
+
 function contaInOfferta(c) {
   const m = new Map();
   for (const r of c.righe) { const x = m.get(r.k) || { n: 0, q: 0 }; x.n++; x.q += num(r.qta); m.set(r.k, x); }

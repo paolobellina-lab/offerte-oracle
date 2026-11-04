@@ -689,3 +689,8 @@ tbody tr.tagliata td { opacity: .55; border-top: 1px dashed var(--accent) !impor
 :root[data-theme="chiaro"] .sb-voce.on .sb-sigla { background: rgba(255,255,255,.6); border-color: var(--on-bordo); }
 /* avvisi in basso: fondo chiaro e scritte scure in entrambi i temi */
 #toast { background: #dbe8f6 !important; color: #10304f !important; border: 1px solid #8fb4dc; }
+/* Database: selezione multipla */
+.pick-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; }
+.sel-col { width: 28px; }
+#righe-picker tr.sel td { background: var(--accent-soft) !important; }
+#righe-picker td.desc, #righe-picker td.mono { cursor: pointer; }
