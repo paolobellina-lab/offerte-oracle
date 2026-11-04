@@ -736,7 +736,31 @@ function spostaCapitolato(c, nome, verso) {
   modificata(); disegnaOfferta();
 }
 
+/* Pagina Righe: database a tutta pagina, righe dell'offerta a tutta pagina, oppure tutte e due */
+function applicaVistaRighe(c) {
+  if (!S.vistaRighe) S.vistaRighe = c && c.righe.length ? "righe" : "db";
+  const v = S.vistaRighe;
+  $("#vr-db").hidden = v === "righe";
+  $("#vr-off").hidden = v === "db";
+  $("#s-righe").classList.toggle("vr-piena", v !== "tutte");
+  $$("#vista-righe [data-vr]").forEach((b) => b.classList.toggle("on", b.dataset.vr === v));
+  if (c) $("#vr-conta").textContent = c.righe.length ? `(${c.righe.length})` : "";
+}
+function cambiaVistaRighe(v) {
+  S.vistaRighe = v;
+  applicaVistaRighe(capAtt());
+  window.scrollTo(0, 0);
+  if (v === "db") setTimeout(() => $("#a-cerca").focus(), 0);
+}
+$("#vista-righe").addEventListener("click", (e) => { const b = e.target.closest("[data-vr]"); if (b) cambiaVistaRighe(b.dataset.vr); });
+document.addEventListener("keydown", (e) => {
+  if (!e.altKey || S.vista !== "offerta" || S.sub !== "righe" || !capAtt()) return;
+  const v = { Digit1: "db", Digit2: "righe", Digit3: "tutte" }[e.code];
+  if (v) { e.preventDefault(); cambiaVistaRighe(v); }
+});
+
 function disegnaRighe(c) {
+  applicaVistaRighe(c);
   const tb = $("#righe-offerta");
   const sel = S.sel;
   for (const id of [...sel]) if (!c.righe.some((r) => r.id === id)) sel.delete(id);
@@ -1114,8 +1138,7 @@ function disegnaPicker(c, reset = false) {
   }
   $("#righe-picker").innerHTML = html || `<tr><td colspan="8" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
   applicaGruppi($("#righe-picker"));
-  $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` :
-    `${lista.length} articoli. Scrivi la quantità e premi Invio o Tab: ogni volta si aggiunge una riga nuova in fondo all'offerta.`;
+  $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : "";
 }
 function contaInOfferta(c) {
   const m = new Map();

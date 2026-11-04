@@ -639,3 +639,17 @@ input.qta.qta-alta { background: var(--bad-soft) !important; border-color: var(-
 .tg-ed:first-of-type { margin-left: 10px; }
 .tg-ed:hover { background: rgba(255,255,255,.3); }
 tbody tr.testa-gruppo:focus-within .tg-ed { color: var(--ink); border-color: var(--riga-attiva-bordo); background: transparent; }
+
+/* Selettore Database / Righe / Tutte e due */
+.vista-righe { position: sticky; top: 0; z-index: 12; display: flex; gap: 6px; align-items: center; padding: 8px 0 10px; background: var(--bg); }
+.vista-righe button {
+  font: inherit; font-weight: 700; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink);
+  border-radius: 10px; padding: 8px 16px; cursor: pointer; box-shadow: var(--shadow);
+}
+.vista-righe button:hover { border-color: var(--accent); }
+.vista-righe button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.vista-righe button.on .conta { color: var(--accent-ink); }
+.vista-righe .muted { margin-left: 8px; }
+/* a tutta pagina: le tabelle usano tutta l'altezza dello schermo */
+.vr-piena .picker-wrap { max-height: calc(100vh - 250px - var(--banner-h, 0px)); }
+.vr-piena #vr-off .tbl-wrap { max-height: calc(100vh - 220px - var(--banner-h, 0px)); }

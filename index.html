@@ -141,6 +141,13 @@
 
         <!-- PAGINA 1: RIGHE (aggiungere, quantità, ordine) -->
         <div id="s-righe">
+          <div class="vista-righe no-print" id="vista-righe">
+            <button type="button" data-vr="db" title="Alt+1">Database articoli</button>
+            <button type="button" data-vr="righe" title="Alt+2">Righe dell'offerta <span class="conta" id="vr-conta"></span></button>
+            <button type="button" data-vr="tutte" title="Alt+3">Tutte e due</button>
+            <span class="muted small">Alt+1 · Alt+2 · Alt+3</span>
+          </div>
+          <div id="vr-db">
           <div class="card">
             <h3 class="titolo-sez">Aggiungi articoli</h3>
             <div class="row" style="margin-bottom:8px">
@@ -157,6 +164,8 @@
             <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
           </div>
 
+          </div>
+          <div id="vr-off">
           <div class="row no-print" style="margin-bottom:8px">
             <h3 class="grow titolo-sez" style="margin:0">Righe dell'offerta</h3>
 <span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-offerta" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-offerta" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span>
@@ -176,6 +185,7 @@
             </tr></thead>
             <tbody id="righe-offerta"></tbody>
           </table></div>
+          </div>
         </div>
 
         <!-- PAGINA 2: SCONTI E RICARICHI + RIEPILOGO -->
