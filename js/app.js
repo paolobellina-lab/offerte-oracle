@@ -938,6 +938,7 @@ function apriMenuDx(x, y) {
     <div class="dx-sub"><button type="button" class="dx-apri">▸ Assegna il capitolato</button>
       <div class="dx-lista">${caps || '<span class="dx-vuoto">nessun capitolato</span>'}<button type="button" data-dx="capnuovo">+ Nuovo capitolato…</button><button type="button" data-dx="cap" data-cap-dx="">— nessun capitolato</button></div></div>
     <button type="button" data-dx="note">✎ Note…</button>
+    ${n === 1 ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : ""}
     <button type="button" data-dx="nota">Applica la nota post-linea…</button>
     <hr>
     <button type="button" data-dx="togli" class="dx-danger">✕ Elimina</button>`;
@@ -965,6 +966,7 @@ $("#menu-dx").addEventListener("click", (e) => {
   if (!c) return;
   const sceltaCap = (sel = "") => `<label class="f">Capitolato<select id="dx-cap"><option value="">— lascia com'è —</option>${c.capitolati.map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label>`;
   if (az === "cap") return azioneRighe("cap", { cap: b.dataset.capDx, vuoto: true });
+  if (az === "moddb") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaNelDatabase(r._kCatalogo || r.k); }
   if (az === "capnuovo") return dialogo({
     titolo: "Nuovo capitolato", html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="dx-nuovo" placeholder="es. PIANO TERRA"></label>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Crea e assegna", value: "ok", cls: "primary" }],
@@ -1250,9 +1252,12 @@ $("#righe-picker").addEventListener("contextmenu", (e) => {
   const tr = e.target.closest("tr[data-k]"); if (!tr || e.target.closest("input:not([type=checkbox])")) return;
   e.preventDefault();
   if (!S.pickSel.has(tr.dataset.k)) { S.pickSel.add(tr.dataset.k); S.pickUltimo = tr.dataset.k; aggiornaPickSel(); }
+  S.pickDx = tr.dataset.k;
   const n = S.pickSel.size, m = $("#menu-dx");
   m.innerHTML = `<div class="dx-titolo">${n === 1 ? "1 articolo selezionato" : `${n} articoli selezionati`}</div>
     <button type="button" data-dxp="aggiungi"><b>+ Aggiungi all'offerta…</b></button>
+    <hr>
+    <button type="button" data-dxp="modifica">✎ Modifica nel database <span class="muted small">(${esc(S.perK.get(tr.dataset.k)?.nOrdine || "")})</span></button>
     <hr>
     <button type="button" data-dxp="tutti">Seleziona tutti quelli visibili</button>
     <button type="button" data-dxp="nessuno">Deseleziona tutti</button>`;
@@ -1266,10 +1271,35 @@ $("#menu-dx").addEventListener("click", (e) => {
   chiudiMenuDx();
   const az = b.dataset.dxp;
   if (az === "aggiungi") return aggiungiSelezionati();
+  if (az === "modifica") return modificaNelDatabase(S.pickDx);
   if (az === "tutti") (S.pickVis || []).forEach((k) => S.pickSel.add(k));
   if (az === "nessuno") S.pickSel.clear();
   aggiornaPickSel();
 });
+/* Dal tasto destro: apre il catalogo su quell'articolo, con il modulo di modifica; poi "Torna all'offerta" */
+function modificaNelDatabase(k) {
+  const a = S.perK.get(k) || S.catalogo.find((x) => x.k === k);
+  if (!a) return toast("Questo articolo non è più nel database.");
+  S.ritorno = S.off ? { offId: S.off.id, dati: S.off, capAtt: S.capAtt, sub: S.sub } : null;
+  vai("catalogo");
+  $("#c-capitolo").value = a.capitolo; $("#c-sotto").value = ""; $("#c-cerca").value = a.nOrdine || codiceArticolo(a);
+  disegnaCatalogo();
+  modificaArticolo(a);
+}
+function aggiornaRitorno() {
+  const b = $("#c-torna"); if (!b) return;
+  b.hidden = !S.ritorno;
+  if (S.ritorno) b.textContent = `← Torna all'offerta`;
+}
+$("#c-torna").addEventListener("click", () => {
+  const r = S.ritorno; S.ritorno = null; aggiornaRitorno();
+  if (r) {
+    apriOfferta(r.offId, false, S.offerte.find((o) => o.id === r.offId) || r.dati);
+    if (S.off?.capitoli.some((c) => c.nome === r.capAtt)) { S.capAtt = r.capAtt; S.sub = r.sub; disegnaOfferta(true); }
+    toast("Le righe già nell'offerta tengono i prezzi di prima: per riallinearle usa “Aggiorna prezzi dal database”.", 5000);
+  }
+});
+
 function aggiungiSelezionati() {
   const c = capAtt(); if (!c) return;
   const arts = S.catalogo.filter((a) => S.pickSel.has(a.k)); // nell'ordine del database
@@ -1506,6 +1536,7 @@ $("#c-cerca").addEventListener("input", () => { S.limiteCat = 300; disegnaCatalo
 $("#c-altri").addEventListener("click", () => { S.limiteCat += 300; disegnaCatalogo(); });
 
 function disegnaCatalogo() {
+  aggiornaRitorno();
   const sel = $("#c-capitolo");
   const prev = sel.value;
   sel.innerHTML = `<option value="">Tutti i capitoli</option>` +
