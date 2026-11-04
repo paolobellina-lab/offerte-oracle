@@ -653,3 +653,25 @@ tbody tr.testa-gruppo:focus-within .tg-ed { color: var(--ink); border-color: var
 /* a tutta pagina: le tabelle usano tutta l'altezza dello schermo */
 .vr-piena .picker-wrap { max-height: calc(100vh - 250px - var(--banner-h, 0px)); }
 .vr-piena #vr-off .tbl-wrap { max-height: calc(100vh - 220px - var(--banner-h, 0px)); }
+
+/* Intestazioni dei gruppi: azzurro chiaro con scritte scure (anche nel tema scuro) */
+:root { --tg-fondo: #b9d4f1; --tg-fondo-hover: #a9c9ec; --tg-testo: #10304f; }
+:root[data-theme="scuro"] { --tg-fondo: #9fc3ea; --tg-fondo-hover: #b2cfef; --tg-testo: #0c2238; }
+tr.testa-gruppo td, :root[data-theme="scuro"] tr.testa-gruppo td,
+tbody tr.testa-gruppo:hover td, :root[data-theme="scuro"] tbody tr.testa-gruppo:hover td { background: var(--tg-fondo) !important; color: var(--tg-testo) !important; }
+tbody tr.testa-gruppo:hover td { background: var(--tg-fondo-hover) !important; filter: none; }
+tr.testa-gruppo span { color: var(--tg-testo) !important; }
+.tg, .tg-ed { border-color: rgba(16,48,79,.45); background: rgba(255,255,255,.45); color: var(--tg-testo); }
+.tg:hover, .tg-ed:hover { background: rgba(255,255,255,.8); }
+.tg:focus { outline-color: var(--tg-testo); }
+input.sel-gruppo { accent-color: var(--tg-testo); }
+tbody tr.testa-gruppo:focus-within .tg { color: var(--tg-testo); background: #fff; }
+/* intestazione selezionata: gialla, scritte scure */
+tbody tr.testa-gruppo:focus-within td, :root[data-theme="scuro"] tbody tr.testa-gruppo:focus-within td { background: #ffe9a3 !important; color: #3a2a00 !important; }
+tbody tr.testa-gruppo:focus-within span { color: #3a2a00 !important; }
+tbody tr.testa-gruppo:focus-within .tg { background: #e0a800; border-color: #e0a800; color: #3a2a00; }
+tbody tr.testa-gruppo:focus-within .tg-ed { color: #3a2a00; border-color: #e0a800; }
+/* righe tagliate in attesa di Incolla */
+tbody tr.tagliata td { opacity: .55; border-top: 1px dashed var(--accent) !important; border-bottom: 1px dashed var(--accent) !important; }
+.menu-dx button:disabled { opacity: .45; cursor: default; background: transparent; }
+.menu-dx kbd { float: right; line-height: inherit; margin-left: 24px; font: 500 .72rem system-ui, sans-serif; color: var(--muted); background: none; border: 0; padding: 0; }

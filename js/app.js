@@ -759,6 +759,20 @@ document.addEventListener("keydown", (e) => {
   if (v) { e.preventDefault(); cambiaVistaRighe(v); }
 });
 
+/* Ctrl/Cmd + X, C, V sulle righe selezionate (non mentre si scrive in un campo) */
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || S.vista !== "offerta" || S.sub !== "righe" || !capAtt()) return;
+  const t = e.target;
+  if (t.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable], dialog")) return;
+  if (String(window.getSelection?.() || "").trim()) return; // testo selezionato col mouse: copia normale
+  const az = { KeyX: "taglia", KeyC: "copia", KeyV: "incolla" }[e.code];
+  if (!az || (az !== "incolla" && !S.sel.size)) return;
+  e.preventDefault(); chiudiMenuDx(); azioneRighe(az);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && S.appunti?.taglio && !document.querySelector("dialog[open]")) { S.appunti = null; if (capAtt()) disegnaOfferta(); }
+});
+
 function disegnaRighe(c) {
   applicaVistaRighe(c);
   const tb = $("#righe-offerta");
@@ -786,7 +800,7 @@ function disegnaRighe(c) {
         ? `${esc(capPrec)}<button type="button" class="tg-ed" data-rinomina="${esc(capPrec)}" title="Rinomina il capitolato">✎</button><button type="button" class="tg-ed" data-capsposta="-1" title="Sposta il capitolato prima">▲</button><button type="button" class="tg-ed" data-capsposta="1" title="Sposta il capitolato dopo">▼</button>`
         : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
-    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}">
+    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}${S.appunti?.taglio && S.appunti.ids.has(r.id) ? " tagliata" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
@@ -884,6 +898,7 @@ $("#righe-offerta").addEventListener("change", cambioRiga);
 $("#riepilogo-righe").addEventListener("change", cambioRiga);
 /* ----- Menu del tasto destro sulle righe dell'offerta ----- */
 function chiudiMenuDx() { $("#menu-dx").hidden = true; }
+const TASTO = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
 function apriMenuDx(x, y) {
   const c = capAtt(); if (!c) return;
   const n = S.sel.size, m = $("#menu-dx");
@@ -892,6 +907,10 @@ function apriMenuDx(x, y) {
     <div class="dx-titolo">${n === 1 ? "1 riga selezionata" : `${n} righe selezionate`}</div>
     <button type="button" data-dx="tutte">Seleziona tutte</button>
     <button type="button" data-dx="nessuna">Deseleziona</button>
+    <hr>
+    <button type="button" data-dx="taglia">✂ Taglia <kbd>${TASTO}X</kbd></button>
+    <button type="button" data-dx="copia">⎘ Copia <kbd>${TASTO}C</kbd></button>
+    <button type="button" data-dx="incolla" ${S.appunti?.righe.length ? "" : "disabled"}>⇩ Incolla sotto${S.appunti?.righe.length ? ` (${S.appunti.righe.length})` : ""} <kbd>${TASTO}V</kbd></button>
     <hr>
     <button type="button" data-dx="su1">↑ Sposta su</button>
     <button type="button" data-dx="giu1">↓ Sposta giù</button>
@@ -1034,7 +1053,30 @@ function azioneRighe(az, opz = {}) {
   const scelte = c.righe.filter((r) => S.sel.has(r.id));
   const nota = (opz.nota || "").trim();
   const capSc = opz.cap || "";
-  if (az === "dup") {
+  if (az === "copia" || az === "taglia") {
+    if (!scelte.length) return toast("Seleziona prima le righe.");
+    S.appunti = { righe: scelte.map((r) => structuredClone(r)), taglio: az === "taglia", offId: S.off.id, ids: new Set(scelte.map((r) => r.id)) };
+    try { navigator.clipboard?.writeText(scelte.map((r) => [codiceArticolo(r), r.descrizione || "", r.qta].join("\t")).join("\n")).catch(() => {}); } catch {}
+    toast(az === "taglia"
+      ? `Tagliate ${scelte.length} righe: seleziona la riga sotto cui spostarle e premi Incolla (${TASTO}V). Esc annulla.`
+      : `Copiate ${scelte.length} righe: seleziona la riga sotto cui incollarle e premi Incolla (${TASTO}V).`, 4500);
+    return disegnaOfferta();
+  } else if (az === "incolla") {
+    const ap = S.appunti;
+    if (!ap?.righe.length) return toast("Non hai copiato o tagliato nessuna riga.");
+    const sposta = ap.taglio && ap.offId === S.off.id;
+    // la destinazione è l'ultima riga selezionata (le righe tagliate non contano); senza selezione si incolla in fondo
+    const dest = scelte.filter((r) => !(sposta && ap.ids.has(r.id))).at(-1);
+    if (sposta) for (const k of S.off.capitoli) k.righe = k.righe.filter((r) => !ap.ids.has(r.id));
+    const nuove = ap.righe.map((r) => ({ ...structuredClone(r), id: sposta ? r.id : db.nuovoId(),
+      ...(dest ? { capitolato: dest.capitolato || "" } : {}) }));
+    const i = dest ? c.righe.indexOf(dest) + 1 : c.righe.length;
+    c.righe.splice(i, 0, ...nuove);
+    S.sel = new Set(nuove.map((r) => r.id));
+    if (sposta) S.appunti = null; // dopo uno spostamento gli appunti si svuotano, come in Excel
+    toast(`${sposta ? "Spostate" : "Incollate"} ${nuove.length} righe${dest ? (dest.capitolato ? ` nel capitolato “${dest.capitolato}”` : " sotto la riga selezionata") : " in fondo"}.`
+      + (ap.taglio && !sposta ? " Le righe originali restano nell'altra offerta." : ""), 4000);
+  } else if (az === "dup") {
     // le copie vanno in fondo, nello stesso ordine, con il capitolato e la nota scelti (se indicati)
     const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(),
       ...(capSc ? { capitolato: capSc } : {}), ...(nota && !isGenerico(r) ? { notePost: nota } : {}) }));
