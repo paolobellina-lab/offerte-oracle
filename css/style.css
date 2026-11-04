@@ -675,3 +675,17 @@ tbody tr.testa-gruppo:focus-within .tg-ed { color: #3a2a00; border-color: #e0a80
 tbody tr.tagliata td { opacity: .55; border-top: 1px dashed var(--accent) !important; border-bottom: 1px dashed var(--accent) !important; }
 .menu-dx button:disabled { opacity: .45; cursor: default; background: transparent; }
 .menu-dx kbd { float: right; line-height: inherit; margin-left: 24px; font: 500 .72rem system-ui, sans-serif; color: var(--muted); background: none; border: 0; padding: 0; }
+
+/* Tema scuro: niente scritte bianche, testo grigio-azzurro più morbido */
+:root[data-theme="scuro"] { --ink: #bccad8; --muted: #8b97a4; --label: #8b97a4; --th-ink: #8b97a4; --th-testo: #a9c0d8; }
+:root[data-theme="scuro"] input, :root[data-theme="scuro"] select, :root[data-theme="scuro"] textarea { color: var(--ink); }
+:root[data-theme="scuro"] strong, :root[data-theme="scuro"] b, :root[data-theme="scuro"] h1, :root[data-theme="scuro"] h2, :root[data-theme="scuro"] h3 { color: #c9d6e3; }
+/* Tema chiaro: pulsanti attivi e principali azzurro chiaro con scritte blu scuro (niente bianco) */
+:root[data-theme="chiaro"] { --accent-ink: #0f2a47; --on-fondo: #bcd6f1; --on-bordo: #8fb4dc; }
+:root[data-theme="chiaro"] :is(.brand-mark, .kpi-main, .seg button.on, button.btn.primary, .captabs-in button.on, .subtabs button.on, .sb-voce.on, .vista-righe button.on) {
+  background: var(--on-fondo) !important; border-color: var(--on-bordo) !important; color: var(--accent-ink) !important;
+}
+:root[data-theme="chiaro"] button.btn.primary:hover { background: #a9caee !important; }
+:root[data-theme="chiaro"] .sb-voce.on .sb-sigla { background: rgba(255,255,255,.6); border-color: var(--on-bordo); }
+/* avvisi in basso: fondo chiaro e scritte scure in entrambi i temi */
+#toast { background: #dbe8f6 !important; color: #10304f !important; border: 1px solid #8fb4dc; }
