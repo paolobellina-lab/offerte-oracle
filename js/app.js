@@ -653,12 +653,12 @@ $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
   if (!target) return toast("Scrivi il prezzo target del capitolo.");
   const ris = vendutaPerTarget(c, target, opzCap(c));
-  if (ris === null) return toast("Non riesco a calcolarlo: servono righe senza un valore proprio sul GMA.");
+  if (ris === null) return toast("Non riesco ad arrivarci: servono righe che prendono il valore Generale (senza un valore proprio sul GMA), oppure il target è fuori portata.", 6000);
   const ricarico = ris.campo === "ricGen";
   const applica = () => {
-    if (ris.campo === "lisGen") c.lis.gen = pctTesto(ris.valore); else c.ven[ris.campo] = pctTesto(ris.valore);
+    if (ris.campo === "lisGen") c.lis.gen = ris.testo; else c.ven[ris.campo] = ris.testo;
     modificata(); disegnaOfferta();
-    toast(`${ricarico ? "Ricarico" : ris.campo === "lisGen" ? "Sconto di listino" : "Sconto"} generale impostato a ${pctTxt(ris.valore) || "0%"} per arrivare a ${euro(target)}.`, 5000);
+    toast(`Aggiunto nella riga Generale un ${ricarico ? "ricarico" : ris.campo === "lisGen" ? "sconto di listino" : "sconto"} extra di ${pctTxt(ris.extra) || "0%"} per arrivare a ${euro(target)} (lo standard resta com'è).`, 6000);
   };
   const rc = riepilogoCapitolo(c, opzCap(c));
   if (target >= rc.acquistato) return applica();

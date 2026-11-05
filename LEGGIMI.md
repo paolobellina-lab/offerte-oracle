@@ -34,7 +34,7 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
   - Anche qui c'è una riga Generale e una per GMA; sotto i due riquadri c'è il riepilogo per GMA (acquistato, venduto, peso, ricarico, margine, cartellino).
   - Attività tecnica: parte dal prezzo di listino di tutti i giorni.
 - **Attività tecnica:** il generale vale solo se è "in aggiunta"; per il resto cambia solo dal suo GMA.
-- **Prezzo target:** calcola il ricarico generale (o lo sconto generale) per arrivare al totale voluto.
+- **Prezzo target:** aggiunge nella riga Generale una cella extra (ricarico o sconto) per arrivare al totale voluto; lo standard non cambia.
 
 **Impostazione del capitolo** (in cima alla pagina Prezzi):
 
@@ -43,7 +43,7 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
   - Al posto delle condizioni di vendita ci sono le **condizioni di listino**: lo sconto di listino, generale e per GMA (standard = la riparametrizzazione dell'articolo nel database).
   - Il prezzo di listino di ogni articolo = prezzo di acquisto / (1 − sconto di listino): applicando lo sconto si torna al prezzo di acquisto.
   - Attività tecnica: arrotondata alle centinaia, come nell'Excel.
-  - Il prezzo target calcola lo sconto di listino generale.
+  - Il prezzo target aggiunge nella riga Generale uno sconto di listino extra (la prima cella non cambia).
 
 **Pagina Oracle:**
 

@@ -354,32 +354,31 @@ export function riepilogoCapitolo(cap, opz = {}) {
 export const ricaricoPct = (venduto, acquistato) => (acquistato ? venduto / acquistato - 1 : 0);
 export const marginePct = (venduto, acquistato) => (venduto ? 1 - acquistato / venduto : 0);
 
-/* Valore generale di vendita che porta il capitolo al prezzo target (condizione a pacchetto):
-   con il ricarico, il ricarico generale; con listino / sconto, lo sconto generale.
-   Le righe con un valore proprio sul GMA (e l'attività nel caso dello sconto) restano come sono.
-   Restituisce { campo: "ricGen" | "scGen", valore } (frazione) oppure null. */
+/* Prezzo target (condizione a pacchetto): aggiunge alla riga Generale una cella extra (ricarico, sconto di vendita
+   o sconto di listino) che porta il totale del capitolo al target. Lo standard e gli extra già scritti restano.
+   Il valore si trova per bisezione sul calcolo vero (vale anche con l'arrotondamento dell'attività).
+   Restituisce { campo: "ricGen" | "scGen" | "lisGen", extra (frazione), testo } oppure null. */
 export function vendutaPerTarget(cap, target, opz = {}) {
   const k = condizioni(cap);
-  const { righe } = calcolaOfferta(cap, opz);
-  let fisso = 0, variabile = 0;
-  for (const x of righe) {
-    const g = x.riga.gmv || "";
-    if (k.imp === "listino") {
-      if (isAttivita(x.riga) || valido(leggiSconti(k.lis.gma[g]))) fisso += x.c.totale; else variabile += x.c.acq.totale;
-    } else if (k.ven.modo === "ricarico") {
-      if (leggiRicarico(k.ven.ricGma[g]) !== null) fisso += x.c.totale; else variabile += x.c.acq.totale;
-    } else if (isAttivita(x.riga) || valido(leggiSconti(k.ven.scGma[g]))) fisso += x.c.totale; // il target scrive uno sconto "al posto": l'attività non cambia
-    else variabile += num(x.riga.listinoAcquisto) * x.c.qta;
+  const campo = k.imp === "listino" ? "lisGen" : k.ven.modo === "ricarico" ? "ricGen" : "scGen";
+  const attuale = String((campo === "lisGen" ? k.lis.gen : k.ven[campo]) || "").trim().replace(/\+$/, "");
+  const testoCon = (x) => `${attuale}+${pctTesto(x)}`;
+  const totale = (x) => {
+    const t = testoCon(x);
+    const c = campo === "lisGen" ? { ...cap, lis: { ...k.lis, gen: t } } : { ...cap, ven: { ...k.ven, [campo]: t } };
+    return calcolaOfferta(c, opz).totale;
+  };
+  let lo = campo === "ricGen" ? -0.95 : -3, hi = campo === "ricGen" ? 20 : 0.99;
+  const tLo = totale(lo), tHi = totale(hi), t = num(target);
+  if (Math.abs(tHi - tLo) < 1e-9) return null; // nessuna riga dipende dal generale
+  if ((t - tLo) * (t - tHi) > 0) return null;   // target fuori portata
+  const cresce = tHi > tLo;
+  for (let n = 0; n < 80; n++) {
+    const m = (lo + hi) / 2, v = totale(m);
+    if ((v < t) === cresce) lo = m; else hi = m;
   }
-  if (!variabile) return null;
-  if (k.imp === "listino") {
-    const resto = num(target) - fisso;
-    if (resto <= 0) return null;
-    const v = 1 - variabile / resto; // sconto di listino: acquisto / (1 - sconto) = listino
-    return Number.isFinite(v) ? { campo: "lisGen", valore: v } : null;
-  }
-  const valore = k.ven.modo === "ricarico" ? (num(target) - fisso) / variabile - 1 : 1 - (num(target) - fisso) / variabile;
-  return Number.isFinite(valore) ? { campo: k.ven.modo === "ricarico" ? "ricGen" : "scGen", valore } : null;
+  const extra = Math.round(((lo + hi) / 2) * 1e8) / 1e8;
+  return { campo, extra, testo: testoCon(extra) };
 }
 
 /* Stato del prezzo di un articolo, in base alla data di aggiornamento e alla regola del suo precodice.
