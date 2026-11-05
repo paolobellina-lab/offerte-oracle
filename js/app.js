@@ -561,7 +561,7 @@ function scriviCondizione(inp, ric, salva) {
 /* Condizione di una riga (Generale o GMA): cella Standard modificabile + celle Extra.
    Standard = sconto del database (o ricarico automatico). Se lo cambi vale al posto dello standard
    (0 = niente standard, prezzo di listino). Le celle Extra si aggiungono in cascata: compilata una ne compare un'altra.
-   Sconti: 15 o -15 = sconto, +5 = aumento. Ricarichi: 5 = ricarico, -5 = riduzione.
+   Sconti: 15 = sconto, -25 = sconto negativo (ricarico del 25%). Ricarichi: 5 = ricarico, -5 = riduzione.
    Si salva come testo: "+15+5" = standard più extra; "55+10" = 55 al posto dello standard, poi 10. */
 const normTesto = (v) => String(v ?? "").trim().replace(/\s+/g, "").replace(/%/g, "").replace(/\./g, ",");
 function scomponi(val) {
@@ -571,14 +571,9 @@ function scomponi(val) {
   const p = t.split("+").filter(Boolean);
   return { over: p[0] ?? null, extra: p.slice(1) };
 }
-const cellaDaTermine = (x, tipo) => (tipo === "sc" && x.startsWith("-") ? "+" + x.slice(1) : x);
-const termineDaCella = (v, tipo) => {
-  const t = normTesto(v);
-  if (!t) return "";
-  if (tipo === "ric") return t.replace(/^\+/, "");
-  if (t.startsWith("+")) return "-" + t.slice(1); // +5 = aumento del 5%
-  return t.replace(/^-/, "");                      // -15 = sconto del 15%
-};
+// il numero nella cella è lo sconto (o il ricarico) così com'è: -25 in uno sconto = ricarico del 25%
+const cellaDaTermine = (x) => x;
+const termineDaCella = (v) => normTesto(v).replace(/^\+/, "");
 const RE_CASCATA = /^-?\d+(?:,\d+)?(?:\+-?\d+(?:,\d+)?)*$/;
 const htmlCella = (v, ph = "") => `<input class="cond cella" value="${esc(v)}" placeholder="${esc(ph)}" inputmode="decimal">`;
 function htmlCondizione({ dove, gma = "", val, tipo, std = "", eredita = false, phStd = "", phExtra = "extra" }) {
@@ -613,7 +608,7 @@ function salvaCondizione(box) {
   stdInp.classList.toggle("errato", errStd);
   celle.forEach((x) => x.classList.toggle("errato", errate.includes(x)));
   const finale = over === null ? (extra.length ? "+" + extra.join("+") : "") : over + (extra.length ? "+" + extra.join("+") : "");
-  if (errStd || errate.length || !testoValido(finale, tipo === "ric")) return toast("Valore non valido: in ogni cella un numero (es. 15, -15 oppure +5).", 6000);
+  if (errStd || errate.length || !testoValido(finale, tipo === "ric")) return toast("Valore non valido: in ogni cella un numero (es. 15, oppure -25 per uno sconto negativo).", 6000);
   salva(finale);
   modificata(); ridisegnaOfferta();
 }

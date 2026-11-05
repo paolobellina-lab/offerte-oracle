@@ -26,7 +26,7 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
 - **Condizioni di acquisto:** una riga Generale e una riga per ogni GMA del capitolo (quella del GMA vince).
   - La prima cella è lo **standard** del database: se la cambi vale al posto dello standard (`0` = niente standard, prezzo di listino); l'intestazione "Standard" si barra in rosso e accanto resta lo standard di prima, barrato.
   - Nelle celle accanto gli **extra** in cascata: compilata una, ne compare un'altra.
-  - In una cella `15` o `-15` è uno sconto, `+5` è un aumento.
+  - In una cella `15` è uno sconto del 15%, `-25` è uno sconto negativo, cioè un ricarico del 25%.
   - Una riga GMA vuota prende la riga Generale.
 - **Condizioni di vendita: Ricarico / Listino-sconto.**
   - Ricarico: vendita = acquisto × (1 + ricarico). La prima cella è il ricarico automatico del capitolo (modificabile), accanto i ricarichi extra in cascata.
