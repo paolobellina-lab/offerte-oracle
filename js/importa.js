@@ -178,22 +178,50 @@ export async function analizzaFile(buf) {
    "GMA" (se c'è) aggiorna anche il GMV. */
 export function leggiAggiornamentoListino(righe) {
   const norm = (s) => testo(s).toLowerCase().replace(/\s+/g, " ");
-  const hi = righe.findIndex((r) => r && r.some((c) => norm(c) === "codice articolo fornitore"));
+  const hi = righe.findIndex((r) => r && r.some((c) => norm(c).includes("codice articolo")));
   if (hi < 0) throw new Error('Non trovo la colonna "Codice Articolo Fornitore". Copia anche la riga delle intestazioni.');
   const h = righe[hi].map(norm);
-  const iCod = h.indexOf("codice articolo fornitore");
-  const iPrezzo = h.indexOf("prezzo unitario");
-  const iGma = h.indexOf("gma");
+  const col = (...nomi) => h.findIndex((x) => nomi.some((n) => (n instanceof RegExp ? n.test(x) : x === n)));
+  const iCod = h.findIndex((x) => x.includes("codice articolo"));
+  let iPrezzo = h.findIndex((x) => x.includes("prezzo unitario"));
+  if (iPrezzo < 0) iPrezzo = h.indexOf("prezzo");
+  const iGma = col("gma", "gmv");
   if (iPrezzo < 0) throw new Error('Non trovo la colonna "Prezzo Unitario".');
+  // righe di un'offerta Oracle: il prezzo unitario è già scontato → listino = prezzo / sconti
+  const iSc = [col(/^sconto 3( \[%\])?$/), col(/^sconto 4( \[%\])?$/), col(/^sconto 5( \[%\])?$/)];
+  const iAum = [col(/^aumento 1( \[%\])?$/), col(/^aumento 2( \[%\])?$/)];
+  const iScGma = col(/^sconto gma/), iScCli = col(/^sconto cliente/);
+  const iNetto = col(/^prezzo netto/), iScEuro = col(/^sconto articolo/, /^sconto \d \[€\]$/);
+  // sconto in percentuale: "75 %", "75", 0.75
+  const pct = (r, i) => {
+    if (i < 0) return 0;
+    const v = r[i];
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return v > 1 ? v / 100 : v;
+    const m = String(v).match(/-?\d+(?:[.,]\d+)?/);
+    if (!m) return 0;
+    const n = num(m[0]);
+    return String(v).includes("%") || n > 1 ? n / 100 : n;
+  };
   const out = new Map();
+  let saltate = 0;
   for (let i = hi + 1; i < righe.length; i++) {
     const r = righe[i] || [];
     const cod = testo(r[iCod]);
     if (!cod) continue;
-    const prezzo = numero(r[iPrezzo]);
-    if (!prezzo) continue;
-    out.set(cod, { prezzo, gmv: iGma >= 0 ? gmvPulito(r[iGma]) : "" });
+    const unitario = numero(r[iPrezzo]);
+    if (!unitario) continue;
+    // prezzo forzato a mano o sconto in euro: il listino non si può ricavare
+    if ((iNetto >= 0 && numero(r[iNetto])) || (iScEuro >= 0 && numero(r[iScEuro]))) { saltate++; continue; }
+    const sc = iSc.map((j) => pct(r, j));
+    const scontiRiga = sc.some(Boolean) ? sc : [pct(r, iScGma), pct(r, iScCli)];
+    const fattore = scontiRiga.reduce((f, x) => f * (1 - x), 1) * iAum.reduce((f, j) => f * (1 + pct(r, j)), 1);
+    const prezzo = fattore > 0 ? Math.round(unitario / fattore * 1e4) / 1e4 : unitario;
+    out.set(cod, { prezzo, unitario, sconto: 1 - fattore, gmv: iGma >= 0 ? gmvPulito(r[iGma]) : "" });
   }
+  out.saltate = saltate;
+  // righe di un'offerta senza le colonne degli sconti: il prezzo unitario potrebbe essere già scontato
+  out.dubbio = [...iSc, ...iAum, iScGma, iScCli].every((j) => j < 0) && h.some((x) => /numero linea|quantit/.test(x));
   return out;
 }
 

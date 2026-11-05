@@ -168,7 +168,9 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
      direttamente: si aggiorna anche nel database con la data di oggi.
    - **Scadenze prezzi** (per precodice): "prezzi a richiesta" con validità in mesi, oppure "listino" con la data del prossimo cambio
      (avviso un mese prima, "da aggiornare" dopo il cambio). Il pallino colorato e gli avvisi in "Esporta per Oracle" seguono queste regole.
-   **Aggiorna i prezzi da Oracle**: incolla la griglia di Oracle (con intestazioni) e l'app aggiorna listino acquisto, GMV e data.
+   **Aggiorna i prezzi da Oracle**: incolla la griglia di Oracle (con intestazioni) oppure carica il file delle righe di un'offerta Oracle (Excel, CSV o PDF).
+   L'app aggiorna listino acquisto, GMA e data, sia nel database sia nella biblioteca. Se sono righe di un'offerta, il prezzo unitario è già scontato:
+   il listino si ricava togliendo gli sconti della riga (Sconto 3/4/5, Aumenti; in mancanza Sconto GMA / Cliente). Le righe con prezzo netto forzato o sconto in euro si saltano.
 11. **Copia di sicurezza**: scarichi tutti i dati in un file `.json` e puoi ripristinarli.
 
 ## File

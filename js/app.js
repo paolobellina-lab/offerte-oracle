@@ -2084,6 +2084,12 @@ $("#file-oracle").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = "";
   if (!f) return;
   try {
+    if (/\.pdf$/i.test(f.name)) {
+      const fogli = BIB.righeDaPdf(await testoPdf(f));
+      if (!fogli.length) return toast("Nel PDF non trovo righe con un prezzo.", 6000);
+      return confrontaOracle(fogli[0].righe);
+    }
+    if (/\.csv$|\.txt$/i.test(f.name)) return confrontaOracle(BIB.righeDaTesto(await f.text()));
     const wb = await leggiExcel(await f.arrayBuffer());
     const nome = wb.nomi.find((n) => /AGGIORNAMENTO LISTINO$/i.test(n)) || wb.nomi[0];
     confrontaOracle(await wb.foglio(nome));
@@ -2091,10 +2097,22 @@ $("#file-oracle").addEventListener("change", async (e) => {
 });
 
 const CODICI_GENERICI = new Set([CODICE_GENERICO, "PITATT.TEC"]);
-function confrontaOracle(righe) {
+/* Si confrontano i prezzi con il database e con la biblioteca (stesso codice Oracle = precodice + codice). */
+const bibCaricata = () => new Promise((ok) => {
+  caricaBib();
+  if (S.bibPronta) return ok();
+  const t = setInterval(() => { if (S.bibPronta) { clearInterval(t); ok(); } }, 100);
+  setTimeout(() => { clearInterval(t); ok(); }, 15000);
+});
+/* Prezzo diverso? Con le righe scontate il confronto si fa sul prezzo unitario arrotondato al centesimo,
+   così un listino ricavato da un prezzo arrotondato (es. 15,88 / 0,25) non sembra cambiato. */
+const diversoDaOracle = (m, listino) => (m.sconto > 0.0001 ? Math.abs(m.unitario - listino * (1 - m.sconto)) > 0.0051 : Math.abs(m.prezzo - listino) > 0.004);
+async function confrontaOracle(righe) {
   const box = $("#riepilogo-oracle");
   let mappa;
   try { mappa = leggiAggiornamentoListino(righe); } catch (x) { box.innerHTML = `<div class="avviso bad">${esc(x.message)}</div>`; return; }
+  box.innerHTML = `<div class="avviso info">Confronto ${mappa.size} codici con il database e la biblioteca…</div>`;
+  await bibCaricata();
   const cambi = [];
   let uguali = 0;
   const trovati = new Set();
@@ -2104,32 +2122,44 @@ function confrontaOracle(righe) {
     const m = mappa.get(cod);
     if (!m) continue;
     trovati.add(cod);
-    const cambiaPrezzo = Math.abs(m.prezzo - num(a.listinoAcquisto)) > 0.004;
+    const cambiaPrezzo = diversoDaOracle(m, num(a.listinoAcquisto));
     const cambiaGmv = m.gmv && m.gmv !== a.gmv;
-    if (cambiaPrezzo || cambiaGmv) cambi.push({ a, m }); else uguali++;
+    if (cambiaPrezzo || cambiaGmv) cambi.push({ a, m, dove: a.capitolo, prima: num(a.listinoAcquisto), gma: a.gmv }); else uguali++;
+  }
+  for (const b of S.bib) {
+    const cod = codiceBib(b);
+    const m = mappa.get(cod);
+    if (!m) continue;
+    trovati.add(cod);
+    if (diversoDaOracle(m, num(b.listino))) cambi.push({ b, m, dove: `Biblioteca · ${b.fornitore}`, prima: num(b.listino), gma: condBib(b).gma });
+    else uguali++;
   }
   const nonTrovati = [...mappa.keys()].filter((c) => !trovati.has(c));
   S.aggOracle = cambi;
+  const nDb = cambi.filter((x) => x.a).length, nBib = cambi.length - nDb;
   box.innerHTML = `
-    <div class="avviso ${cambi.length ? "info" : "ok"}">${mappa.size} codici letti: <b>${cambi.length}</b> articoli da aggiornare, ${uguali} già allineati${nonTrovati.length ? `, ${nonTrovati.length} codici non presenti nel catalogo` : ""}.
+    <div class="avviso ${cambi.length ? "info" : "ok"}">${mappa.size} codici letti: <b>${cambi.length}</b> da aggiornare (${nDb} nel database, ${nBib} in biblioteca), ${uguali} già allineati${nonTrovati.length ? `, ${nonTrovati.length} codici che non sono né nel database né in biblioteca` : ""}${mappa.saltate ? `, ${mappa.saltate} righe saltate (prezzo netto forzato o sconto in euro: il listino non si ricava)` : ""}.
+      ${mappa.dubbio ? `<div class="avviso bad" style="margin-top:6px">Sembrano righe di un'offerta ma <b>non ci sono le colonne degli sconti</b> (Sconto 3/4/5): il prezzo unitario viene preso come listino. Se in Oracle le righe erano scontate, i listini risulteranno sbagliati: esporta anche le colonne degli sconti.</div>` : ""}
+      ${[...mappa.values()].some((m) => m.sconto > 0.0001) ? "<br>Sono righe di un'offerta: il prezzo unitario di Oracle è già scontato, quindi il listino si ricava togliendo gli sconti della riga (Sconto 3/4/5, Aumenti)." : ""}
       Gli articoli generici (P000ARTICOLO_GEN, PITATT.TEC) non si aggiornano: hanno tutti lo stesso codice in Oracle.</div>
-    ${cambi.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Capitolo</th><th>Codice</th><th>Articolo</th><th class="num">Listino acq. attuale</th><th class="num">Oracle</th><th class="num">Diff.</th><th>GMV</th></tr></thead><tbody>
-      ${cambi.map(({ a, m }) => { const d = num(a.listinoAcquisto) ? (m.prezzo / num(a.listinoAcquisto) - 1) : 0;
-        return `<tr><td>${esc(a.capitolo)}</td><td class="mono">${esc(codiceArticolo(a))}</td><td>${esc(a.nOrdine)}</td>
-        <td class="num">${euro(a.listinoAcquisto)}</td><td class="num"><b>${euro(m.prezzo)}</b></td>
+    ${cambi.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Dove</th><th>Codice</th><th>Articolo</th><th class="num">Listino attuale</th><th class="num">Listino Oracle</th><th class="num">Diff.</th><th>GMA</th></tr></thead><tbody>
+      ${cambi.map(({ a, b, m, dove, prima, gma }) => { const d = prima ? (m.prezzo / prima - 1) : 0;
+        return `<tr><td class="small">${esc(dove)}</td><td class="mono">${esc(a ? codiceArticolo(a) : codiceBib(b))}</td><td>${esc((a || b).nOrdine || (b ? b.codice : ""))}</td>
+        <td class="num">${euro(prima)}</td><td class="num"><b>${euro(m.prezzo)}</b>${m.sconto > 0.0001 ? `<div class="muted small">${euro(m.unitario)} con ${pctTxt(m.sconto)}</div>` : ""}</td>
         <td class="num"><span class="badge ${d > 0 ? "bad" : "ok"}">${d > 0 ? "+" : ""}${fNum.format(Math.round(d * 1000) / 10)}%</span></td>
-        <td class="mono">${m.gmv && m.gmv !== a.gmv ? `${esc(a.gmv || "—")} → <b>${esc(m.gmv)}</b>` : esc(a.gmv)}</td></tr>`; }).join("")}
+        <td class="mono">${a && m.gmv && m.gmv !== gma ? `${esc(gma || "—")} → <b>${esc(m.gmv)}</b>` : esc(gma || "")}</td></tr>`; }).join("")}
       </tbody></table></div>
       <div class="row" style="margin-top:10px"><button class="btn primary" id="applica-oracle">Aggiorna ${cambi.length} articoli</button>
         <span class="muted small">La data di aggiornamento diventa quella di oggi.</span></div>` : ""}
-    ${nonTrovati.length ? `<details style="margin-top:8px"><summary class="muted small">Codici non presenti nel catalogo (${nonTrovati.length})</summary><p class="mono small">${nonTrovati.map(esc).join(", ")}</p></details>` : ""}`;
+    ${nonTrovati.length ? `<details style="margin-top:8px"><summary class="muted small">Codici che non sono né nel database né in biblioteca (${nonTrovati.length})</summary><p class="mono small">${nonTrovati.map(esc).join(", ")}</p></details>` : ""}`;
   $("#applica-oracle")?.addEventListener("click", applicaOracle);
 }
 async function applicaOracle() {
   const cambi = S.aggOracle || [];
-  const caps = new Set();
+  const caps = new Set(), forn = new Set();
   const oggi = oggiIso();
-  for (const { a, m } of cambi) {
+  for (const { a, b, m } of cambi) {
+    if (b) { b.listino = m.prezzo; b.dataAgg = oggi; forn.add(b.fornitore); continue; }
     const art = S.perK.get(a.k); if (!art) continue;
     const auto = !num(art.listino) || Math.abs(num(art.listino) - listinoCalcolato(art)) < 0.005;
     art.listinoAcquisto = m.prezzo;
@@ -2139,8 +2169,12 @@ async function applicaOracle() {
     caps.add(art.capitolo);
   }
   try {
-    await db.scrivi([...caps].flatMap((c) => opsCapitolo(c, S.catalogo.filter((a) => a.capitolo === c))));
-    $("#riepilogo-oracle").innerHTML = `<div class="avviso ok">Aggiornati ${cambi.length} articoli in ${caps.size} capitoli.</div>`;
+    await db.scrivi([
+      ...[...caps].flatMap((c) => opsCapitolo(c, S.catalogo.filter((a) => a.capitolo === c))),
+      ...[...forn].flatMap((f) => opsBib(f, S.bib.filter((x) => x.fornitore === f))),
+    ]);
+    $("#riepilogo-oracle").innerHTML = `<div class="avviso ok">Aggiornati ${cambi.length} articoli${caps.size ? ` in ${caps.size} capitoli del database` : ""}${forn.size ? `${caps.size ? " e" : ""} in ${forn.size} listini della biblioteca` : ""}.
+      Le offerte già fatte non cambiano: per riallinearle usa “Aggiorna prezzi dal database” nella pagina Righe.</div>`;
     $("#incolla-oracle").value = "";
     S.aggOracle = null;
   } catch (x) { errore(x, "Aggiornamento non riuscito"); }
@@ -2432,6 +2466,18 @@ document.addEventListener("click", (e) => {
   }
 });
 
+/* Testo di un PDF con le posizioni, pagina per pagina (pdf.js di Mozilla, caricato solo quando serve). */
+async function testoPdf(file) {
+  const pdfjs = await import("./vendor/pdfjs/pdf.min.js");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdfjs/pdf.worker.min.js", import.meta.url).href;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pagine = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    pagine.push(tc.items.filter((i) => i.str && i.str.trim()).map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height })));
+  }
+  return pagine;
+}
 async function righeDaFile(file) {
   const nome = file.name || "listino";
   if (/\.(xlsx|xlsm)$/i.test(nome)) {
@@ -2442,16 +2488,7 @@ async function righeDaFile(file) {
   }
   if (/\.xls$/i.test(nome)) throw new Error("Il formato .xls (Excel 97-2003) non si legge: aprilo in Excel e salvalo come .xlsx.");
   if (/\.pdf$/i.test(nome)) {
-    // pdf.js (Mozilla) si carica solo quando serve
-    const pdfjs = await import("./vendor/pdfjs/pdf.min.js");
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdfjs/pdf.worker.min.js", import.meta.url).href;
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-    const pagine = [];
-    for (let p = 1; p <= doc.numPages; p++) {
-      const tc = await (await doc.getPage(p)).getTextContent();
-      pagine.push(tc.items.filter((i) => i.str && i.str.trim()).map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height })));
-    }
-    const fogli = BIB.righeDaPdf(pagine);
+    const fogli = BIB.righeDaPdf(await testoPdf(file));
     if (!fogli.length) throw new Error("Nel PDF non trovo righe con un prezzo (se è una scansione, il testo non si può leggere).");
     return fogli;
   }

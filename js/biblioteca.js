@@ -196,7 +196,8 @@ export function righeDaPdf(pagine) {
         const c = celle[celle.length - 1];
         const gap = c ? it.x - c.x2 : Infinity;
         const soloEuro = /^\s*€\s*$/.test(it.str) && c && /\d\s*$/.test(c.t);
-        if (c && (soloEuro || gap < Math.max(3, (it.h || 8) * 0.5))) { c.t += (gap > 0.8 ? " " : "") + it.str; c.x2 = Math.max(c.x2, it.x + it.w); }
+        const largChar = it.str.length ? it.w / it.str.length : (it.h || 8) * 0.5;
+        if (c && (soloEuro || gap < Math.max(1.5, Math.min((it.h || 8) * 0.5, largChar * 0.9)))) { c.t += (gap > 0.8 ? " " : "") + it.str; c.x2 = Math.max(c.x2, it.x + it.w); }
         else celle.push({ t: it.str, x: it.x, x2: it.x + it.w });
       }
       for (const c of celle) { c.t = c.t.replace(/\s+/g, " ").trim(); c.prezzo = RE_PREZZO.test(c.t); }

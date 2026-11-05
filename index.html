@@ -384,11 +384,11 @@
         <h2>Aggiorna i prezzi da Oracle</h2>
         <p class="muted" style="margin:0">Dalla griglia delle righe offerta di Oracle seleziona tutto e copia (con la riga delle intestazioni), poi incolla qui.
           Servono le colonne <b>Codice Articolo Fornitore</b> e <b>Prezzo Unitario</b>; se c'è la colonna <b>GMA</b> si aggiorna anche il GMV.
-          Va bene anche un file Excel con le stesse colonne.</p>
+          Va bene anche il file delle righe offerta esportato da Oracle (Excel, CSV o PDF). Si aggiornano il database e la biblioteca.</p>
         <textarea id="incolla-oracle" rows="5" placeholder="Incolla qui le righe copiate da Oracle"></textarea>
         <div class="row">
           <button class="btn" id="analizza-oracle">Confronta con il catalogo</button>
-          <label class="btn">Scegli file Excel<input type="file" id="file-oracle" accept=".xlsx,.xlsm" hidden></label>
+          <label class="btn">Scegli file (Excel, CSV o PDF)<input type="file" id="file-oracle" accept=".xlsx,.xlsm,.csv,.txt,.pdf" hidden></label>
         </div>
         <div id="riepilogo-oracle"></div>
       </div>
