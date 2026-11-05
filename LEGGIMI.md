@@ -55,7 +55,7 @@ Unica differenza voluta: il controllo cartellino dell'attività tecnica confront
 
 La biblioteca raccoglie i listini dei fornitori. Gli articoli restano nascosti finché non li usi, così il database non si riempie di articoli che servono di rado.
 
-- **Carica listino** (pagina Biblioteca): Excel (.xlsx) o CSV.
+- **Carica listino** (pagina Biblioteca): Excel (.xlsx), CSV o PDF.
   - L'app trova la riga delle intestazioni e propone le colonne: codice, modello, descrizione, prezzo, prezzo netto, sconto, famiglia di sconto, GMA, unità di misura, moltiplicatore.
   - Il formato **METEL** si riconosce da solo, moltiplicatore compreso.
   - Nei listini a più fogli o a sezioni il nome del foglio o della sezione diventa il sottocapitolo.
@@ -68,7 +68,7 @@ La biblioteca raccoglie i listini dei fornitori. Gli articoli restano nascosti f
   - cercando un codice che non è nel database, sotto compaiono i risultati della biblioteca;
   - con il pulsante **Biblioteca** (Alt+4) la sfogli a tutta pagina;
   - **Aggiungi…** chiede quantità, capitolato e note, e ogni volta se mettere l'articolo anche nel database (capitolo e sottocapitolo).
-- PDF: in arrivo; per ora usa Excel o CSV (o incolla le righe in un file .csv).
+- **PDF**: i listini a tabella (es. Siemens Fire) e le righe dentro una mail si leggono bene; i cataloghi con descrizioni lunghe (es. Advanced) danno codici e prezzi giusti ma descrizioni meno pulite. Se il fornitore ha la versione Excel, meglio quella. I PDF scansionati (immagini) non si possono leggere.
 
 ## Come sono organizzati i dati (Firestore)
 

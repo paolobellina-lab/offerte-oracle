@@ -2417,7 +2417,20 @@ async function righeDaFile(file) {
     return fogli;
   }
   if (/\.xls$/i.test(nome)) throw new Error("Il formato .xls (Excel 97-2003) non si legge: aprilo in Excel e salvalo come .xlsx.");
-  if (/\.pdf$/i.test(nome)) throw new Error("I listini in PDF arrivano nel prossimo passo: per ora usa Excel o CSV.");
+  if (/\.pdf$/i.test(nome)) {
+    // pdf.js (Mozilla) si carica solo quando serve
+    const pdfjs = await import("./vendor/pdfjs/pdf.min.js");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdfjs/pdf.worker.min.js", import.meta.url).href;
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pagine = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const tc = await (await doc.getPage(p)).getTextContent();
+      pagine.push(tc.items.filter((i) => i.str && i.str.trim()).map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height })));
+    }
+    const fogli = BIB.righeDaPdf(pagine);
+    if (!fogli.length) throw new Error("Nel PDF non trovo righe con un prezzo (se è una scansione, il testo non si può leggere).");
+    return fogli;
+  }
   return [{ nome: nome.replace(/\.[^.]+$/, ""), righe: BIB.righeDaTesto(await file.text()) }];
 }
 async function apriListino(file, atteso = "") {
@@ -2432,7 +2445,10 @@ async function apriListino(file, atteso = "") {
   let prof = atteso ? profiloDi(atteso) : S.fornitori.find((f) => f.mappa?.codice && tutteInt.includes(f.mappa.codice) && tutteInt.includes(f.mappa.prezzo) && f.file && file.name.toLowerCase().includes(f.file));
   let nomeForn = prof?.nome || "";
   if (!nomeForn && metel) { const r = conInt[0].righe[conInt[0].int.indice + 1] || []; nomeForn = String(r[conInt[0].int.celle.indexOf("sigla marchio")] || "").trim(); prof = profiloDi(nomeForn); }
-  if (!nomeForn) nomeForn = file.name.replace(/\.[^.]+$/, "").split(/[_\s-]+/)[0];
+  if (!nomeForn) {
+    const vuote = /^(listino|listini|prezzi|prezzo|price|list|pricelist|copia|di|del|the|upgrade|licenze|rev|tot|con|sel|lock|compressed|\d.*)$/i;
+    nomeForn = file.name.replace(/\.[^.]+$/, "").split(/[_\s.-]+/).find((x) => x.length > 2 && !vuote.test(x)) || "";
+  }
   const st = {
     fornitore: nomeForn, precodice: prof?.precodice ?? (metel ? nomeForn : ""),
     mappa: prof?.mappa && tutteInt.includes(prof.mappa.codice) ? { ...prof.mappa } : metel ? { ...BIB.MAPPA_METEL } : BIB.indovinaMappa(conInt[0].int.celle),
