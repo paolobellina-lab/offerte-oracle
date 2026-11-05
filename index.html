@@ -42,6 +42,7 @@
           <nav class="sb-lista" id="tabs">
             <button type="button" class="sb-voce on" data-vista="offerte" title="Offerte"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg></span><span class="sb-testo">Offerte</span></button>
             <button type="button" class="sb-voce" data-vista="catalogo" title="Catalogo (database articoli)"><span class="sb-ico"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span><span class="sb-testo">Catalogo</span></button>
+            <button type="button" class="sb-voce" data-vista="biblioteca" title="Biblioteca (listini fornitore)"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="M16.5 4.8l3.7-1 3 15.4-3.8 1z" transform="translate(-2.5 .4)"/></svg></span><span class="sb-testo">Biblioteca</span></button>
             <button type="button" class="sb-voce" data-vista="clienti" title="Clienti e cartellini"><span class="sb-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.2 4.4 2 4.8 5.4"/></svg></span><span class="sb-testo">Clienti</span></button>
             <button type="button" class="sb-voce" data-vista="importa" title="Importa e aggiorna"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg></span><span class="sb-testo">Importa e aggiorna</span></button>
           </nav>
@@ -145,7 +146,8 @@
             <button type="button" data-vr="db" title="Alt+1">Database articoli</button>
             <button type="button" data-vr="righe" title="Alt+2">Righe dell'offerta <span class="conta" id="vr-conta"></span></button>
             <button type="button" data-vr="tutte" title="Alt+3">Tutte e due</button>
-            <span class="muted small">Alt+1 · Alt+2 · Alt+3</span>
+            <button type="button" data-vr="bib" title="Alt+4">Biblioteca</button>
+            <span class="muted small">Alt+1 · Alt+2 · Alt+3 · Alt+4</span>
           </div>
           <div id="vr-db">
           <div class="card">
@@ -168,6 +170,20 @@
             <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
           </div>
 
+          </div>
+          <div id="vr-bib" hidden>
+          <div class="card">
+            <h3 class="titolo-sez">Biblioteca</h3>
+            <div class="row" style="margin-bottom:8px">
+              <label class="f">Fornitore<select id="rb-fornitore"></select></label>
+              <label class="f grow">Cerca<input id="rb-cerca" type="search" placeholder="codice, modello o descrizione"></label>
+            </div>
+            <div class="tbl-wrap picker-wrap"><table>
+              <thead><tr><th>Fornitore</th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino</th><th>GMA</th><th class="num">Sconto acq.</th><th></th></tr></thead>
+              <tbody id="rb-righe"></tbody>
+            </table></div>
+            <div class="row" style="margin-top:8px"><span class="muted small" id="rb-info"></span></div>
+          </div>
           </div>
           <div id="vr-off">
           <div class="row no-print" style="margin-bottom:8px">
@@ -304,6 +320,34 @@
         <tbody id="righe-catalogo"></tbody>
       </table></div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="c-altri" hidden>Mostra altri</button></div>
+    </section>
+
+    <!-- BIBLIOTECA -->
+    <section id="v-biblioteca" hidden>
+      <div class="row" style="margin-bottom:10px">
+        <h2>Biblioteca</h2>
+        <select id="b-fornitore"></select>
+        <input id="b-cerca" type="search" class="grow" placeholder="Cerca codice, modello, descrizione o famiglia">
+        <label class="row small"><input type="checkbox" id="b-decidere"> solo da decidere</label>
+        <button class="btn" id="b-sconti">Sconti GMA</button>
+        <button class="btn primary" id="b-carica">+ Carica listino</button>
+        <input type="file" id="b-file" accept=".xlsx,.xlsm,.csv,.txt" hidden>
+      </div>
+      <div class="card">
+        <h3 class="titolo-sez">Listini caricati</h3>
+        <p class="muted small" style="margin-top:0">Gli articoli dei listini restano qui, nascosti: non entrano nel database finché non li usi.
+          Li trovi anche nella pagina Righe dell'offerta (nella ricerca e con il pulsante Biblioteca).</p>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Fornitore</th><th>Precodice</th><th class="num">Articoli</th><th class="num">Da decidere</th><th>Caricato</th><th></th></tr></thead>
+          <tbody id="b-fornitori"></tbody>
+        </table></div>
+      </div>
+      <div id="b-bulk"></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fornitore</th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino</th><th>Famiglia → GMA</th><th class="num">Sconto acq.</th><th></th></tr></thead>
+        <tbody id="b-righe"></tbody>
+      </table></div>
+      <div class="row" style="margin-top:8px"><span class="muted small" id="b-info"></span></div>
     </section>
 
     <!-- CLIENTI -->

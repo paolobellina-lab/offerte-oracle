@@ -753,3 +753,9 @@ main label.f:not(.card *) > input, main label.f:not(.card *) > select { color: v
 .std-barrato { color: var(--bad); font-size: .8rem; }
 th .barrato, #cond-acq-std.barrato, #cond-ven-std.barrato { color: var(--bad) !important; text-decoration: line-through; }
 .cond-box input.cond.cella:first-child:placeholder-shown { width: 70px !important; text-align: right; }
+/* Biblioteca */
+.lg-mappa { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 14px; margin-top: 4px; }
+.lg-mappa select { width: 100%; }
+tr.bib td { background: color-mix(in srgb, var(--accent-soft) 45%, var(--row)) !important; }
+tr.bib-testa td { font-weight: 700; }
+.btn.ghost { background: transparent; border-style: dashed; }

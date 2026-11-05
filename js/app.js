@@ -8,14 +8,16 @@ import {
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
+import * as BIB from "./biblioteca.js";
 
 /* ================= Stato ================= */
-const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte" };
+const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte", bib: "oracle_biblioteca" };
 const S = {
   capitoli: [], gmv: [], clienti: [], chunks: [], catalogo: [], perK: new Map(), offerte: [],
   off: null, vista: "offerte", sub: "righe", dirty: false, salvando: false, utente: null,
   limiteCat: 300, limitePick: 300, pickCap: "", pickDb: "", importato: null, aggOracle: null,
   capAtt: "", sel: new Set(), precodici: [], pickSel: new Set(), pickUltimo: "", pickVis: [],
+  fornitori: [], bib: [], bibChunks: [], bibPerK: new Map(), bibPronta: false, bibAscolto: null,
 };
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
@@ -88,7 +90,9 @@ function dialogo({ titolo, html, pulsanti = [{ label: "Chiudi", value: "annulla"
 $("#dlg-form").addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !e.target.matches("input:not([type=checkbox])")) return;
   const ok = $("#dlg-foot .primary") || $("#dlg-foot .danger"); if (!ok) return;
-  e.preventDefault(); ok.click();
+  e.preventDefault();
+  e.target.dispatchEvent(new Event("change", { bubbles: true })); // il valore appena scritto conta
+  ok.click();
 });
 $("#dlg-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -177,7 +181,7 @@ db.avvia({
   onLogout() {
     ascoltatori.forEach((f) => f());
     ascoltatori = [];
-    S.utente = null; S.off = null; S.offerte = []; S.catalogo = []; S.clienti = [];
+    S.utente = null; S.off = null; S.offerte = []; S.catalogo = []; S.clienti = []; S.bib = []; S.bibAscolto = null; S.bibPronta = false;
     $("#app").hidden = true;
     $("#login").hidden = false;
     $("#google-login").hidden = false;
@@ -207,6 +211,7 @@ function collega() {
     S.precodici = docs.find((d) => d.id === "precodici")?.lista || [];
     S.capitoli = (cap?.lista || []).slice().sort((a, b) => num(a.ordine) - num(b.ordine));
     S.gmv = gmv?.lista || [];
+    S.fornitori = docs.find((d) => d.id === "fornitori")?.lista || [];
     ridisegna();
   }, onErr));
   ascoltatori.push(db.ascolta(COLL.cat, (docs) => {
@@ -241,7 +246,8 @@ function vai(vista) {
   if (S.vista === "offerta" && vista !== "offerta") salvaOraSeServe();
   S.vista = vista;
   $("#sb-offerta").hidden = vista !== "offerta";
-  for (const v of ["offerte", "offerta", "catalogo", "clienti", "importa"]) $("#v-" + v).hidden = v !== vista;
+  for (const v of ["offerte", "offerta", "catalogo", "biblioteca", "clienti", "importa"]) $("#v-" + v).hidden = v !== vista;
+  if (vista === "biblioteca") caricaBib();
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.vista === (vista === "offerta" ? "offerte" : vista)));
   if (vista !== "offerta" && location.hash) history.replaceState(null, "", location.pathname);
   ridisegna(true);
@@ -267,6 +273,7 @@ function ridisegna(forza = false) {
     else if (S.vista === "offerta") disegnaOfferta();
     else if (S.vista === "catalogo") disegnaCatalogo();
     else if (S.vista === "clienti") disegnaClienti();
+    else if (S.vista === "biblioteca") disegnaBiblioteca();
   });
 }
 
@@ -833,8 +840,10 @@ function spostaCapitolato(c, nome, verso) {
 function applicaVistaRighe(c) {
   if (!S.vistaRighe) S.vistaRighe = c && c.righe.length ? "righe" : "db";
   const v = S.vistaRighe;
-  $("#vr-db").hidden = v === "righe";
-  $("#vr-off").hidden = v === "db";
+  $("#vr-db").hidden = v === "righe" || v === "bib";
+  $("#vr-off").hidden = v === "db" || v === "bib";
+  $("#vr-bib").hidden = v !== "bib";
+  if (v === "bib") { caricaBib(); disegnaBibRighe(); }
   $("#s-righe").classList.toggle("vr-piena", v !== "tutte");
   $$("#vista-righe [data-vr]").forEach((b) => b.classList.toggle("on", b.dataset.vr === v));
   if (c) $("#vr-conta").textContent = c.righe.length ? `(${c.righe.length})` : "";
@@ -844,11 +853,12 @@ function cambiaVistaRighe(v) {
   applicaVistaRighe(capAtt());
   window.scrollTo(0, 0);
   if (v === "db") setTimeout(() => $("#a-cerca").focus(), 0);
+  if (v === "bib") setTimeout(() => $("#rb-cerca").focus(), 0);
 }
 $("#vista-righe").addEventListener("click", (e) => { const b = e.target.closest("[data-vr]"); if (b) cambiaVistaRighe(b.dataset.vr); });
 document.addEventListener("keydown", (e) => {
   if (!e.altKey || S.vista !== "offerta" || S.sub !== "righe" || !capAtt()) return;
-  const v = { Digit1: "db", Digit2: "righe", Digit3: "tutte" }[e.code];
+  const v = { Digit1: "db", Digit2: "righe", Digit3: "tutte", Digit4: "bib" }[e.code];
   if (v) { e.preventDefault(); cambiaVistaRighe(v); }
 });
 
@@ -1295,6 +1305,18 @@ function disegnaPicker(c, reset = false) {
   applicaGruppi($("#righe-picker"));
   S.pickVis = vis.map((a) => a.k);
   aggiornaPickSel();
+  // articoli della biblioteca (listini fornitore) che non sono nel database
+  if (q.length >= 2) {
+    caricaBib();
+    const tb = $("#righe-picker");
+    if (!S.bibPronta) tb.insertAdjacentHTML("beforeend", `<tr class="sotto"><td colspan="9" class="muted">Cerco anche nella biblioteca…</td></tr>`);
+    else {
+      const trovati = cercaBib(q, { escludiDb: true }).slice(0, 40);
+      if (trovati.length) tb.insertAdjacentHTML("beforeend", `<tr class="sotto bib-testa" data-gruppo="__biblioteca"><td colspan="9">Dalla biblioteca (listini fornitore, non nel database)</td></tr>` +
+        trovati.map((a) => rigaBibHtml(a, "picker")).join(""));
+      applicaGruppi(tb);
+    }
+  }
   $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : "";
 }
 /* --- Selezione di più articoli del database e aggiunta in un colpo solo --- */
@@ -2100,6 +2122,475 @@ async function applicaOracle() {
   } catch (x) { errore(x, "Aggiornamento non riuscito"); }
 }
 
+/* ================= Biblioteca (listini fornitore) =================
+   Gli articoli dei listini stanno in oracle_biblioteca, a blocchi per fornitore, e si caricano solo quando servono.
+   Profili dei fornitori (colonne, precodice, famiglie di sconto → GMA) in oracle_config/fornitori;
+   sconto standard di ogni GMA nell'elenco GMV (oracle_config/gmv, campo "sconto", es. "50+10"). */
+function caricaBib() {
+  if (S.bibAscolto) return;
+  S.bibAscolto = db.ascolta(COLL.bib, (docs) => {
+    S.bibChunks = docs;
+    S.bib = [];
+    for (const d of docs) for (const a of d.articoli || []) S.bib.push({ ...a, _chunk: d.id });
+    S.bibPerK = new Map(S.bib.map((a) => [a.k, a]));
+    S.bibPronta = true;
+    // i risultati compaiono subito anche mentre si scrive nella ricerca
+    if (S.vista === "offerta" && S.sub === "righe" && capAtt()) { disegnaPicker(capAtt()); if (S.vistaRighe === "bib") disegnaBibRighe(); }
+    ridisegna();
+  }, (e) => errore(e, "Errore di lettura della biblioteca"));
+  ascoltatori.push(S.bibAscolto);
+}
+const profiloDi = (nome) => S.fornitori.find((f) => f.nome === nome) || { nome, famiglie: {} };
+const scontoGmaTxt = (g) => S.gmv.find((x) => x.codice === g)?.sconto || "";
+/* Condizioni di un articolo della biblioteca: GMA e sconto standard, confronto con quanto dice il listino. */
+function condBib(a) {
+  const p = profiloDi(a.fornitore);
+  const gmaFam = (a.famiglia && p.famiglie?.[a.famiglia]) || p.gmaDefault || "";
+  const gmaListino = a.gma || "";
+  const diffGma = !!(gmaListino && gmaFam && gmaListino !== gmaFam);
+  const gma = a.decisione === "listino" ? gmaListino || gmaFam : gmaFam || gmaListino;
+  const stdTxt = scontoGmaTxt(gma);
+  const stdTerm = BIB.terminiSconto(stdTxt);
+  const scL = a.scListino ?? null;
+  const diffSc = scL !== null && Math.abs(1 - BIB.fattoreDi(stdTerm) - scL) > 0.0005;
+  const usaListino = a.decisione === "listino" && scL !== null;
+  const termini = usaListino ? [scL] : stdTerm;
+  return { gma, gmaFam, gmaListino, stdTxt, scL, diffGma, diffSc, daDecidere: (diffGma || diffSc) && !a.decisione, termini,
+    fonte: usaListino ? "listino" : "gma", sconto: 1 - BIB.fattoreDi(termini) };
+}
+const codiceBib = (a) => `${a.precodice ?? profiloDi(a.fornitore).precodice ?? ""}${a.codice}`;
+function cercaBib(q, { forn = "", soloDecidere = false, escludiDb = false } = {}) {
+  q = (q || "").trim().toLowerCase();
+  const nelDb = escludiDb ? new Set(S.catalogo.map(codiceArticolo)) : null;
+  const parole = q.split(/\s+/).filter(Boolean);
+  return S.bib.filter((a) => (!forn || a.fornitore === forn) &&
+    (!parole.length || parole.every((p) => `${codiceBib(a)} ${a.codice} ${a.nOrdine} ${a.descrizione} ${a.famiglia} ${a.fornitore}`.toLowerCase().includes(p))) &&
+    (!nelDb || !nelDb.has(codiceBib(a))) && (!soloDecidere || condBib(a).daDecidere));
+}
+/* Una riga della biblioteca: nella ricerca della pagina Righe ("picker"), nella vista Biblioteca dell'offerta ("offerta")
+   o nella pagina Biblioteca ("pagina"). */
+function rigaBibHtml(a, modo) {
+  const k = condBib(a);
+  const sc = pctTxt(k.sconto) || "0%";
+  const decidi = k.daDecidere
+    ? `<span class="badge warn" title="${esc([k.diffSc ? `Il listino indica lo sconto ${pctTxt(k.scL) || "0%"}, il GMA ${k.gma || "—"} ha ${k.stdTxt ? k.stdTxt + "%" : "nessuno sconto standard"}` : "", k.diffGma ? `Il listino indica il GMA ${k.gmaListino}, la famiglia porta a ${k.gmaFam}` : ""].filter(Boolean).join(". "))}">da decidere</span>
+       <button type="button" class="btn small" data-bib-dec="gma" data-k="${esc(a.k)}" title="Usa lo sconto standard del GMA">GMA ${esc(k.stdTxt ? k.stdTxt + "%" : "—")}</button>
+       <button type="button" class="btn small" data-bib-dec="listino" data-k="${esc(a.k)}" title="Usa lo sconto indicato dal listino">listino ${esc(pctTxt(k.scL) || "0%")}</button>`
+    : a.decisione ? `<button type="button" class="btn small ghost" data-bib-dec="" data-k="${esc(a.k)}" title="Annulla la scelta">${a.decisione === "listino" ? "sconto del listino" : "sconto del GMA"} ✕</button>` : "";
+  const nelDb = S.perKCodice?.has(codiceBib(a));
+  const azione = modo === "pagina"
+    ? (nelDb ? '<span class="badge ok">nel database</span>' : `<button type="button" class="btn small" data-bib-db="${esc(a.k)}">Nel database…</button>`)
+    : `<button type="button" class="btn small primary" data-bib-add="${esc(a.k)}">Aggiungi…</button>`;
+  const desc = `<td class="desc"><b>${esc(a.nOrdine || a.codice)}</b>${modo !== "pagina" ? ` <span class="badge info">${esc(a.fornitore)}</span>` : ""}<div class="d">${esc(a.descrizione)}</div>${a.sottocapitolo ? `<div class="muted small">${esc(a.sottocapitolo)}</div>` : ""}</td>`;
+  if (modo === "picker") return `<tr class="bib" data-bib="${esc(a.k)}"><td></td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
+    <td class="num">${euro(a.listino)}</td><td class="num">${sc}</td><td class="mono">${esc(k.gma)}</td><td>${decidi}</td><td class="num nowrap">${azione}</td></tr>`;
+  return `<tr class="bib" data-bib="${esc(a.k)}"><td>${esc(a.fornitore)}</td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
+    <td class="num">${euro(a.listino)}</td><td class="mono small">${a.famiglia ? esc(a.famiglia) + " → " : ""}<b>${esc(k.gma || "—")}</b></td>
+    <td class="num nowrap">${sc}${k.fonte === "listino" ? ' <span class="muted small">(listino)</span>' : ""}</td><td class="nowrap">${decidi} ${azione}</td></tr>`;
+}
+function opzioniFornitori(sel, valore) {
+  const nomi = [...new Set([...S.fornitori.map((f) => f.nome), ...S.bib.map((a) => a.fornitore)])].sort();
+  sel.innerHTML = `<option value="">Tutti i fornitori</option>` + nomi.map((n) => `<option ${n === valore ? "selected" : ""}>${esc(n)}</option>`).join("");
+}
+function disegnaBiblioteca() {
+  S.perKCodice = new Set(S.catalogo.map(codiceArticolo));
+  opzioniFornitori($("#b-fornitore"), $("#b-fornitore").value);
+  const conta = new Map();
+  for (const a of S.bib) { const x = conta.get(a.fornitore) || { n: 0, dec: 0 }; x.n++; if (condBib(a).daDecidere) x.dec++; conta.set(a.fornitore, x); }
+  const nomi = [...new Set([...S.fornitori.map((f) => f.nome), ...conta.keys()])].sort();
+  $("#b-fornitori").innerHTML = !S.bibPronta ? `<tr><td colspan="6" class="vuoto">Carico la biblioteca…</td></tr>` : nomi.length ? nomi.map((n) => {
+    const p = profiloDi(n), x = conta.get(n) || { n: 0, dec: 0 };
+    return `<tr><td><b>${esc(n)}</b></td><td class="mono">${esc(p.precodice || "")}</td><td class="num">${x.n}</td>
+      <td class="num">${x.dec ? `<span class="badge warn">${x.dec}</span>` : ""}</td><td class="small">${p.aggiornatoIl ? new Date(p.aggiornatoIl).toLocaleDateString("it-IT") : ""}</td>
+      <td class="nowrap"><button class="btn small" data-forn-agg="${esc(n)}">Aggiorna listino</button>
+        <button class="btn small" data-forn-imp="${esc(n)}">Impostazioni</button>
+        <button class="icon" data-forn-del="${esc(n)}" title="Togli il listino dalla biblioteca">✕</button></td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="vuoto">Nessun listino: caricane uno con “+ Carica listino”.</td></tr>`;
+  const forn = $("#b-fornitore").value, q = $("#b-cerca").value, solo = $("#b-decidere").checked;
+  const lista = S.bibPronta ? cercaBib(q, { forn, soloDecidere: solo }) : [];
+  const vis = lista.slice(0, 300);
+  $("#b-righe").innerHTML = vis.map((a) => rigaBibHtml(a, "pagina")).join("") ||
+    `<tr><td colspan="8" class="vuoto">${S.bibPronta ? (S.bib.length ? "Nessun articolo trovato." : "La biblioteca è vuota.") : "Carico…"}</td></tr>`;
+  $("#b-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : lista.length ? `${lista.length} articoli` : "";
+  const dec = lista.filter((a) => condBib(a).daDecidere);
+  $("#b-bulk").innerHTML = dec.length ? `<div class="avviso">${dec.length} articoli ${forn ? `di ${esc(forn)} ` : ""}hanno nel listino uno sconto o un GMA diverso da quello impostato: decidi voce per voce oppure
+    <button class="btn small" data-bib-tutti="gma">usa il GMA per tutti</button> <button class="btn small" data-bib-tutti="listino">usa il listino per tutti</button></div>` : "";
+  S.bibDecVisibili = dec;
+}
+function disegnaBibRighe() {
+  const sel = $("#rb-fornitore");
+  opzioniFornitori(sel, sel.value);
+  S.perKCodice = new Set(S.catalogo.map(codiceArticolo));
+  const lista = S.bibPronta ? cercaBib($("#rb-cerca").value, { forn: sel.value }) : [];
+  const vis = lista.slice(0, 200);
+  $("#rb-righe").innerHTML = vis.map((a) => rigaBibHtml(a, "offerta")).join("") ||
+    `<tr><td colspan="8" class="vuoto">${S.bibPronta ? (S.bib.length ? "Nessun articolo trovato." : "La biblioteca è vuota: carica i listini dalla pagina Biblioteca.") : "Carico la biblioteca…"}</td></tr>`;
+  $("#rb-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : "";
+}
+$("#b-fornitore").addEventListener("change", disegnaBiblioteca);
+$("#b-cerca").addEventListener("input", disegnaBiblioteca);
+$("#b-decidere").addEventListener("change", disegnaBiblioteca);
+$("#rb-fornitore").addEventListener("change", disegnaBibRighe);
+$("#rb-cerca").addEventListener("input", disegnaBibRighe);
+
+/* Salvataggio: blocchi sotto il limite di 1 MB di Firestore, per fornitore. */
+function opsBib(fornitore, articoli) {
+  const blocchi = [];
+  let cur = [], dim = 0;
+  for (const { _chunk, ...a } of articoli) {
+    const d = JSON.stringify(a).length * 1.2 + 50;
+    if (cur.length && dim + d > 700000) { blocchi.push(cur); cur = []; dim = 0; }
+    cur.push(a); dim += d;
+  }
+  if (cur.length) blocchi.push(cur);
+  const base = "f_" + slug(fornitore);
+  const ops = blocchi.map((b, i) => ({ tipo: "set", coll: COLL.bib, id: `${base}__${i}`, data: { fornitore, parte: i, articoli: b, aggiornatoIl: Date.now() } }));
+  const nuovi = new Set(ops.map((o) => o.id));
+  for (const c of S.bibChunks) if (c.fornitore === fornitore && !nuovi.has(c.id)) ops.push({ tipo: "del", coll: COLL.bib, id: c.id });
+  return ops;
+}
+/* Riscrive solo i blocchi toccati (decisioni voce per voce). */
+function salvaBloccoBib(ids) {
+  const ops = [...new Set(ids)].map((id) => {
+    const ch = S.bibChunks.find((c) => c.id === id);
+    return ch && { tipo: "set", coll: COLL.bib, id, data: { ...ch, articoli: S.bib.filter((a) => a._chunk === id).map(({ _chunk, ...a }) => a) } };
+  }).filter(Boolean).map((o) => { delete o.data.id; return o; });
+  return db.scrivi(ops);
+}
+async function decidiBib(arts, decisione) {
+  for (const a of arts) { if (decisione) a.decisione = decisione; else delete a.decisione; }
+  ridisegna(true);
+  if (S.vista === "offerta" && capAtt()) { disegnaPicker(capAtt()); disegnaBibRighe(); }
+  try { await salvaBloccoBib(arts.map((a) => a._chunk)); } catch (x) { errore(x, "Salvataggio non riuscito"); }
+}
+document.addEventListener("click", (e) => {
+  const d = e.target.closest("[data-bib-dec]");
+  if (d) { const a = S.bibPerK.get(d.dataset.k); if (a) decidiBib([a], d.dataset.bibDec); return; }
+  const t = e.target.closest("[data-bib-tutti]");
+  if (t) { decidiBib(S.bibDecVisibili || [], t.dataset.bibTutti); return; }
+  const ad = e.target.closest("[data-bib-add]");
+  if (ad) { const a = S.bibPerK.get(ad.dataset.bibAdd); if (a) aggiungiDaBib(a); return; }
+  const dbb = e.target.closest("[data-bib-db]");
+  if (dbb) { const a = S.bibPerK.get(dbb.dataset.bibDb); if (a) mettiNelDatabase(a); }
+});
+
+/* Articolo del database fatto da un articolo della biblioteca. */
+function articoloDaBib(a, capitolo, sottocapitolo) {
+  const k = condBib(a), p = profiloDi(a.fornitore);
+  const pos = k.termini.filter((x) => x >= 0), neg = k.termini.filter((x) => x < 0);
+  const sc = pos.slice(0, 2);
+  if (pos.length > 2) sc.push(1 - BIB.fattoreDi(pos.slice(2)));
+  const art = {
+    capitolo, sottocapitolo: sottocapitolo || "", rifCap: "", pos: "",
+    precodice: a.precodice ?? p.precodice ?? "", codice: a.codice, nOrdine: a.nOrdine || "", descrizione: a.descrizione || "", um: a.um || "n.",
+    listinoAcquisto: num(a.listino), giorni: 0, riparam: 0,
+    sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0,
+    gmv: k.gma, notePre: "", notePost: "", dataAgg: a.dataAgg || oggiIso(), daBiblioteca: a.fornitore,
+  };
+  art.listino = listinoCalcolato(art);
+  const base = `${capitolo}||${codiceArticolo(art)}|${art.nOrdine}`;
+  let kk = base, n = 1;
+  while (S.perK.has(kk)) kk = `${base}|${++n}`;
+  art.k = kk;
+  art.ordine = Math.max(0, ...S.catalogo.filter((x) => x.capitolo === capitolo).map((x) => num(x.ordine))) + 1;
+  return art;
+}
+async function scriviNelDatabase(art) {
+  S.catalogo.push(art); S.perK.set(art.k, art);
+  await salvaCapitolo(art.capitolo);
+}
+const opzCapitoliDb = (sel) => S.capitoli.map((c) => `<option ${c.nome === sel ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
+const sottoDi = (cap) => [...new Set(S.catalogo.filter((x) => x.capitolo === cap).map((x) => x.sottocapitolo).filter(Boolean))];
+const htmlDecisione = (k) => !k.daDecidere ? "" : `<div class="avviso" style="margin-top:10px"><b>Il listino non coincide con le tue condizioni.</b>
+  ${k.diffSc ? `Sconto del listino ${pctTxt(k.scL) || "0%"}, sconto standard del GMA ${esc(k.gma || "—")}: ${k.stdTxt ? esc(k.stdTxt) + "%" : "non impostato"}.` : ""}
+  ${k.diffGma ? `GMA del listino ${esc(k.gmaListino)}, dalla famiglia ${esc(k.gmaFam)}.` : ""}
+  <div class="row" style="margin-top:6px"><label class="row small"><input type="radio" name="ad-dec" value="gma" checked> usa il GMA</label>
+  <label class="row small"><input type="radio" name="ad-dec" value="listino"> usa il listino</label></div></div>`;
+
+/* Dalla pagina Righe: aggiunge all'offerta; ogni volta chiede se metterlo anche nel database. */
+function aggiungiDaBib(a) {
+  const c = capAtt(); if (!c) return toast("Apri prima un capitolo dell'offerta.");
+  const k = condBib(a);
+  const capDef = S.capitoli.some((x) => x.nome === c.nome) ? c.nome : S.capitoli[0]?.nome || "";
+  dialogo({
+    titolo: `Aggiungi ${a.nOrdine || a.codice}`,
+    html: `<p class="muted small" style="margin-top:0">${esc(a.fornitore)} · <span class="mono">${esc(codiceBib(a))}</span> · ${esc(a.descrizione)}<br>
+      Listino ${euro(a.listino)} · GMA ${esc(k.gma || "—")} · sconto di acquisto ${pctTxt(k.sconto) || "0%"}</p>
+      <div class="row">
+        <label class="f">Quantità<input id="ad-qta" inputmode="decimal" style="width:110px" placeholder="es. 2"></label>
+        <label class="f grow">Capitolato<select id="ad-cap"><option value="">— nessuno —</option>${c.capitolati.map((n) => `<option ${n === c.capNuove ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="f grow">Nota pre-linea<input id="ad-pre"></label><label class="f grow">Nota post-linea<input id="ad-post"></label>
+      </div>
+      ${htmlDecisione(k)}
+      <div class="card" style="margin:12px 0 0;padding:10px 12px">
+        <label class="row"><input type="checkbox" id="ad-db"> <b>Metti l'articolo anche nel database</b> (la prossima volta lo trovi tra gli articoli normali)</label>
+        <div class="row" id="ad-db-box" hidden style="margin-top:8px">
+          <label class="f">Capitolo del database<select id="ad-dbcap">${opzCapitoliDb(capDef)}</select></label>
+          <label class="f grow">Sottocapitolo<input id="ad-sotto" list="ad-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="ad-sotti"></datalist></label>
+        </div>
+      </div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiungi all'offerta", value: "ok", cls: "primary" }],
+    onApri(d) {
+      const sotti = () => { $("#ad-sotti", d).innerHTML = sottoDi($("#ad-dbcap", d).value).map((x) => `<option value="${esc(x)}">`).join(""); };
+      $("#ad-db", d).addEventListener("change", (e) => { $("#ad-db-box", d).hidden = !e.target.checked; });
+      $("#ad-dbcap", d).addEventListener("change", sotti); sotti();
+      setTimeout(() => $("#ad-qta", d).focus(), 50);
+    },
+    async onConferma(v, d) {
+      const q = num($("#ad-qta", d).value);
+      if (!q) { toast("Scrivi la quantità."); return false; }
+      const dec = $('input[name="ad-dec"]:checked', d)?.value;
+      if (dec) { a.decisione = dec; salvaBloccoBib([a._chunk]).catch((x) => errore(x)); }
+      let art;
+      if ($("#ad-db", d).checked) {
+        art = articoloDaBib(a, $("#ad-dbcap", d).value, $("#ad-sotto", d).value.trim());
+        try { await scriviNelDatabase(art); } catch (x) { errore(x, "Non riesco a salvarlo nel database"); return false; }
+      } else {
+        art = articoloDaBib(a, c.nome, a.sottocapitolo);
+        art.k = "bib|" + a.k; // non è nel database: la riga ne tiene la copia
+      }
+      const r = { ...rigaDaArticolo(art), id: db.nuovoId(), qta: q, capitolato: $("#ad-cap", d).value };
+      const pre = $("#ad-pre", d).value.trim(), post = $("#ad-post", d).value.trim();
+      if (pre) r.notePre = pre;
+      if (post) r.notePost = post;
+      c.righe.push(r);
+      modificata(); disegnaOfferta();
+      toast(`Aggiunta ${a.nOrdine || a.codice}${$("#ad-db", d).checked ? `, anche nel database (${art.capitolo})` : " (solo nell'offerta)"}.`, 4000);
+    },
+  });
+}
+/* Dalla pagina Biblioteca: mette l'articolo nel database. */
+function mettiNelDatabase(a) {
+  const k = condBib(a);
+  dialogo({
+    titolo: `Metti nel database ${a.nOrdine || a.codice}`,
+    html: `<p class="muted small" style="margin-top:0">${esc(a.fornitore)} · <span class="mono">${esc(codiceBib(a))}</span> · ${esc(a.descrizione)}<br>
+      Listino ${euro(a.listino)} · GMA ${esc(k.gma || "—")} · sconto ${pctTxt(k.sconto) || "0%"}</p>
+      <div class="row"><label class="f">Capitolo<select id="md-cap">${opzCapitoliDb(S.capitoli[0]?.nome)}</select></label>
+      <label class="f grow">Sottocapitolo<input id="md-sotto" list="md-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="md-sotti"></datalist></label></div>
+      ${htmlDecisione(k)}`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Metti nel database", value: "ok", cls: "primary" }],
+    onApri(d) {
+      const sotti = () => { $("#md-sotti", d).innerHTML = sottoDi($("#md-cap", d).value).map((x) => `<option value="${esc(x)}">`).join(""); };
+      $("#md-cap", d).addEventListener("change", sotti); sotti();
+    },
+    async onConferma(v, d) {
+      if (!S.capitoli.length) { toast("Prima crea un capitolo del database."); return false; }
+      const dec = $('input[name="ad-dec"]:checked', d)?.value;
+      if (dec) { a.decisione = dec; salvaBloccoBib([a._chunk]).catch((x) => errore(x)); }
+      const art = articoloDaBib(a, $("#md-cap", d).value, $("#md-sotto", d).value.trim());
+      try { await scriviNelDatabase(art); toast(`${a.nOrdine || a.codice} è nel database (${art.capitolo}).`); disegnaBiblioteca(); }
+      catch (x) { errore(x, "Non riesco a salvarlo nel database"); return false; }
+    },
+  });
+}
+
+/* --- Caricamento di un listino --- */
+$("#b-carica").addEventListener("click", () => { S.bibAtteso = ""; $("#b-file").click(); });
+$("#b-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) apriListino(f, S.bibAtteso); });
+document.addEventListener("click", (e) => {
+  const ag = e.target.closest("[data-forn-agg]");
+  if (ag) { S.bibAtteso = ag.dataset.fornAgg; $("#b-file").click(); return; }
+  const im = e.target.closest("[data-forn-imp]");
+  if (im) return impostaFornitore(im.dataset.fornImp);
+  const de = e.target.closest("[data-forn-del]");
+  if (de) {
+    const n = de.dataset.fornDel, quanti = S.bib.filter((a) => a.fornitore === n).length;
+    dialogo({ titolo: `Togliere il listino ${n}?`, html: `<p>I ${quanti} articoli di ${esc(n)} escono dalla biblioteca. Database e offerte non cambiano.</p>`,
+      pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Togli", value: "ok", cls: "danger" }],
+      async onConferma() {
+        const ops = S.bibChunks.filter((c) => c.fornitore === n).map((c) => ({ tipo: "del", coll: COLL.bib, id: c.id }));
+        ops.push({ tipo: "set", coll: COLL.cfg, id: "fornitori", data: { lista: S.fornitori.filter((f) => f.nome !== n) } });
+        await db.scrivi(ops);
+      } });
+  }
+});
+
+async function righeDaFile(file) {
+  const nome = file.name || "listino";
+  if (/\.(xlsx|xlsm)$/i.test(nome)) {
+    const wb = await leggiExcel(await file.arrayBuffer());
+    const fogli = [];
+    for (const n of wb.nomi) fogli.push({ nome: n, righe: (await wb.foglio(n)) || [] });
+    return fogli;
+  }
+  if (/\.xls$/i.test(nome)) throw new Error("Il formato .xls (Excel 97-2003) non si legge: aprilo in Excel e salvalo come .xlsx.");
+  if (/\.pdf$/i.test(nome)) throw new Error("I listini in PDF arrivano nel prossimo passo: per ora usa Excel o CSV.");
+  return [{ nome: nome.replace(/\.[^.]+$/, ""), righe: BIB.righeDaTesto(await file.text()) }];
+}
+async function apriListino(file, atteso = "") {
+  toast(`Leggo ${file.name}…`, 2500);
+  let fogli;
+  try { fogli = await righeDaFile(file); } catch (x) { return errore(x, "File non leggibile"); }
+  const conInt = fogli.map((f) => ({ ...f, int: BIB.trovaIntestazione(f.righe) })).filter((f) => f.int);
+  if (!conInt.length) return toast("Non trovo la riga delle intestazioni: servono almeno una colonna con il codice e una con il prezzo.", 7000);
+  const tutteInt = [...new Set(conInt.flatMap((f) => f.int.celle.filter(Boolean)))];
+  const metel = BIB.isMetel(conInt[0].int.celle);
+  // fornitore: quello richiesto, oppure un profilo che conosce già queste colonne, oppure il marchio METEL o il nome del file
+  let prof = atteso ? profiloDi(atteso) : S.fornitori.find((f) => f.mappa?.codice && tutteInt.includes(f.mappa.codice) && tutteInt.includes(f.mappa.prezzo) && f.file && file.name.toLowerCase().includes(f.file));
+  let nomeForn = prof?.nome || "";
+  if (!nomeForn && metel) { const r = conInt[0].righe[conInt[0].int.indice + 1] || []; nomeForn = String(r[conInt[0].int.celle.indexOf("sigla marchio")] || "").trim(); prof = profiloDi(nomeForn); }
+  if (!nomeForn) nomeForn = file.name.replace(/\.[^.]+$/, "").split(/[_\s-]+/)[0];
+  const st = {
+    fornitore: nomeForn, precodice: prof?.precodice ?? (metel ? nomeForn : ""),
+    mappa: prof?.mappa && tutteInt.includes(prof.mappa.codice) ? { ...prof.mappa } : metel ? { ...BIB.MAPPA_METEL } : BIB.indovinaMappa(conInt[0].int.celle),
+    fogli: new Set((prof?.fogli && conInt.some((f) => prof.fogli.includes(f.nome)) ? conInt.filter((f) => prof.fogli.includes(f.nome)) : conInt).map((f) => f.nome)),
+    sottoFoglio: prof?.sottoFoglio ?? conInt.length > 1,
+    famiglie: { ...(prof?.famiglie || {}) }, gmaDefault: prof?.gmaDefault || "", sconti: {},
+  };
+  const opzCol = (v) => `<option value="">— nessuna —</option>` + tutteInt.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
+  let letti = { articoli: [], scartate: 0, perFoglio: {} };
+  const leggi = () => { letti = BIB.leggiListino(conInt.filter((f) => st.fogli.has(f.nome)), st.mappa, { sottoFoglio: st.sottoFoglio }); };
+  const gmaList = `<datalist id="lg-gma">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>`;
+  dialogo({
+    titolo: `Carica listino · ${file.name}`, largo: true,
+    html: `<div class="row">
+        <label class="f">Fornitore<input id="lg-forn" list="lg-forns" value="${esc(st.fornitore)}"><datalist id="lg-forns">${S.fornitori.map((f) => `<option value="${esc(f.nome)}">`).join("")}</datalist></label>
+        <label class="f">Precodice per Oracle<input id="lg-pre" value="${esc(st.precodice)}" style="width:110px" placeholder="es. SIE"></label>
+        ${metel ? '<span class="badge ok" style="align-self:flex-end">formato METEL riconosciuto</span>' : ""}
+      </div>
+      ${conInt.length > 1 ? `<div style="margin-top:10px"><span class="muted small" style="font-weight:600">Fogli da leggere</span>
+        <div class="row" style="flex-wrap:wrap;gap:4px 14px;margin-top:4px">${conInt.map((f) => `<label class="row small"><input type="checkbox" data-lg-foglio="${esc(f.nome)}" ${st.fogli.has(f.nome) ? "checked" : ""}> ${esc(f.nome)} <span class="muted" data-lg-n="${esc(f.nome)}"></span></label>`).join("")}</div>
+        <label class="row small" style="margin-top:6px"><input type="checkbox" id="lg-sottofoglio" ${st.sottoFoglio ? "checked" : ""}> il nome del foglio diventa il sottocapitolo</label></div>` : ""}
+      <div style="margin-top:12px"><span class="muted small" style="font-weight:600">Colonne del listino</span>
+        <div class="lg-mappa">${BIB.CAMPI.map((c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-lg-campo="${c.k}">${opzCol(st.mappa[c.k])}</select></label>`).join("")}</div></div>
+      <div id="lg-anteprima" style="margin-top:12px"></div>
+      <div id="lg-famiglie" style="margin-top:12px"></div>${gmaList}`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Carica nella biblioteca", value: "ok", cls: "primary" }],
+    onApri(d) {
+      const aggiorna = () => {
+        leggi();
+        for (const [n, x] of Object.entries(letti.perFoglio)) { const el = $(`[data-lg-n="${CSS.escape(n)}"]`, d); if (el) el.textContent = `(${x})`; }
+        const es = letti.articoli.slice(0, 6);
+        $("#lg-anteprima", d).innerHTML = `<span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""}</span>
+          <div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Codice Oracle</th><th>Modello</th><th>Descrizione</th><th>U.M.</th><th class="num">Listino</th><th class="num">Sconto listino</th><th>Famiglia</th><th>Sottocapitolo</th></tr></thead><tbody>
+          ${es.map((a) => `<tr><td class="mono">${esc(st.precodice + a.codice)}</td><td>${esc(a.nOrdine)}</td><td class="small">${esc(a.descrizione.slice(0, 80))}</td><td>${esc(a.um)}</td><td class="num">${euro(a.listino)}</td><td class="num">${a.scListino === null ? "" : pctTxt(a.scListino)}</td><td>${esc(a.famiglia)}</td><td class="small">${esc(a.sottocapitolo)}</td></tr>`).join("") || `<tr><td colspan="8" class="vuoto">Nessun articolo: controlla le colonne codice e prezzo.</td></tr>`}
+          </tbody></table></div>`;
+        // famiglie di sconto → GMA (con lo sconto standard del GMA)
+        const fam = new Map();
+        for (const a of letti.articoli) fam.set(a.famiglia || "", (fam.get(a.famiglia || "") || 0) + 1);
+        const righe = [...fam.entries()].sort((x, y) => y[1] - x[1]);
+        const riga = (f, n) => {
+          const g = f ? st.famiglie[f] || "" : st.gmaDefault;
+          return `<tr><td>${f ? `<b class="mono">${esc(f)}</b>` : "<i>senza famiglia</i>"}</td><td class="num">${n}</td>
+            <td><input class="cond" data-lg-fam="${esc(f)}" list="lg-gma" value="${esc(g)}" placeholder="GMA" style="width:130px"></td>
+            <td><input class="cond" data-lg-sc="${esc(g)}" value="${esc(st.sconti[g] ?? scontoGmaTxt(g))}" placeholder="es. 50+10" style="width:110px" ${g ? "" : "disabled"}></td></tr>`;
+        };
+        $("#lg-famiglie", d).innerHTML = `<span class="muted small" style="font-weight:600">Famiglie di sconto → GMA</span>
+          <p class="muted small" style="margin:2px 0 6px">Abbina ogni famiglia a un GMA e scrivi lo sconto standard del GMA (vale per tutti i suoi articoli; più sconti in cascata con il +).
+            Se il listino indica per un articolo uno sconto diverso, lo trovi “da decidere” nella biblioteca.</p>
+          <div class="tbl-wrap" style="max-height:240px"><table><thead><tr><th>Famiglia</th><th class="num">Articoli</th><th>GMA</th><th>Sconto standard %</th></tr></thead>
+          <tbody>${righe.slice(0, 200).map(([f, n]) => riga(f, n)).join("")}</tbody></table></div>`;
+      };
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.id === "lg-forn") st.fornitore = t.value.trim();
+        else if (t.id === "lg-pre") st.precodice = t.value.trim();
+        else if (t.id === "lg-sottofoglio") st.sottoFoglio = t.checked;
+        else if (t.dataset.lgFoglio !== undefined) { t.checked ? st.fogli.add(t.dataset.lgFoglio) : st.fogli.delete(t.dataset.lgFoglio); }
+        else if (t.dataset.lgCampo) { if (t.value) st.mappa[t.dataset.lgCampo] = t.value; else delete st.mappa[t.dataset.lgCampo]; }
+        else if (t.dataset.lgFam !== undefined) { const f = t.dataset.lgFam, g = t.value.trim(); if (f) { if (g) st.famiglie[f] = g; else delete st.famiglie[f]; } else st.gmaDefault = g; }
+        else if (t.dataset.lgSc !== undefined) { st.sconti[t.dataset.lgSc] = t.value.trim(); return; }
+        else return;
+        aggiorna();
+      });
+      aggiorna();
+    },
+    async onConferma() {
+      if (!st.fornitore) { toast("Scrivi il nome del fornitore."); return false; }
+      if (!st.mappa.codice || !st.mappa.prezzo) { toast("Scegli le colonne del codice e del prezzo."); return false; }
+      leggi();
+      if (!letti.articoli.length) { toast("Nessun articolo letto: controlla le colonne."); return false; }
+      const errSc = Object.entries(st.sconti).find(([, t]) => t && !testoValido(t));
+      if (errSc) { toast(`Sconto standard non valido per ${errSc[0]}: scrivi per esempio 50 oppure 50+10.`); return false; }
+      return salvaListino(st, letti, file.name);
+    },
+  });
+}
+async function salvaListino(st, letti, nomeFile) {
+  const oggi = oggiIso();
+  const esistenti = S.bib.filter((a) => a.fornitore === st.fornitore);
+  const u = BIB.unisciListino(esistenti, letti.articoli, oggi);
+  const articoli = u.articoli.map((a) => ({ ...a, fornitore: st.fornitore, precodice: st.precodice, k: `${slug(st.fornitore)}|${a.codice}` }));
+  const ops = opsBib(st.fornitore, articoli);
+  // profilo del fornitore: la prossima volta il listino si legge da solo
+  const prof = { nome: st.fornitore, precodice: st.precodice, mappa: st.mappa, fogli: [...st.fogli], sottoFoglio: st.sottoFoglio,
+    famiglie: st.famiglie, gmaDefault: st.gmaDefault, file: (nomeFile.toLowerCase().match(/[a-z]{4,}/) || [""])[0], aggiornatoIl: Date.now(), articoli: articoli.length };
+  ops.push({ tipo: "set", coll: COLL.cfg, id: "fornitori", data: { lista: [...S.fornitori.filter((f) => f.nome !== st.fornitore), prof] } });
+  // GMA nuovi e sconti standard
+  const gm = new Map(S.gmv.map((g) => [g.codice, { ...g }]));
+  const usati = new Set([st.gmaDefault, ...Object.values(st.famiglie)].filter(Boolean));
+  for (const g of usati) if (!gm.has(g)) gm.set(g, { codice: g, fornitore: st.fornitore });
+  for (const [g, t] of Object.entries(st.sconti)) if (g && gm.has(g)) gm.get(g).sconto = t;
+  ops.push({ tipo: "set", coll: COLL.cfg, id: "gmv", data: { lista: [...gm.values()] } });
+  try { await db.scrivi(ops); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
+  // articoli già nel database con un prezzo diverso: si segnalano (l'aggiornamento del database è un passo a parte)
+  const perCod = new Map(articoli.map((a) => [`${a.precodice}${a.codice}`, a]));
+  const diversi = S.catalogo.filter((x) => { const a = perCod.get(codiceArticolo(x)); return a && Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004; });
+  setTimeout(() => dialogo({
+    titolo: `Listino ${st.fornitore} caricato`,
+    html: `<ul class="riep"><li><b>${u.nuovi}</b> articoli nuovi</li><li><b>${u.aggiornati.length}</b> con il prezzo cambiato</li><li>${u.invariati} invariati</li>
+      ${u.tolti.length ? `<li><b>${u.tolti.length}</b> non più nel listino (tolti dalla biblioteca)</li>` : ""}</ul>
+      ${diversi.length ? `<div class="avviso"><b>${diversi.length} articoli del tuo database</b> hanno un prezzo diverso da questo listino.
+        <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(codiceArticolo(x)).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
+  }), 300);
+}
+/* Impostazioni di un fornitore: precodice, GMA senza famiglia, famiglie → GMA. */
+function impostaFornitore(nome) {
+  const p = profiloDi(nome);
+  const fam = [...new Set(S.bib.filter((a) => a.fornitore === nome).map((a) => a.famiglia).filter(Boolean))].sort();
+  dialogo({
+    titolo: `Impostazioni ${nome}`,
+    html: `<div class="row"><label class="f">Precodice per Oracle<input id="fi-pre" value="${esc(p.precodice || "")}" style="width:110px"></label>
+      <label class="f">GMA degli articoli senza famiglia<input id="fi-gma" list="fi-gmas" value="${esc(p.gmaDefault || "")}" style="width:140px"></label></div>
+      ${fam.length ? `<div class="tbl-wrap" style="max-height:300px;margin-top:10px"><table><thead><tr><th>Famiglia</th><th>GMA</th></tr></thead><tbody>
+        ${fam.map((f) => `<tr><td class="mono">${esc(f)}</td><td><input class="cond" data-fi-fam="${esc(f)}" list="fi-gmas" value="${esc(p.famiglie?.[f] || "")}" style="width:140px"></td></tr>`).join("")}</tbody></table></div>` : ""}
+      <datalist id="fi-gmas">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>
+      <p class="muted small">Il precodice cambia il codice Oracle degli articoli della biblioteca. Gli sconti standard si impostano in “Sconti GMA”.</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    async onConferma(v, d) {
+      const famiglie = {};
+      $$("[data-fi-fam]", d).forEach((x) => { if (x.value.trim()) famiglie[x.dataset.fiFam] = x.value.trim(); });
+      const pre = $("#fi-pre", d).value.trim();
+      const prof = { ...p, nome, precodice: pre, gmaDefault: $("#fi-gma", d).value.trim(), famiglie };
+      const ops = [{ tipo: "set", coll: COLL.cfg, id: "fornitori", data: { lista: [...S.fornitori.filter((f) => f.nome !== nome), prof] } }];
+      if (pre !== (p.precodice || "")) ops.push(...opsBib(nome, S.bib.filter((a) => a.fornitore === nome).map((a) => ({ ...a, precodice: pre }))));
+      await db.scrivi(ops);
+    },
+  });
+}
+/* Sconto standard di ogni GMA (vale per gli articoli della biblioteca). */
+$("#b-sconti").addEventListener("click", () => {
+  const righe = S.gmv.slice().sort((a, b) => a.codice.localeCompare(b.codice));
+  dialogo({
+    titolo: "Sconti standard per GMA", largo: true,
+    html: `<p class="muted small" style="margin-top:0">Sconto di acquisto standard di ogni GMA, usato per gli articoli che vengono dalla biblioteca. Più sconti in cascata con il + (es. <code>50+10</code>); un numero negativo è un ricarico.</p>
+      <div class="row" style="margin-bottom:6px"><input id="sg-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
+      <div class="tbl-wrap" style="max-height:420px"><table><thead><tr><th>GMA</th><th>Fornitore</th><th>Sconto standard %</th></tr></thead><tbody id="sg-righe">
+      ${righe.map((g) => `<tr data-sg="${esc(g.codice)}"><td class="mono"><b>${esc(g.codice)}</b></td><td>${esc(g.fornitore || "")}</td>
+        <td><input class="cond" data-sg-sc="${esc(g.codice)}" value="${esc(g.sconto || "")}" placeholder="—" style="width:120px"></td></tr>`).join("")}</tbody></table></div>
+      <div class="row" style="margin-top:8px"><input id="sg-nuovo" placeholder="nuovo GMA" style="width:130px"><input id="sg-nuovo-f" placeholder="fornitore"><input id="sg-nuovo-s" placeholder="sconto" style="width:90px"></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    onApri(d) {
+      $("#sg-cerca", d).addEventListener("input", (e) => { const q = e.target.value.toLowerCase(); $$("#sg-righe tr", d).forEach((tr) => { tr.hidden = !!q && !tr.textContent.toLowerCase().includes(q); }); });
+    },
+    async onConferma(v, d) {
+      const lista = S.gmv.map((g) => ({ ...g }));
+      for (const x of $$("[data-sg-sc]", d)) {
+        const t = x.value.trim().replace(/\s+/g, "");
+        if (t && !testoValido(t)) { toast(`Sconto non valido per ${x.dataset.sgSc}.`); x.focus(); return false; }
+        const g = lista.find((y) => y.codice === x.dataset.sgSc);
+        if (t) g.sconto = t; else delete g.sconto;
+      }
+      const n = $("#sg-nuovo", d).value.trim();
+      if (n && !lista.some((g) => g.codice === n)) lista.push({ codice: n, fornitore: $("#sg-nuovo-f", d).value.trim(), ...($("#sg-nuovo-s", d).value.trim() ? { sconto: $("#sg-nuovo-s", d).value.trim() } : {}) });
+      await db.salva(COLL.cfg, "gmv", { lista });
+    },
+  });
+});
+
 /* ================= Copia di sicurezza ================= */
 $("#scarica-backup").addEventListener("click", () => {
   const dati = {
@@ -2142,4 +2633,4 @@ $("#file-backup").addEventListener("change", async (e) => {
 });
 
 // per i test automatici
-window.__app = { S, calcolaOfferta, opzCap };
+window.__app = { S, calcolaOfferta, opzCap, BIB };

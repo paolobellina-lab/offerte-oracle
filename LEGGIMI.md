@@ -51,6 +51,25 @@ Le offerte salvate con il vecchio modello (tipo offerta, DA ORACLE/DA EXCEL) si 
 
 Unica differenza voluta: il controllo cartellino dell'attività tecnica confronta il **prezzo a giornata** con la tariffa del cliente. L'Excel invece usava il prezzo di tutti i giorni.
 
+## Biblioteca (listini fornitore)
+
+La biblioteca raccoglie i listini dei fornitori. Gli articoli restano nascosti finché non li usi, così il database non si riempie di articoli che servono di rado.
+
+- **Carica listino** (pagina Biblioteca): Excel (.xlsx) o CSV.
+  - L'app trova la riga delle intestazioni e propone le colonne: codice, modello, descrizione, prezzo, prezzo netto, sconto, famiglia di sconto, GMA, unità di misura, moltiplicatore.
+  - Il formato **METEL** si riconosce da solo, moltiplicatore compreso.
+  - Nei listini a più fogli o a sezioni il nome del foglio o della sezione diventa il sottocapitolo.
+  - Scegli il **precodice per Oracle** e abbini le **famiglie di sconto ai GMA**, con lo sconto standard di ogni GMA.
+  - Tutto resta salvato nel profilo del fornitore: la volta dopo basta "Aggiorna listino".
+- **Ricaricare un listino**: gli articoli si aggiornano per codice, i nuovi si aggiungono e quelli spariti si tolgono. Ti vengono segnalati gli articoli del database con un prezzo diverso.
+- **Da decidere**: se il listino indica per un articolo uno sconto (o un prezzo netto) o un GMA diversi da quelli impostati, l'articolo è "da decidere". Scegli voce per voce (GMA o listino), oppure per tutti insieme.
+- **Sconti GMA**: lo sconto di acquisto standard di ogni GMA (es. `50+10`).
+- **Nell'offerta** (pagina Righe):
+  - cercando un codice che non è nel database, sotto compaiono i risultati della biblioteca;
+  - con il pulsante **Biblioteca** (Alt+4) la sfogli a tutta pagina;
+  - **Aggiungi…** chiede quantità, capitolato e note, e ogni volta se mettere l'articolo anche nel database (capitolo e sottocapitolo).
+- PDF: in arrivo; per ora usa Excel o CSV (o incolla le righe in un file .csv).
+
 ## Come sono organizzati i dati (Firestore)
 
 | Collezione | Contenuto |
@@ -58,6 +77,7 @@ Unica differenza voluta: il controllo cartellino dell'attività tecnica confront
 | `oracle_catalogo` | Articoli, a blocchi per capitolo (un documento contiene centinaia di articoli: si consumano poche letture) |
 | `oracle_config` | `capitoli` (nome, ricarico automatico, ordine) e `gmv` (codice, fornitore) |
 | `oracle_clienti` | Ragione sociale, codice, tariffa attività tecnica, sconti di cartellino per GMV |
+| `oracle_biblioteca` | Articoli dei listini fornitore, a blocchi per fornitore (si leggono solo quando servono) |
 | `oracle_offerte` | Testata dell'offerta e i suoi capitoli; ogni capitolo ha condizioni proprie e le righe (con una copia dei dati dell'articolo) |
 
 Le righe dell'offerta conservano una copia del prezzo e degli sconti. Così, se il catalogo cambia, le offerte già fatte non si muovono. Il pulsante **Aggiorna prezzi dal catalogo** le riallinea quando vuoi.
