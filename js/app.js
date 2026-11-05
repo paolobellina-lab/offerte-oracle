@@ -725,9 +725,9 @@ function disegnaOffertaIn(cambioSub) {
   }
   $("#o-totali").innerHTML = `
     <div class="kpi kpi-main"><span>${impOfferta(o) === "listino" ? "Totale listino" : "Venduto"}</span><span class="big">${euro(venduto)}</span></div>
-    <div class="kpi"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
-    <div class="kpi"><span>${impOfferta(o) === "listino" ? "Sconto di listino medio" : "Margine"}</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
-    <div class="kpi"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>
+    ${impOfferta(o) === "listino" ? "" : `<div class="kpi"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
+    <div class="kpi"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
+    <div class="kpi"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>`}
     <div class="kpi"><span>Capitoli · righe</span><span class="big">${o.capitoli.length} · ${righe}</span></div>
     ${o.cliente ? `<div class="kpi"><span>Cartellino ${esc(cli?.nome || "")}</span><span>${
       fuori ? `<span class="badge bad">${fuori} GMV fuori cartellino</span>` : `<span class="badge ok">nessun problema</span>`}</span></div>` : ""}`;
@@ -749,8 +749,8 @@ function disegnaOffertaIn(cambioSub) {
   $(".cap-testa").hidden = S.sub !== "prezzi";
   $("#c-totali").innerHTML = (S.sub !== "prezzi" ? "" : `
     <span class="mini-kpi"><span>${c.imp === "listino" ? "Totale listino" : "Venduto"}</span><b>${euro(rc.venduto)}</b></span>
-    <span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
-    <span class="mini-kpi"><span>${c.imp === "listino" ? "Sconto di listino medio" : "Margine"}</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>
+    ${c.imp === "listino" ? "" : `<span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
+    <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>`}
     <span class="mini-kpi"><span>Condizioni</span><b>${esc(descrCondizioni(c))}</b></span>`);
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
   for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
@@ -765,31 +765,35 @@ function disegnaOffertaIn(cambioSub) {
 function descrCondizioni(c) {
   const k = condizioni(c);
   const conExtra = k.acq.gen || Object.keys(k.acq.gma).length;
-  if (k.imp === "listino") return `Listino riparametrizzato · Acq. ${conExtra ? "con condizioni proprie" : "standard"} · Oracle: ${OUT_PREZZO[k.out.prezzo].toLowerCase()}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
+  if (k.imp === "listino") return `Listino riparametrizzato · Acq. ${conExtra ? "con condizioni proprie" : "standard"} · Oracle: ${k.out.prezzo === "acquisto" ? "acquisto" : "listino"}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
   return `Acq. ${conExtra ? "con condizioni proprie" : "standard"} · Vend. ${k.ven.modo === "ricarico" ? "ricarico" : "listino/sconto"} · Oracle: ${OUT_PREZZO[k.out.prezzo].toLowerCase()}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
 }
 /* --- Riepilogo dell'offerta (ex ANALISI PACCHETTO) --- */
 function disegnaRiepilogo() {
   const o = S.off, cli = clienteOff();
   const tot = { venduto: 0, acquistato: 0, attV: 0, matV: 0, righe: 0 };
+  const lisO = impOfferta(o) === "listino";
+  $("#riepilogo-capitoli").closest("table").classList.toggle("modo-listino", lisO);
+  $("#rc-vend").textContent = lisO ? "Listino" : "Venduto";
+  $("#rc-nota").hidden = lisO;
   const righe = o.capitoli.map((c) => {
     const r = riepilogoCapitolo(c, opzCap(c));
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
     tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
     return `<tr><td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button></td>
       <td class="small nowrap">${esc(descrCondizioni(c))}</td><td class="num">${r.righe}</td>
-      <td class="num"><b>${euro(r.venduto)}</b></td><td class="num">${euro(r.acquistato)}</td>
+      <td class="num"><b>${euro(r.venduto)}</b></td><td class="num solo-av">${euro(r.acquistato)}</td>
       <td class="num">${euro(r.materiale.venduto)}</td><td class="num">${euro(r.attivita.venduto)}</td>
-      <td class="num">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
-      <td class="num">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
+      <td class="num solo-av">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
+      <td class="num solo-av">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td>${!cli ? "" : fuori ? `<span class="badge bad">${fuori} fuori</span>` : '<span class="badge ok">OK</span>'}</td>
       <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"}>Excel Oracle</button>
         <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
   $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
-      <td class="num">${euro(tot.venduto)}</td><td class="num">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>
-      <td class="num">${tot.acquistato ? pctTxt(ricaricoPct(tot.venduto, tot.acquistato)) || "0%" : ""}</td>
-      <td class="num">${tot.venduto ? pctTxt(marginePct(tot.venduto, tot.acquistato)) || "0%" : ""}</td><td></td><td></td></tr>`
+      <td class="num">${euro(tot.venduto)}</td><td class="num solo-av">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>
+      <td class="num solo-av">${tot.acquistato ? pctTxt(ricaricoPct(tot.venduto, tot.acquistato)) || "0%" : ""}</td>
+      <td class="num solo-av">${tot.venduto ? pctTxt(marginePct(tot.venduto, tot.acquistato)) || "0%" : ""}</td><td></td><td></td></tr>`
     : `<tr><td colspan="11" class="vuoto">Nessun capitolo: aggiungine uno con “+ Aggiungi capitolo”.</td></tr>`;
   $("#scarica-tutti").disabled = !tot.righe;
 }

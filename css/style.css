@@ -762,3 +762,4 @@ tr.bib-testa td { font-weight: 700; }
 #o-imp { flex-wrap: nowrap; } #o-imp button { white-space: nowrap; }
 #dlg .grid-set > label.f { justify-content: flex-end; }
 #o-imp { max-width: none; }
+table.modo-listino .solo-av { display: none; }
