@@ -210,6 +210,11 @@
 
         <!-- PAGINA 2: SCONTI E RICARICHI + RIEPILOGO -->
         <div id="s-prezzi" hidden>
+          <div class="card row imp-card" style="gap:14px;align-items:center">
+            <span class="muted small" style="font-weight:600">Impostazione del capitolo</span>
+            <div class="seg" id="c-imp"></div>
+            <span class="muted small grow" id="c-imp-nota"></span>
+          </div>
           <div class="cond-grid">
             <div class="card cond-card" id="c-acq">
               <h3 class="titolo-sez">Condizioni di acquisto</h3>
@@ -222,7 +227,7 @@
                 <code>15</code> = sconto del 15%, <code>-25</code> = sconto negativo (ricarico del 25%). Una riga GMA vuota prende il Generale.</p>
             </div>
             <div class="card cond-card">
-              <h3 class="titolo-sez">Condizioni di vendita</h3>
+              <h3 class="titolo-sez" id="cond-ven-titolo">Condizioni di vendita</h3>
               <div class="seg" id="c-ven-modo"></div>
               <div class="tbl-wrap cond-tab"><table>
                 <thead><tr><th>GMA</th><th>Fornitore</th><th><span id="cond-ven-std">Standard</span> <span class="muted">·</span> <span id="cond-ven-extra">Extra</span> %</th></tr></thead>
@@ -239,7 +244,7 @@
           <h3 class="titolo-sez">Riepilogo per GMA</h3>
           <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. Il controllo cartellino confronta lo sconto sul listino con quello del cliente.</p>
           <div class="tbl-wrap"><table>
-            <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Acquistato</th><th class="num">Venduto</th><th class="num">Peso</th>
+            <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Acquistato</th><th class="num" id="rg-vend">Venduto</th><th class="num">Peso</th>
               <th class="num">Ricarico</th><th class="num">Margine</th><th class="num">Sconto sul listino</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
             <tbody id="righe-gmv"></tbody>
           </table></div>
@@ -249,7 +254,7 @@
           <div class="tbl-wrap"><table>
             <thead><tr><th class="num">Linea</th><th>Codice</th><th>Articolo</th><th class="num">Q.tà</th><th class="num">Listino acq.</th>
               <th class="num">Sc. acquisto</th><th class="num">Acquisto</th><th class="num" id="rr-ven">Ricarico</th>
-              <th class="num">Vendita</th><th class="num">Totale</th><th class="num">Sc. sul listino</th><th>GMA</th></tr></thead>
+              <th class="num" id="rr-vend">Vendita</th><th class="num">Totale</th><th class="num">Sc. sul listino</th><th>GMA</th></tr></thead>
             <tbody id="riepilogo-righe"></tbody>
           </table></div>
         </div>

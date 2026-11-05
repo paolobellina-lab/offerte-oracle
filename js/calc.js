@@ -5,6 +5,8 @@ export const CAMPI_SCONTO = ["sc3", "sc4", "sc5", "aum1"]; // colonne Q R S T de
 // Condizioni del capitolo (pagina Prezzi) e scelte dell'output (pagina Oracle)
 export const MODI_ACQ = { standard: "Standard", extra: "Extra" };
 export const MODI_VEN = { ricarico: "Ricarico", listino: "Listino / sconto" };
+// impostazione del capitolo: acquisto e vendita, oppure solo un listino riparametrizzato per tutti gli articoli
+export const IMPOSTAZIONI = { av: "Acquisto / vendita", listino: "Listino" };
 export const OUT_PREZZO = { vendita: "Vendita", acquisto: "Acquisto" };
 export const OUT_FORMATO = { sconti: "Sconti", netti: "Prezzi netti" };
 
@@ -128,6 +130,8 @@ export function condizioni(cap) {
     acq: { modo: c.acq?.modo === "extra" ? "extra" : "standard", gen: c.acq?.gen || "", gma: c.acq?.gma || {} },
     ven: { modo: c.ven?.modo === "listino" ? "listino" : "ricarico", ricGen: c.ven?.ricGen || "", ricGma: c.ven?.ricGma || {}, scGen: c.ven?.scGen || "", scGma: c.ven?.scGma || {} },
     out: { prezzo: c.out?.prezzo === "acquisto" ? "acquisto" : "vendita", formato: c.out?.formato === "netti" ? "netti" : "sconti" },
+    imp: c.imp === "listino" ? "listino" : "av",
+    lis: { gen: c.lis?.gen || "", gma: c.lis?.gma || {} },
   };
 }
 /* Frazione → testo in percentuale ("0.125" → "12,5"). */
@@ -180,8 +184,20 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const acqQta = att && gg > 0 ? gg * num(r.qta) : num(r.qta);
   const acq = { unitario: acqUnit, qta: acqQta, totale: acqUnit * acqQta, fattore: fAcq, fonte: fonteAcq };
   // vendita: ricarico sull'acquisto, oppure sconto sul listino
-  let perPezzo, ric = null, fVen = null, baseVen, fonteVen;
-  if (k.ven.modo === "ricarico") {
+  let perPezzo, ric = null, fVen = null, baseVen, fonteVen, scLis = null;
+  if (k.imp === "listino") {
+    // listino riparametrizzato: il prezzo di listino è quello che, con lo sconto di listino, dà il prezzo di acquisto.
+    // Standard = riparametrizzazione dell'articolo (colonna P del database). Attività: arrotondata alle centinaia come nell'Excel.
+    const f0L = 1 - num(r.riparam);
+    const spG = valido(leggiSconti(k.lis.gma[g])), spC = generalePer(att, k.lis.gen);
+    const fL = spG ? applica(spG, f0L) : spC ? applica(spC, f0L) : f0L;
+    fonteVen = spG ? "gma" : spC ? "generale" : "standard";
+    scLis = 1 - fL;
+    const costo = acqUnit * (att && gg > 0 ? gg : 1);
+    baseVen = costo;
+    perPezzo = fL > 0 ? costo / fL : costo;
+    if (att && gg > 0) perPezzo = Math.ceil(Math.round(perPezzo / 100 * 1e9) / 1e9) * 100;
+  } else if (k.ven.modo === "ricarico") {
     const auto = num(ricarichi[r.capitolo]);
     const rG = leggiRicarico(k.ven.ricGma[g], auto), rC = leggiRicarico(k.ven.ricGen, auto);
     ric = rG ?? rC ?? auto;
@@ -200,7 +216,7 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const qta = giornate ? gg * num(r.qta) : num(r.qta);
   // sconto complessivo rispetto al listino acquisto (quello che Oracle conosce): serve al cartellino
   const scontoListino = !att && la ? 1 - perPezzo / la : null;
-  return { unitario, qta, totale: unitario * qta, base: baseVen, ric, fVen, fonteVen, scontoListino, acq, f0 };
+  return { unitario, qta, totale: unitario * qta, base: baseVen, ric, fVen, fonteVen, scontoListino, acq, f0, scLis };
 }
 
 /* Valori da mandare in Oracle per una riga: vendita o acquisto, come scelto nell'output. */
@@ -348,12 +364,20 @@ export function vendutaPerTarget(cap, target, opz = {}) {
   let fisso = 0, variabile = 0;
   for (const x of righe) {
     const g = x.riga.gmv || "";
-    if (k.ven.modo === "ricarico") {
+    if (k.imp === "listino") {
+      if (isAttivita(x.riga) || valido(leggiSconti(k.lis.gma[g]))) fisso += x.c.totale; else variabile += x.c.acq.totale;
+    } else if (k.ven.modo === "ricarico") {
       if (leggiRicarico(k.ven.ricGma[g]) !== null) fisso += x.c.totale; else variabile += x.c.acq.totale;
     } else if (isAttivita(x.riga) || valido(leggiSconti(k.ven.scGma[g]))) fisso += x.c.totale; // il target scrive uno sconto "al posto": l'attività non cambia
     else variabile += num(x.riga.listinoAcquisto) * x.c.qta;
   }
   if (!variabile) return null;
+  if (k.imp === "listino") {
+    const resto = num(target) - fisso;
+    if (resto <= 0) return null;
+    const v = 1 - variabile / resto; // sconto di listino: acquisto / (1 - sconto) = listino
+    return Number.isFinite(v) ? { campo: "lisGen", valore: v } : null;
+  }
   const valore = k.ven.modo === "ricarico" ? (num(target) - fisso) / variabile - 1 : 1 - (num(target) - fisso) / variabile;
   return Number.isFinite(valore) ? { campo: k.ven.modo === "ricarico" ? "ricGen" : "scGen", valore } : null;
 }
