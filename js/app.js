@@ -1578,9 +1578,11 @@ function disegnaGmv(c, rc) {
     conGma.map(([g]) => riga(g, htmlCondizione({ dove: "acqGma", gma: g, val: c.acq.gma[g], tipo: "sc", std: stdDi(g), ...opzGen(c.acq.gen, g) }))).join("");
   const ricStd = pctTesto(ricAutoCap(c));
   const lisM = k.imp === "listino";
-  const stdRip = (g) => { const t = new Set(righeCap.filter((r) => (r.gmv || "") === g).map((r) => pctTesto(num(r.riparam)))); return t.size === 1 ? [...t][0] : ""; };
+  // standard dello sconto di listino: lo sconto di acquisto del GMA con più righe (uguale per tutti); attività: nessuno
+  const lisStd = pctTesto(k.lis.std || 0);
+  const stdRip = (g) => (soloAtt(g) ? "0" : lisStd);
   $("#cond-ven").innerHTML = lisM
-    ? riga("", htmlCondizione({ dove: "lisGen", val: c.lis.gen, tipo: "sc", phStd: "standard" }), true) +
+    ? riga("", htmlCondizione({ dove: "lisGen", val: c.lis.gen, tipo: "sc", std: lisStd }), true) +
       conGma.map(([g]) => riga(g, htmlCondizione({ dove: "lisGma", gma: g, val: c.lis.gma[g], tipo: "sc", std: stdRip(g), ...opzGen(c.lis.gen, g) }))).join("")
     : ricarico
     ? riga("", htmlCondizione({ dove: "ricGen", val: c.ven.ricGen, tipo: "ric", std: ricStd }), true) +
@@ -1591,7 +1593,7 @@ function disegnaGmv(c, rc) {
   $("#cond-acq-std").classList.toggle("barrato", !!$("#cond-acq input.std.mod"));
   $("#cond-ven-std").classList.toggle("barrato", !!$("#cond-ven input.std.mod"));
   $("#rg-vend").textContent = lisM ? "Listino" : "Venduto";
-  $("#cond-ven-std").textContent = lisM ? "Sconto di listino (riparametrizzazione)" : ricarico ? "Ricarico automatico" : "Standard";
+  $("#cond-ven-std").textContent = lisM ? `Sconto di listino (standard: sconto di acquisto di ${k.lis.stdGma || "—"}, il GMA con più righe)` : ricarico ? "Ricarico automatico" : "Standard";
   $("#cond-ven-extra").textContent = lisM ? "Extra" : ricarico ? "Ricarichi extra" : "Extra";
   // riepilogo per GMA (solo lettura)
   const esiti = new Map(controlloCartellino(c, clienteOff(), opzCap(c)).map((x) => [x.gmv, x]));

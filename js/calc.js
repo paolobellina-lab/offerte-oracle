@@ -126,13 +126,32 @@ const generalePer = (att, testo) => { const sp = valido(leggiSconti(testo)); ret
 /* Condizioni del capitolo, sempre complete (anche per i capitoli salvati con il vecchio modello). */
 export function condizioni(cap) {
   const c = cap.acq && cap.ven ? cap : migraCondizioni(cap);
-  return {
+  const k = {
     acq: { modo: c.acq?.modo === "extra" ? "extra" : "standard", gen: c.acq?.gen || "", gma: c.acq?.gma || {} },
     ven: { modo: c.ven?.modo === "listino" ? "listino" : "ricarico", ricGen: c.ven?.ricGen || "", ricGma: c.ven?.ricGma || {}, scGen: c.ven?.scGen || "", scGma: c.ven?.scGma || {} },
     out: { prezzo: c.out?.prezzo === "acquisto" ? "acquisto" : "vendita", formato: c.out?.formato === "netti" ? "netti" : "sconti" },
     imp: c.imp === "listino" ? "listino" : "av",
     lis: { gen: c.lis?.gen || "", gma: c.lis?.gma || {} },
   };
+  if (k.imp === "listino") Object.assign(k.lis, stdListino(cap.righe || [], k));
+  return k;
+}
+/* Listino: lo sconto di listino standard è lo sconto di acquisto del GMA con più righe nel capitolo
+   (il più frequente tra le sue righe). Così gli articoli di quel GMA restano al loro listino e gli altri
+   si riparametrizzano sullo stesso sconto. */
+export function stdListino(righe, k) {
+  const perGma = new Map();
+  for (const r of righe) {
+    if (!num(r.qta) || isAttivita(r) || !r.gmv) continue;
+    if (!perGma.has(r.gmv)) perGma.set(r.gmv, []);
+    perGma.get(r.gmv).push(r);
+  }
+  const [gma, rr] = [...perGma.entries()].sort((a, b) => b[1].length - a[1].length)[0] || [];
+  if (!gma) return { std: 0, stdGma: "" };
+  const freq = new Map();
+  for (const r of rr) { const f = Math.round(fattoreAcquisto(r, k).f * 1e8) / 1e8; freq.set(f, (freq.get(f) || 0) + 1); }
+  const f = [...freq.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return { std: Math.round((1 - f) * 1e8) / 1e8, stdGma: gma };
 }
 /* Frazione → testo in percentuale ("0.125" → "12,5"). */
 export const pctTesto = (v) => String(Math.round(num(v) * 1e8) / 1e6).replace(".", ",");
@@ -168,18 +187,23 @@ export function migraCondizioni(cap) {
    con questa scelta va in Oracle come valore giornaliero × numero di giorni. In acquisto è sempre così. */
 export const aGiornate = (r) => isAttivita(r) && !!r.aGiornate && num(r.giorni) > 0;
 
+/* Fattore di acquisto di una riga: standard del database o condizioni della pagina Prezzi. */
+export function fattoreAcquisto(r, k) {
+  const att = isAttivita(r), g = r.gmv || "", f0 = fattoreStandard(r);
+  const spG = valido(leggiSconti(k.acq.gma[g])), spC = generalePer(att, k.acq.gen);
+  if (spG) return { f: applica(spG, f0), fonte: "gma" };
+  if (spC) return { f: applica(spC, f0), fonte: "generale" };
+  return { f: f0, fonte: "standard" };
+}
+
 /* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO_DATABASE: 0.28, ... } (ricarico automatico).
    Restituisce i valori di vendita (unitario, qta, totale) e quelli di acquisto in "acq". */
 export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const att = isAttivita(r), g = r.gmv || "";
   const gg = num(r.giorni), la = num(r.listinoAcquisto);
   const f0 = fattoreStandard(r);
-  // acquisto: standard del database, oppure le condizioni extra (del GMA o generali)
-  let fAcq = f0, fonteAcq = "standard";
-  { // le condizioni di acquisto scritte nella pagina Prezzi (vuote = standard del database)
-    const spG = valido(leggiSconti(k.acq.gma[g])), spC = generalePer(att, k.acq.gen);
-    if (spG) { fAcq = applica(spG, f0); fonteAcq = "gma"; } else if (spC) { fAcq = applica(spC, f0); fonteAcq = "generale"; }
-  }
+  // acquisto: standard del database, oppure le condizioni scritte nella pagina Prezzi (del GMA o generali)
+  const { f: fAcq, fonte: fonteAcq } = fattoreAcquisto(r, k);
   const acqUnit = la * fAcq; // per l'attività: al giorno
   const acqQta = att && gg > 0 ? gg * num(r.qta) : num(r.qta);
   const acq = { unitario: acqUnit, qta: acqQta, totale: acqUnit * acqQta, fattore: fAcq, fonte: fonteAcq };
@@ -188,7 +212,7 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   if (k.imp === "listino") {
     // listino riparametrizzato: il prezzo di listino è quello che, con lo sconto di listino, dà il prezzo di acquisto.
     // Standard = riparametrizzazione dell'articolo (colonna P del database). Attività: arrotondata alle centinaia come nell'Excel.
-    const f0L = 1 - num(r.riparam);
+    const f0L = att ? 1 - num(r.riparam) : 1 - (k.lis.std || 0);
     const spG = valido(leggiSconti(k.lis.gma[g])), spC = generalePer(att, k.lis.gen);
     const fL = spG ? applica(spG, f0L) : spC ? applica(spC, f0L) : f0L;
     fonteVen = spG ? "gma" : spC ? "generale" : "standard";

@@ -40,7 +40,7 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
 
 - **Acquisto / vendita:** tutto quello descritto sopra.
 - **Listino:** non c'è una vendita, c'è solo un listino per tutti gli articoli (listino riparametrizzato).
-  - Al posto delle condizioni di vendita ci sono le **condizioni di listino**: lo sconto di listino, generale e per GMA (standard = la riparametrizzazione dell'articolo nel database).
+  - Al posto delle condizioni di vendita ci sono le **condizioni di listino**: lo sconto di listino, generale e per GMA (standard = lo sconto di acquisto del GMA con più righe nel capitolo: i suoi articoli restano al loro listino, gli altri si riparametrizzano).
   - Il prezzo di listino di ogni articolo = prezzo di acquisto / (1 − sconto di listino): applicando lo sconto si torna al prezzo di acquisto.
   - Attività tecnica: arrotondata alle centinaia, come nell'Excel.
   - Il prezzo target aggiunge nella riga Generale uno sconto di listino extra (la prima cella non cambia).
