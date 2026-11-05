@@ -474,7 +474,19 @@ function disegnaTestata() {
   $("#o-note").value = o.note || "";
   $("#o-cliente").innerHTML = `<option value="">— nessun cliente (niente controllo cartellino) —</option>` +
     S.clienti.map((c) => `<option value="${esc(c.id)}" ${c.id === o.cliente ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
+  seg($("#o-imp"), Object.keys(IMPOSTAZIONI), impOfferta(o), (v) => IMPOSTAZIONI[v]);
+  $("#o-imp-nota").textContent = impOfferta(o) === "listino"
+    ? "Listino: per ogni capitolo si definisce uno sconto di listino e si ricalcola il prezzo di listino di ogni articolo (riparametrizzato) in modo che, scontato, dia il prezzo di acquisto."
+    : "Acquisto / vendita: ogni capitolo ha condizioni di acquisto e condizioni di vendita (ricarico o sconto sul listino).";
 }
+/* Impostazione dei prezzi: vale per tutta l'offerta (tutti i capitoli). */
+const impOfferta = (o) => o.imp || (o.capitoli.length && o.capitoli.every((c) => c.imp === "listino") ? "listino" : "av");
+$("#o-imp").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]"); if (!b || !S.off) return;
+  S.off.imp = b.dataset.v;
+  for (const c of S.off.capitoli) { aggiornaCondizioni(c); c.imp = b.dataset.v; }
+  modificata(); disegnaTestata(); disegnaOfferta();
+});
 $("#o-nome").addEventListener("input", (e) => { S.off.nome = e.target.value; modificata(); });
 $("#o-note").addEventListener("input", (e) => { S.off.note = e.target.value; modificata(); });
 $("#o-cliente").addEventListener("change", (e) => { S.off.cliente = e.target.value; modificata(); disegnaOfferta(); });
@@ -522,7 +534,7 @@ $("#add-cap").addEventListener("change", (e) => {
   const nome = e.target.value; if (!nome) return;
   const modello = capAtt() || S.off.capitoli[S.off.capitoli.length - 1];
   // il nuovo capitolo parte con tipo offerta e prezzi del capitolo attuale, ma senza sconti
-  S.off.capitoli.push(nuovoCapitolo(nome, modello ? { acq: modello.acq, ven: modello.ven, out: modello.out, imp: modello.imp, sottocapitoli: modello.sottocapitoli } : {}));
+  S.off.capitoli.push(nuovoCapitolo(nome, { ...(modello ? { acq: modello.acq, ven: modello.ven, out: modello.out, sottocapitoli: modello.sottocapitoli } : {}), imp: impOfferta(S.off) }));
   S.capAtt = nome; S.sub = "righe"; S.sel = new Set();
   menuAperto(false);
   modificata(); disegnaOfferta(true);
@@ -534,13 +546,10 @@ function disegnaImpostCapitolo() {
   const c = capAtt(); if (!c) return;
   aggiornaCondizioni(c);
   seg($("#c-ven-modo"), Object.keys(MODI_VEN), c.ven.modo, (v) => MODI_VEN[v]);
-  seg($("#c-imp"), Object.keys(IMPOSTAZIONI), c.imp, (v) => IMPOSTAZIONI[v]);
   const lis = c.imp === "listino";
   $("#c-ven-modo").hidden = lis;
   $("#cond-ven-titolo").textContent = lis ? "Condizioni di listino" : "Condizioni di vendita";
-  $("#c-imp-nota").textContent = lis
-    ? "Listino: non c'è una vendita. Con lo sconto di listino si ricalcola il prezzo di listino di ogni articolo (riparametrizzato) in modo che, scontato, dia il prezzo di acquisto."
-    : "Acquisto / vendita: prezzo di acquisto e prezzo di vendita (con ricarico o sconto sul listino).";
+
   seg($("#c-out-prezzo"), Object.keys(OUT_PREZZO), c.out.prezzo, (v) => (v === "vendita" && c.imp === "listino" ? "Listino" : OUT_PREZZO[v]));
   seg($("#c-out-formato"), Object.keys(OUT_FORMATO), c.out.formato, (v) => OUT_FORMATO[v]);
   seg($("#c-sottocap"), ["SI", "NO"], c.sottocapitoli ? "SI" : "NO");
@@ -558,7 +567,6 @@ function disegnaImpostCapitolo() {
 const suCap = (fn) => (e) => { const c = capAtt(); if (!c) return; aggiornaCondizioni(c); fn(c, e); };
 const suSeg = (fn) => suCap((c, e) => { const b = e.target.closest("button[data-v]"); if (b) { fn(c, b.dataset.v); modificata(); disegnaOfferta(); } });
 $("#c-ven-modo").addEventListener("click", suSeg((c, v) => (c.ven.modo = v)));
-$("#c-imp").addEventListener("click", suSeg((c, v) => (c.imp = v)));
 $("#c-out-prezzo").addEventListener("click", suSeg((c, v) => (c.out.prezzo = v)));
 $("#c-out-formato").addEventListener("click", suSeg((c, v) => (c.out.formato = v)));
 $("#c-sottocap").addEventListener("click", suSeg((c, v) => (c.sottocapitoli = v === "SI")));
@@ -716,9 +724,9 @@ function disegnaOffertaIn(cambioSub) {
     fuori += controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
   }
   $("#o-totali").innerHTML = `
-    <div class="kpi kpi-main"><span>Venduto</span><span class="big">${euro(venduto)}</span></div>
+    <div class="kpi kpi-main"><span>${impOfferta(o) === "listino" ? "Totale listino" : "Venduto"}</span><span class="big">${euro(venduto)}</span></div>
     <div class="kpi"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
-    <div class="kpi"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
+    <div class="kpi"><span>${impOfferta(o) === "listino" ? "Sconto di listino medio" : "Margine"}</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
     <div class="kpi"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>
     <div class="kpi"><span>Capitoli · righe</span><span class="big">${o.capitoli.length} · ${righe}</span></div>
     ${o.cliente ? `<div class="kpi"><span>Cartellino ${esc(cli?.nome || "")}</span><span>${

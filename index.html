@@ -101,7 +101,9 @@
           <label class="f wide">Cliente
             <select id="o-cliente"></select>
           </label>
+          <div class="f"><span>Prezzi dell'offerta</span><div class="seg" id="o-imp"></div></div>
         </div>
+        <p class="muted small" id="o-imp-nota" style="margin:8px 0 0"></p>
         <div class="totale-box" id="o-totali" style="margin-top:14px"></div>
       </div>
 
@@ -210,11 +212,6 @@
 
         <!-- PAGINA 2: SCONTI E RICARICHI + RIEPILOGO -->
         <div id="s-prezzi" hidden>
-          <div class="card row imp-card" style="gap:14px;align-items:center">
-            <span class="muted small" style="font-weight:600">Impostazione del capitolo</span>
-            <div class="seg" id="c-imp"></div>
-            <span class="muted small grow" id="c-imp-nota"></span>
-          </div>
           <div class="cond-grid">
             <div class="card cond-card" id="c-acq">
               <h3 class="titolo-sez">Condizioni di acquisto</h3>

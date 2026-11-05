@@ -759,3 +759,4 @@ th .barrato, #cond-acq-std.barrato, #cond-ven-std.barrato { color: var(--bad) !i
 tr.bib td { background: color-mix(in srgb, var(--accent-soft) 45%, var(--row)) !important; }
 tr.bib-testa td { font-weight: 700; }
 .btn.ghost { background: transparent; border-style: dashed; }
+#o-imp { flex-wrap: nowrap; } #o-imp button { white-space: nowrap; }
