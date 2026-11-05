@@ -198,16 +198,23 @@
             <div class="card cond-card" id="c-acq">
               <h3 class="titolo-sez">Condizioni di acquisto</h3>
               <div class="seg" id="c-acq-modo"></div>
-              <label class="f" style="margin-top:12px">Sconto di acquisto generale %<input id="c-acq-gen" class="cond" placeholder="standard del database"></label>
-              <p class="muted small cond-aiuto"><b>Standard</b> = sconti del database. <b>Extra</b>: <code>75+15</code> sconti in cascata al posto dello standard ·
-                <code>55</code> al posto dello standard · <code>+15</code> in aggiunta allo standard. Vuoto = standard.
-                Sull'attività tecnica il generale vale solo se è in aggiunta (<code>+3</code>).</p>
+              <div class="tbl-wrap cond-tab"><table>
+                <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Standard</th><th>Sconto di acquisto %</th></tr></thead>
+                <tbody id="cond-acq"></tbody>
+              </table></div>
+              <p class="muted small cond-aiuto"><b>Standard</b> = sconti del database. <b>Extra</b>: scrivi lo sconto e scegli
+                <b>in aggiunta</b> (es. standard 75, extra 15) oppure <b>al posto</b> dello standard (es. 55 invece di 75).
+                Una cella per sconto: compilata una, ne compare un'altra accanto per lo sconto successivo (in cascata).
+                In una cella <code>15</code> o <code>-15</code> = sconto, <code>+5</code> = aumento.
+                Vuoto: il GMA prende la riga Generale, il Generale prende lo standard. Sull'attività tecnica il generale vale solo se è in aggiunta.</p>
             </div>
             <div class="card cond-card">
               <h3 class="titolo-sez">Condizioni di vendita</h3>
               <div class="seg" id="c-ven-modo"></div>
-              <label class="f" id="c-ven-ric-box" style="margin-top:12px">Ricarico generale % (sull'acquisto)<input id="c-ven-ric" class="cond"></label>
-              <label class="f" id="c-ven-sc-box" style="margin-top:12px">Sconto al cliente generale % (sul listino acquisto)<input id="c-ven-sc" class="cond" placeholder="standard del database"></label>
+              <div class="tbl-wrap cond-tab"><table>
+                <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Standard</th><th id="cond-ven-tit">Ricarico %</th></tr></thead>
+                <tbody id="cond-ven"></tbody>
+              </table></div>
               <div class="row" style="margin-top:12px">
                 <label class="f">Prezzo target del capitolo €<input id="c-target" inputmode="decimal" style="width:150px" placeholder="es. 25000"></label>
                 <button class="btn" id="c-target-calcola" style="align-self:flex-end">Calcola il ricarico</button>
@@ -216,13 +223,11 @@
             </div>
           </div>
 
-          <h3 class="titolo-sez">Condizioni per GMA</h3>
-          <p class="muted small" style="margin-top:0">I valori scritti qui valgono solo per quel GMA e vincono su quelli generali (vuoto = generale). Si scrivono come sopra (<code>75+15</code>, <code>55</code>, <code>+15</code>).
-            Peso = quota del venduto del capitolo. Il controllo cartellino confronta lo sconto sul listino con quello del cliente.</p>
-          <div class="tbl-wrap"><table class="tab-gma">
-            <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Standard</th><th id="gma-acq">Sconto acquisto</th><th id="gma-ven">Ricarico vendita</th>
-              <th class="num">Righe</th><th class="num">Acquistato</th><th class="num">Venduto</th><th class="num">Peso</th><th class="num">Margine</th>
-              <th class="num">Sconto sul listino</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
+          <h3 class="titolo-sez">Riepilogo per GMA</h3>
+          <p class="muted small" style="margin-top:0">Peso = quota del venduto del capitolo. Il controllo cartellino confronta lo sconto sul listino con quello del cliente.</p>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Righe</th><th class="num">Acquistato</th><th class="num">Venduto</th><th class="num">Peso</th>
+              <th class="num">Ricarico</th><th class="num">Margine</th><th class="num">Sconto sul listino</th><th class="num">Cartellino</th><th>Controllo</th></tr></thead>
             <tbody id="righe-gmv"></tbody>
           </table></div>
 

@@ -25,17 +25,17 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
 
 - **Condizioni di acquisto: Standard / Extra.**
   - Standard: gli sconti del database (Sconto 3, 4, 5, Aumento 1 dell'articolo).
-  - Extra: uno sconto generale e, se serve, uno per GMA (quello del GMA vince). Si scrive così:
-    - `75+15`: sconti in cascata al posto dello standard;
-    - `55`: al posto dello standard;
-    - `+15`: in aggiunta allo standard;
-    - `0`: nessuno sconto;
-    - vuoto: standard.
+  - Extra: nel riquadro c'è una riga Generale e una riga per ogni GMA del capitolo (quella del GMA vince).
+  - Per ogni riga scegli **in aggiunta** allo standard (es. standard 75, extra 15) oppure **al posto** dello standard (es. 55 invece di 75).
+  - Una cella per sconto: compilata una, ne compare un'altra accanto per lo sconto successivo, in cascata.
+  - In una cella `15` o `-15` è uno sconto, `+5` è un aumento.
+  - Vuoto: il GMA prende la riga Generale, il Generale prende lo standard.
 - **Condizioni di vendita: Ricarico / Listino-sconto.**
   - Ricarico: vendita = acquisto × (1 + ricarico). Vale quello del GMA, poi il generale, poi il ricarico automatico del capitolo.
-  - Listino-sconto: vendita = listino acquisto con lo sconto al cliente, scritto come sopra (vuoto = standard del database).
+  - Listino-sconto: vendita = listino acquisto con lo sconto al cliente, con le stesse celle e la stessa scelta in aggiunta / al posto (vuoto = standard del database).
+  - Anche qui c'è una riga Generale e una per GMA; sotto i due riquadri c'è il riepilogo per GMA (acquistato, venduto, peso, ricarico, margine, cartellino).
   - Attività tecnica: parte dal prezzo di listino di tutti i giorni.
-- **Attività tecnica:** il generale vale solo se è "in aggiunta" (`+3`); per il resto cambia solo dal suo GMA.
+- **Attività tecnica:** il generale vale solo se è "in aggiunta"; per il resto cambia solo dal suo GMA.
 - **Prezzo target:** calcola il ricarico generale (o lo sconto generale) per arrivare al totale voluto.
 
 **Pagina Oracle:**

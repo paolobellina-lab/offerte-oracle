@@ -707,3 +707,24 @@ input.cond.errato { border-color: var(--bad) !important; background: var(--bad-s
 th.spento { opacity: .55; }
 .fonte { color: var(--accent); font-size: .7em; vertical-align: 2px; }
 .seg { align-self: flex-start; width: max-content; max-width: 100%; }
+/* campo sconto con scelta in aggiunta / al posto */
+.cond-box { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.cond-box input.cond { width: 110px; }
+#c-acq-gen-box .cond-box input.cond, #c-ven-sc-wrap .cond-box input.cond { width: 160px; }
+.mini-seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
+.mini-seg button { border: 0; background: var(--card-2); color: var(--muted); font: 600 .74rem/1 system-ui, sans-serif; padding: 6px 8px; cursor: pointer; white-space: nowrap; }
+.mini-seg button + button { border-left: 1px solid var(--line-strong); }
+.mini-seg button.on { background: var(--on-fondo, #bcd6f1); color: var(--accent-ink); }
+:root[data-theme="scuro"] .mini-seg button.on { background: #9fc3ea; color: #0c2238; }
+.cond-box.spento { opacity: .5; }
+div.f > span:first-child { font-size: .78rem; color: var(--label); font-weight: 600; }
+div.f { display: flex; flex-direction: column; gap: 4px; }
+.cond-box .celle { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.cond-box input.cond.cella { width: 62px !important; text-align: right; }
+.cond-box input.cond.cella:first-child:placeholder-shown { width: 150px !important; text-align: left; }
+.cond-tab { margin-top: 12px; }
+.cond-tab td { vertical-align: middle; }
+tr.cond-gen td { background: var(--accent-soft) !important; font-weight: 600; }
+.cond-tab input.cond:not(.cella) { width: 150px; }
+.cond-box .celle { flex-wrap: nowrap; }
+.cond-box .mini-seg { flex: none; }

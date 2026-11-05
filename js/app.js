@@ -530,16 +530,8 @@ function disegnaImpostCapitolo() {
   $("#c-linea").value = c.lineaPartenza ?? 10;
   $("#c-magazzino").value = c.magazzino ?? "BG";
   const extra = c.acq.modo === "extra", ricarico = c.ven.modo === "ricarico";
-  const gen = $("#c-acq-gen");
-  if (document.activeElement !== gen) gen.value = c.acq.gen || "";
-  gen.disabled = !extra;
   $("#c-acq").classList.toggle("spento", !extra);
-  $("#c-ven-ric-box").hidden = !ricarico;
-  $("#c-ven-sc-box").hidden = ricarico;
-  const vr = $("#c-ven-ric"), vs = $("#c-ven-sc");
-  if (document.activeElement !== vr) vr.value = c.ven.ricGen || "";
-  if (document.activeElement !== vs) vs.value = c.ven.scGen || "";
-  vr.placeholder = `automatico ${pctTxt(ricAutoCap(c)) || "0%"}`;
+  $("#cond-ven-tit").textContent = ricarico ? "Ricarico % (sull'acquisto)" : "Sconto al cliente % (sul listino acquisto)";
   $("#c-target-calcola").textContent = ricarico ? "Calcola il ricarico" : "Calcola lo sconto";
   $("#c-target-nota").textContent = ricarico ? "Imposta il ricarico generale per arrivare a quel totale (condizione a pacchetto)."
     : "Imposta lo sconto generale sul listino per arrivare a quel totale (condizione a pacchetto).";
@@ -561,7 +553,7 @@ function scriviCondizione(inp, ric, salva) {
   const t = inp.value.trim().replace(/\s+/g, "").replace(/%/g, "");
   if (!testoValido(t, ric)) {
     inp.classList.add("errato");
-    toast(ric ? "Ricarico non valido: scrivi per esempio 28 oppure 20+5." : "Sconto non valido: scrivi per esempio 75+15 (al posto dello standard), 55, +15 (in aggiunta allo standard) oppure 0.", 6000);
+    toast(ric ? "Ricarico non valido: scrivi per esempio 28 oppure 20+5." : "Sconto non valido: scrivi per esempio 15, 55 oppure 75+15.", 6000);
     return false;
   }
   inp.classList.remove("errato");
@@ -570,9 +562,70 @@ function scriviCondizione(inp, ric, salva) {
   modificata(); ridisegnaOfferta();
   return true;
 }
-$("#c-acq-gen").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, false, (t) => (c.acq.gen = t))));
-$("#c-ven-ric").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, true, (t) => (c.ven.ricGen = t))));
-$("#c-ven-sc").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, false, (t) => (c.ven.scGen = t))));
+/* Campo sconto: una cella per sconto (in cascata), più la scelta "in aggiunta / al posto" dello standard.
+   Si compila una cella e ne compare una nuova accanto. In una cella: 15 o -15 = sconto, +5 = aumento.
+   Nel capitolo si salva come testo: "+15+5" = in aggiunta, "55" o "75+15" = al posto ("-5" dentro = aumento). */
+const modoDi = (t, def) => (String(t || "").trim() ? (String(t).trim().startsWith("+") ? "agg" : "posto") : def);
+const termini = (t) => String(t || "").trim().replace(/^\+/, "").split("+").filter((x) => x !== "");
+const cellaDaTermine = (x) => (x.startsWith("-") ? "+" + x.slice(1) : x);  // aumento: in cella con il +
+const termineDaCella = (v) => {
+  const t = v.trim().replace(/\s+/g, "").replace(/%/g, "");
+  if (!t) return "";
+  if (t.startsWith("+")) return "-" + t.slice(1);   // +5 = aumento del 5%
+  if (t.startsWith("-")) return t.slice(1);          // -15 = sconto del 15%
+  return t;
+};
+function descrSconto(t) {
+  if (!String(t || "").trim()) return "";
+  return `${modoDi(t) === "agg" ? "in aggiunta" : "al posto"}: ${termini(t).map(cellaDaTermine).join(" · ")}%`;
+}
+const htmlCella = (v, ph, dis) => `<input class="cond cella" value="${esc(v)}" placeholder="${esc(ph)}" ${dis ? "disabled" : ""} inputmode="decimal">`;
+function htmlCampoSconto({ dove, gma = "", val, def, dis = false, ph = "" }) {
+  const m = modoDi(val, def);
+  const celle = termini(val).map(cellaDaTermine);
+  if (!dis) celle.push(""); // una cella vuota in fondo per lo sconto successivo
+  if (!celle.length) celle.push("");
+  return `<span class="cond-box${dis ? " spento" : ""}" data-dove="${dove}" data-gma="${esc(gma)}" data-modo="${m}">
+    <span class="mini-seg"><button type="button" data-cm="agg" class="${m === "agg" ? "on" : ""}" ${dis ? "disabled" : ""} title="In aggiunta allo standard del database">in aggiunta</button><button type="button" data-cm="posto" class="${m === "posto" ? "on" : ""}" ${dis ? "disabled" : ""} title="Al posto dello standard del database">al posto</button></span>
+    <span class="celle">${celle.map((v, i) => htmlCella(v, i === 0 ? ph : "", dis)).join("")}</span></span>`;
+}
+function disegnaCampoSconto(el, o) {
+  if (el.contains(document.activeElement)) return; // non si ridisegna mentre ci scrivi
+  el.innerHTML = htmlCampoSconto(o);
+}
+function salvaCampoSconto(box) {
+  const c = capAtt(); if (!c) return;
+  aggiornaCondizioni(c);
+  const g = box.dataset.gma;
+  const salva = {
+    acqGen: (t) => (c.acq.gen = t),
+    venScGen: (t) => (c.ven.scGen = t),
+    acqGma: (t) => { if (t) c.acq.gma[g] = t; else delete c.acq.gma[g]; },
+    venScGma: (t) => { if (t) c.ven.scGma[g] = t; else delete c.ven.scGma[g]; },
+  }[box.dataset.dove];
+  const celle = [...box.querySelectorAll("input.cella")];
+  const terms = celle.map((x) => termineDaCella(x.value)).filter(Boolean);
+  const finale = terms.length ? (box.dataset.modo === "agg" ? "+" : "") + terms.join("+") : "";
+  const errate = celle.filter((x) => x.value.trim() && !/^-?\d+(?:[.,]\d+)?$/.test(termineDaCella(x.value)));
+  celle.forEach((x) => x.classList.toggle("errato", errate.includes(x)));
+  if (errate.length || !testoValido(finale)) return toast("Sconto non valido: in ogni cella un numero (15 o -15 = sconto, +5 = aumento).", 6000);
+  salva(finale);
+  modificata(); ridisegnaOfferta();
+}
+// compilando l'ultima cella ne compare una nuova accanto
+document.addEventListener("input", (e) => {
+  const inp = e.target.closest(".cond-box input.cella"); if (!inp) return;
+  const celle = inp.parentElement;
+  if (inp === celle.lastElementChild && inp.value.trim()) celle.insertAdjacentHTML("beforeend", htmlCella("", "", false));
+});
+document.addEventListener("change", (e) => { const box = e.target.closest(".cond-box"); if (box && e.target.matches("input.cella")) salvaCampoSconto(box); });
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".cond-box [data-cm]"); if (!b) return;
+  const box = b.closest(".cond-box");
+  box.dataset.modo = b.dataset.cm;
+  box.querySelectorAll("[data-cm]").forEach((x) => x.classList.toggle("on", x === b));
+  if ([...box.querySelectorAll("input.cella")].some((x) => x.value.trim())) salvaCampoSconto(box);
+});
 $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
   if (!target) return toast("Scrivi il prezzo target del capitolo.");
@@ -1450,39 +1503,44 @@ function standardDi(righe) {
 }
 function disegnaGmv(c, rc) {
   const k = condizioni(c), ricarico = k.ven.modo === "ricarico", extra = k.acq.modo === "extra";
-  $("#gma-ven").textContent = ricarico ? "Ricarico vendita" : "Sconto vendita";
-  $("#gma-acq").classList.toggle("spento", !extra);
-  const esiti = new Map(controlloCartellino(c, clienteOff(), opzCap(c)).map((x) => [x.gmv, x]));
   const righeCap = c.righe.filter((r) => num(r.qta));
-  const html = [...rc.perGmv.entries()].sort((a, b) => b[1].venduto - a[1].venduto).map(([g, info]) => {
+  const gmaOrd = [...rc.perGmv.entries()].sort((a, b) => b[1].venduto - a[1].venduto);
+  const conGma = gmaOrd.filter(([g]) => g);
+  // condizioni: riga Generale + una riga per GMA, nel blocco acquisto e nel blocco vendita
+  const stdTutte = standardDi(righeCap);
+  const ricAuto = `automatico ${pctTxt(ricAutoCap(c)) || "0%"}`;
+  const ricCampo = (g, val, ph) => `<input class="cond" data-ric="${esc(g)}" value="${esc(val || "")}" placeholder="${esc(ph)}" inputmode="decimal">`;
+  const riga = (g, std, campo, gen = false) => `<tr class="${gen ? "cond-gen" : ""}"><td class="mono"><b>${gen ? "Generale" : esc(g)}</b></td>
+    <td>${gen ? '<span class="muted small">tutti i GMA senza valore proprio</span>' : esc(fornitore(g))}</td><td class="num muted">${std}</td><td>${campo}</td></tr>`;
+  const stdDi = (g) => standardDi(righeCap.filter((r) => (r.gmv || "") === g));
+  $("#cond-acq").innerHTML = riga("", stdTutte, htmlCampoSconto({ dove: "acqGen", val: c.acq.gen, def: "agg", dis: !extra, ph: "standard" }), true) +
+    conGma.map(([g]) => riga(g, stdDi(g), htmlCampoSconto({ dove: "acqGma", gma: g, val: c.acq.gma[g], def: "agg", dis: !extra, ph: descrSconto(c.acq.gen) || "generale" }))).join("");
+  $("#cond-ven").innerHTML = ricarico
+    ? riga("", stdTutte, ricCampo("", c.ven.ricGen, ricAuto), true) + conGma.map(([g]) => riga(g, stdDi(g), ricCampo(g, c.ven.ricGma[g], c.ven.ricGen ? `generale ${c.ven.ricGen}%` : ricAuto))).join("")
+    : riga("", stdTutte, htmlCampoSconto({ dove: "venScGen", val: c.ven.scGen, def: "posto", ph: "standard" }), true) +
+      conGma.map(([g]) => riga(g, stdDi(g), htmlCampoSconto({ dove: "venScGma", gma: g, val: c.ven.scGma[g], def: "posto", ph: descrSconto(c.ven.scGen) || "generale" }))).join("");
+  // riepilogo per GMA (solo lettura)
+  const esiti = new Map(controlloCartellino(c, clienteOff(), opzCap(c)).map((x) => [x.gmv, x]));
+  const html = gmaOrd.map(([g, info]) => {
     const peso = rc.venduto ? info.venduto / rc.venduto : 0;
-    const dati = `<td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
-      <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
-      <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>`;
-    const std = standardDi(righeCap.filter((r) => (r.gmv || "") === g));
-    if (!g) return `<tr><td class="muted">(senza GMA)</td><td></td><td class="num muted">${std}</td><td colspan="2" class="muted small">Valgono le condizioni generali.</td>${dati}<td colspan="3"></td></tr>`;
-    const e = esiti.get(g);
-    const campo = (tipo, val, ph, dis) => `<input class="cond" data-gma="${esc(g)}" data-campo="${tipo}" value="${esc(val || "")}" placeholder="${esc(ph)}" ${dis ? "disabled" : ""}>`;
-    const acqPh = c.acq.gen || "standard";
-    const venCampo = ricarico
-      ? campo("ric", c.ven.ricGma[g], c.ven.ricGen || `auto ${pctTxt(ricAutoCap(c)) || "0%"}`)
-      : campo("sc", c.ven.scGma[g], c.ven.scGen || "standard");
-    const att = e?.tipo === "attivita";
+    const e = esiti.get(g), att = e?.tipo === "attivita";
     const badge = !e ? '<span class="muted small">—</span>' :
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
     const scList = info.prima.c.scontoListino;
-    return `<tr><td class="mono"><b>${esc(g)}</b></td><td>${esc(fornitore(g))}</td><td class="num muted">${std}</td>
-      <td class="spegni">${campo("acq", c.acq.gma[g], acqPh, !extra)}</td><td>${venCampo}</td>${dati}
+    return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitore(g))}</td>
+      <td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
+      <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
+      <td class="num">${info.acquistato ? pctTxt(ricaricoPct(info.venduto, info.acquistato)) || "0%" : "—"}</td>
+      <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>
       <td class="num">${att ? (e ? euro(e.offerta) + "/g" : "") : scList === null ? "" : pctTxt(scList) || "0%"}</td>
       <td class="num">${e ? (att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
   }).join("");
-  $("#righe-gmv").innerHTML = html || `<tr><td colspan="13" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMA.</td></tr>`;
+  $("#righe-gmv").innerHTML = html || `<tr><td colspan="11" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMA.</td></tr>`;
 }
-$("#righe-gmv").addEventListener("change", suCap((c, e) => {
-  const inp = e.target.closest("input[data-gma]"); if (!inp) return;
-  const g = inp.dataset.gma, campo = inp.dataset.campo;
-  const dove = campo === "acq" ? c.acq.gma : campo === "ric" ? c.ven.ricGma : c.ven.scGma;
-  scriviCondizione(inp, campo === "ric", (t) => { if (t) dove[g] = t; else delete dove[g]; });
+$("#cond-ven").addEventListener("change", suCap((c, e) => {
+  const inp = e.target.closest("input[data-ric]"); if (!inp) return;
+  const g = inp.dataset.ric;
+  scriviCondizione(inp, true, (t) => { if (!g) c.ven.ricGen = t; else if (t) c.ven.ricGma[g] = t; else delete c.ven.ricGma[g]; });
 }));
 
 /* --- Esportazione per Oracle (un foglio per capitolo) --- */
