@@ -825,3 +825,9 @@ tbody tr:nth-child(even):not(.testa-gruppo):not(.sel):not(.totale):not(.sotto) t
 tr.cond-gen td { background: color-mix(in srgb, var(--accent) 16%, var(--card)) !important; }
 /* righe selezionate verdi (distinte dalle barre blu dei capitolati) */
 tr.sel td, #righe-picker tr.sel td { background: var(--riga-sel) !important; }
+/* righe dei totali: arancio deciso, scritte scure (anche nel tema scuro) */
+tr.totale td, tbody tr.sotto:not([data-gruppo]) td {
+  background: #f4bf62 !important; color: #3b2300 !important; font-weight: 800 !important;
+  border-top: 3px solid #b45309 !important;
+}
+tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !important; }
