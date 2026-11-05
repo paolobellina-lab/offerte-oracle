@@ -769,3 +769,59 @@ table.modo-listino .solo-av { display: none; }
 :root[data-theme="scuro"] { --riga-sel: #2c5687; --riga-sel-bordo: #8fc1f0; --riga-attiva: #6e5a12; --riga-attiva-bordo: #f0c24e; }
 tr.sel td, #righe-picker tr.sel td { background: var(--riga-sel) !important; }
 tr.sel td:first-child { box-shadow: inset 4px 0 0 var(--riga-sel-bordo); }
+
+/* ===================== Più contrasto e colore (v4) ===================== */
+:root[data-theme="chiaro"] {
+  --c-acq: #0f766e; --c-acq-soft: #d5f0ec;      /* acquisto: verde acqua */
+  --c-ven: #1d4ed8; --c-ven-soft: #dbe6fb;      /* vendita: blu */
+  --c-lis: #7c3aed; --c-lis-soft: #ebe1fc;      /* listino: viola */
+  --c-mar: #15803d; --c-mar-soft: #d9f2e1;      /* margine: verde */
+  --c-ric: #b45309; --c-ric-soft: #fbead3;      /* ricarico: ambra */
+  --c-neg: #b91c1c; --c-neg-soft: #fde0de;
+  --th-fondo: #c9d9ec; --th-testo: #1b3a5c;
+  --row: #ffffff; --row-alt: #eaf0f7;
+  --tg-fondo: #8fb6e3; --tg-fondo-hover: #a2c3e9; --tg-testo: #0b2440;
+  --riga-sel: #c9ebd3; --riga-sel-bordo: #15803d;
+}
+:root[data-theme="scuro"] {
+  --c-acq: #5eead4; --c-acq-soft: #123c38;
+  --c-ven: #93b4ff; --c-ven-soft: #1c2d52;
+  --c-lis: #c4a5ff; --c-lis-soft: #31224f;
+  --c-mar: #86efac; --c-mar-soft: #173923;
+  --c-ric: #fbbf24; --c-ric-soft: #3d2c0d;
+  --c-neg: #fca5a5; --c-neg-soft: #4a1d1d;
+  --th-fondo: #2b4466; --th-testo: #d6e4f5;
+  --row: #22262c; --row-alt: #2b3139;
+  --tg-fondo: #7fa9da; --tg-fondo-hover: #93b7e2; --tg-testo: #0a1c33;
+  --riga-sel: #1f4d33; --riga-sel-bordo: #86efac;
+}
+/* intestazioni delle tabelle: banda colorata, testo deciso */
+thead th { background: var(--th-fondo) !important; color: var(--th-testo) !important; font-weight: 800 !important; }
+tbody tr:nth-child(even):not(.testa-gruppo):not(.sel):not(.totale):not(.sotto) td { background: var(--row-alt); }
+/* riquadri con il colore del loro ruolo */
+.blocco-acq { border-top: 5px solid var(--c-acq) !important; background: linear-gradient(var(--c-acq-soft), var(--card) 90px) !important; }
+.blocco-ven { border-top: 5px solid var(--c-ven) !important; background: linear-gradient(var(--c-ven-soft), var(--card) 90px) !important; }
+.blocco-ven.blocco-lis { border-top-color: var(--c-lis) !important; background: linear-gradient(var(--c-lis-soft), var(--card) 90px) !important; }
+.blocco-acq .titolo-sez { color: var(--c-acq) !important; border-left-color: var(--c-acq) !important; }
+.blocco-ven .titolo-sez { color: var(--c-ven) !important; border-left-color: var(--c-ven) !important; }
+.blocco-ven.blocco-lis .titolo-sez { color: var(--c-lis) !important; border-left-color: var(--c-lis) !important; }
+.blocco-acq thead th { background: color-mix(in srgb, var(--c-acq) 22%, var(--card)) !important; }
+.blocco-ven thead th { background: color-mix(in srgb, var(--c-ven) 22%, var(--card)) !important; }
+.blocco-ven.blocco-lis thead th { background: color-mix(in srgb, var(--c-lis) 22%, var(--card)) !important; }
+/* riquadri dei numeri colorati per significato */
+.kpi.k-acq, .mini-kpi.k-acq { background: var(--c-acq-soft) !important; border-color: color-mix(in srgb, var(--c-acq) 45%, transparent) !important; }
+.kpi.k-acq .big, .mini-kpi.k-acq b { color: var(--c-acq) !important; }
+.kpi.k-mar, .mini-kpi.k-mar { background: var(--c-mar-soft) !important; border-color: color-mix(in srgb, var(--c-mar) 45%, transparent) !important; }
+.kpi.k-mar .big, .mini-kpi.k-mar b { color: var(--c-mar) !important; }
+.kpi.k-neg, .mini-kpi.k-neg { background: var(--c-neg-soft) !important; border-color: var(--c-neg) !important; }
+.kpi.k-neg .big, .mini-kpi.k-neg b { color: var(--c-neg) !important; }
+.kpi.k-ric { background: var(--c-ric-soft) !important; border-color: color-mix(in srgb, var(--c-ric) 45%, transparent) !important; }
+.kpi.k-ric .big { color: var(--c-ric) !important; }
+.mini-kpi.k-ven { background: var(--c-ven-soft) !important; border-color: color-mix(in srgb, var(--c-ven) 45%, transparent) !important; }
+.mini-kpi.k-ven b { color: var(--c-ven) !important; }
+.kpi-main { background: var(--c-ven-soft) !important; border: 2px solid var(--c-ven) !important; }
+.kpi-main .big, .kpi-main span { color: var(--c-ven) !important; }
+/* riga Generale nei riquadri condizioni */
+tr.cond-gen td { background: color-mix(in srgb, var(--accent) 16%, var(--card)) !important; }
+/* righe selezionate verdi (distinte dalle barre blu dei capitolati) */
+tr.sel td, #righe-picker tr.sel td { background: var(--riga-sel) !important; }

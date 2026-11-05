@@ -549,6 +549,7 @@ function disegnaImpostCapitolo() {
   const lis = c.imp === "listino";
   $("#c-ven-modo").hidden = lis;
   $("#cond-ven-titolo").textContent = lis ? "Condizioni di listino" : "Condizioni di vendita";
+  $("#c-ven-card").classList.toggle("blocco-lis", lis);
 
   seg($("#c-out-prezzo"), Object.keys(OUT_PREZZO), c.out.prezzo, (v) => (v === "vendita" && c.imp === "listino" ? "Listino" : OUT_PREZZO[v]));
   seg($("#c-out-formato"), Object.keys(OUT_FORMATO), c.out.formato, (v) => OUT_FORMATO[v]);
@@ -725,10 +726,10 @@ function disegnaOffertaIn(cambioSub) {
   }
   $("#o-totali").innerHTML = `
     <div class="kpi kpi-main"><span>${impOfferta(o) === "listino" ? "Totale listino" : "Venduto"}</span><span class="big">${euro(venduto)}</span></div>
-    ${impOfferta(o) === "listino" ? "" : `<div class="kpi"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
-    <div class="kpi"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
-    <div class="kpi"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>`}
-    <div class="kpi"><span>Capitoli · righe</span><span class="big">${o.capitoli.length} · ${righe}</span></div>
+    ${impOfferta(o) === "listino" ? "" : `<div class="kpi k-acq"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
+    <div class="kpi k-mar ${venduto && marginePct(venduto, acquistato) < 0 ? "k-neg" : ""}"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
+    <div class="kpi k-ric"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>`}
+    <div class="kpi k-info"><span>Capitoli · righe</span><span class="big">${o.capitoli.length} · ${righe}</span></div>
     ${o.cliente ? `<div class="kpi"><span>Cartellino ${esc(cli?.nome || "")}</span><span>${
       fuori ? `<span class="badge bad">${fuori} GMV fuori cartellino</span>` : `<span class="badge ok">nessun problema</span>`}</span></div>` : ""}`;
   disegnaBarraCapitoli();
@@ -748,10 +749,10 @@ function disegnaOffertaIn(cambioSub) {
   // venduto / acquistato / margine del capitolo: solo nella pagina Sconti e ricarichi
   $(".cap-testa").hidden = S.sub !== "prezzi";
   $("#c-totali").innerHTML = (S.sub !== "prezzi" ? "" : `
-    <span class="mini-kpi"><span>${c.imp === "listino" ? "Totale listino" : "Venduto"}</span><b>${euro(rc.venduto)}</b></span>
-    ${c.imp === "listino" ? "" : `<span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
-    <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>`}
-    <span class="mini-kpi"><span>Condizioni</span><b>${esc(descrCondizioni(c))}</b></span>`);
+    <span class="mini-kpi k-ven"><span>${c.imp === "listino" ? "Totale listino" : "Venduto"}</span><b>${euro(rc.venduto)}</b></span>
+    ${c.imp === "listino" ? "" : `<span class="mini-kpi k-acq"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
+    <span class="mini-kpi k-mar ${rc.venduto && marginePct(rc.venduto, rc.acquistato) < 0 ? "k-neg" : ""}"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>`}
+    <span class="mini-kpi k-info"><span>Condizioni</span><b>${esc(descrCondizioni(c))}</b></span>`);
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
   for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
   $("#conta-righe").textContent = c.righe.length ? `(${c.righe.length})` : "";
@@ -787,7 +788,7 @@ function disegnaRiepilogo() {
       <td class="num solo-av">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td class="num solo-av">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td>${!cli ? "" : fuori ? `<span class="badge bad">${fuori} fuori</span>` : '<span class="badge ok">OK</span>'}</td>
-      <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"}>Excel Oracle</button>
+      <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"} title="Scarica il foglio per Oracle di questo capitolo">⤓ Excel</button>
         <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
   $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
