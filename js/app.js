@@ -1,9 +1,10 @@
 import * as db from "./firebase.js";
 import {
-  TIPI, FONTI, CAMPI_SCONTO, ETICHETTE, COLONNE_ORACLE, num, isAttivita, codiceOracle, prezzoListino,
-  listinoCalcolato, prezzoBase, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
-  riepilogoCapitolo, ricaricoPct, marginePct, ricaricoPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
-  codiceArticolo, statoPrezzo, CODICE_GENERICO,
+  CAMPI_SCONTO, MODI_ACQ, MODI_VEN, OUT_PREZZO, OUT_FORMATO, COLONNE_ORACLE, num, isAttivita, codiceOracle, prezzoListino,
+  listinoCalcolato, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
+  riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
+  codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
+  fattoreStandard, pctTesto,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
@@ -271,17 +272,26 @@ function ridisegna(forza = false) {
 
 /* ================= Modello dell'offerta =================
    offerta = { id, nome, cliente, note, capitoli: [capitolo], creatoIl, aggiornatoIl, creatoDa }
-   capitolo = { nome, tipo, prezzi, sottocapitoli, lineaPartenza, magazzino, globali, gmv, notaNuove,
+   capitolo = { nome, acq, ven, out (vedi calc.js: condizioni), sottocapitoli, lineaPartenza, magazzino, notaNuove,
                 capitolati: [nomi dei capitolati per Oracle], capNuove, righe: [riga] }
    Il capitolato (colonna "Nome Capitolato" in Oracle) si decide offerta per offerta e non c'entra con
    i sottocapitoli del database, che servono solo a organizzare gli articoli.
    riga = copia dei dati dell'articolo + { id, qta, giorni, notePre, notePost }. Le righe sono nell'ordine scelto. */
 function nuovoCapitolo(nome, base = {}) {
+  // i selettori si copiano dal capitolo di partenza, i valori no
   return {
-    nome, tipo: base.tipo || "VENDITA CLIENTE", prezzi: base.prezzi || "DA ORACLE", sottocapitoli: !!base.sottocapitoli,
-    lineaPartenza: base.lineaPartenza ?? 10, magazzino: base.magazzino ?? "BG",
-    globali: { ...(base.globali || {}) }, gmv: structuredClone(base.gmv || {}), notaNuove: "", capitolati: [], capNuove: "", righe: [],
+    nome, sottocapitoli: !!base.sottocapitoli, lineaPartenza: base.lineaPartenza ?? 10, magazzino: base.magazzino ?? "BG",
+    acq: { modo: base.acq?.modo || "standard", gen: "", gma: {} },
+    ven: { modo: base.ven?.modo || "ricarico", ricGen: "", ricGma: {}, scGen: "", scGma: {} },
+    out: { prezzo: base.out?.prezzo || "vendita", formato: base.out?.formato || "sconti" },
+    notaNuove: "", capitolati: [], capNuove: "", righe: [],
   };
+}
+/* Capitoli salvati con il vecchio modello (tipo offerta, Sconto 3/4/5…): si convertono una volta. */
+function aggiornaCondizioni(c) {
+  if (c.acq && c.ven && c.out) return;
+  Object.assign(c, migraCondizioni(c));
+  for (const k of ["tipo", "prezzi", "globali", "gmv"]) delete c[k];
 }
 function nuovaOffertaVuota() {
   const ora = Date.now();
@@ -295,13 +305,19 @@ function normalizza(o) {
     o.capitoli = [];
     for (const r of o.righe || []) {
       let c = o.capitoli.find((x) => x.nome === r.capitolo);
-      if (!c) { c = nuovoCapitolo(r.capitolo, base); o.capitoli.push(c); }
+      if (!c) {
+        c = nuovoCapitolo(r.capitolo, base);
+        delete c.acq; delete c.ven; delete c.out; // si convertono dal vecchio modello qui sotto
+        Object.assign(c, { tipo: base.tipo, prezzi: base.prezzi, globali: base.globali || {}, gmv: base.gmv || {} });
+        o.capitoli.push(c);
+      }
       c.righe.push(r);
     }
     for (const k of ["righe", "tipo", "prezzi", "sottocapitoli", "lineaPartenza", "magazzino", "globali", "gmv"]) delete o[k];
   }
   for (const c of o.capitoli) {
-    c.globali ||= {}; c.gmv ||= {}; c.righe ||= []; c.capitolati ||= [];
+    aggiornaCondizioni(c);
+    c.righe ||= []; c.capitolati ||= [];
     for (const r of c.righe) {
       r.id ||= db.nuovoId();
       // offerte di prima: il capitolato era il sottocapitolo della riga
@@ -495,67 +511,86 @@ $("#add-cap").addEventListener("change", (e) => {
   const nome = e.target.value; if (!nome) return;
   const modello = capAtt() || S.off.capitoli[S.off.capitoli.length - 1];
   // il nuovo capitolo parte con tipo offerta e prezzi del capitolo attuale, ma senza sconti
-  S.off.capitoli.push(nuovoCapitolo(nome, modello ? { tipo: modello.tipo, prezzi: modello.prezzi, sottocapitoli: modello.sottocapitoli } : {}));
+  S.off.capitoli.push(nuovoCapitolo(nome, modello ? { acq: modello.acq, ven: modello.ven, out: modello.out, sottocapitoli: modello.sottocapitoli } : {}));
   S.capAtt = nome; S.sub = "righe"; S.sel = new Set();
   menuAperto(false);
   modificata(); disegnaOfferta(true);
 });
 
-/* --- Impostazioni del capitolo --- */
+/* --- Condizioni del capitolo (pagina Prezzi) e impostazioni dell'output --- */
+const ricAutoCap = (c) => num(S.capitoli.find((x) => x.nome === c.nome)?.ricarico);
 function disegnaImpostCapitolo() {
   const c = capAtt(); if (!c) return;
-  seg($("#c-tipo"), TIPI, c.tipo);
-  seg($("#c-prezzi"), FONTI, c.prezzi);
-  seg($("#c-sotto"), ["SI", "NO"], c.sottocapitoli ? "SI" : "NO");
+  aggiornaCondizioni(c);
+  seg($("#c-acq-modo"), Object.keys(MODI_ACQ), c.acq.modo, (v) => MODI_ACQ[v]);
+  seg($("#c-ven-modo"), Object.keys(MODI_VEN), c.ven.modo, (v) => MODI_VEN[v]);
+  seg($("#c-out-prezzo"), Object.keys(OUT_PREZZO), c.out.prezzo, (v) => OUT_PREZZO[v]);
+  seg($("#c-out-formato"), Object.keys(OUT_FORMATO), c.out.formato, (v) => OUT_FORMATO[v]);
+  seg($("#c-sottocap"), ["SI", "NO"], c.sottocapitoli ? "SI" : "NO");
   $("#c-linea").value = c.lineaPartenza ?? 10;
   $("#c-magazzino").value = c.magazzino ?? "BG";
-  const ricAuto = num(S.capitoli.find((x) => x.nome === c.nome)?.ricarico);
-  $("#c-globali").innerHTML = [...CAMPI_SCONTO, "ric"].map((k) => `
-    <label class="f" ${k === "ric" ? 'title="Solo per VENDITA CLIENTE. Vuoto = ricarico automatico del capitolo."' : ""}>${ETICHETTE[k]}${k === "ric" ? " *" : ""}
-      <span class="pct-wrap"><input class="pct" data-glob="${k}" inputmode="decimal" value="${esc(pctVal(c.globali[k]))}"
-        ${k === "ric" ? (c.tipo !== "VENDITA CLIENTE" ? "disabled" : 'placeholder="auto"') : ""}></span></label>`).join("") +
-    `<span class="muted small" style="align-self:flex-end;padding-bottom:7px">* ricarico solo per vendita cliente; vuoto = automatico del capitolo (${pctTxt(ricAuto) || "0%"})</span>`;
-  $("#c-target-box").hidden = c.tipo !== "VENDITA CLIENTE";
+  const extra = c.acq.modo === "extra", ricarico = c.ven.modo === "ricarico";
+  const gen = $("#c-acq-gen");
+  if (document.activeElement !== gen) gen.value = c.acq.gen || "";
+  gen.disabled = !extra;
+  $("#c-acq").classList.toggle("spento", !extra);
+  $("#c-ven-ric-box").hidden = !ricarico;
+  $("#c-ven-sc-box").hidden = ricarico;
+  const vr = $("#c-ven-ric"), vs = $("#c-ven-sc");
+  if (document.activeElement !== vr) vr.value = c.ven.ricGen || "";
+  if (document.activeElement !== vs) vs.value = c.ven.scGen || "";
+  vr.placeholder = `automatico ${pctTxt(ricAutoCap(c)) || "0%"}`;
+  $("#c-target-calcola").textContent = ricarico ? "Calcola il ricarico" : "Calcola lo sconto";
+  $("#c-target-nota").textContent = ricarico ? "Imposta il ricarico generale per arrivare a quel totale (condizione a pacchetto)."
+    : "Imposta lo sconto generale sul listino per arrivare a quel totale (condizione a pacchetto).";
+  $("#c-out-nota").textContent = c.out.formato === "netti"
+    ? "Si compila solo la colonna Prezzo Netto."
+    : "Si compila solo Sconto 3 [%]: un unico sconto sul listino acquisto, che somma tutti gli sconti e i ricarichi (negativo se il prezzo supera il listino). Attività tecnica e generici vanno sempre a prezzo netto.";
 }
-const suCap = (fn) => (e) => { const c = capAtt(); if (!c) return; fn(c, e); };
-$("#c-tipo").addEventListener("click", suCap((c, e) => {
-  const b = e.target.closest("button"); if (!b) return;
-  c.tipo = b.dataset.v; modificata(); disegnaOfferta();
-}));
-$("#c-prezzi").addEventListener("click", suCap((c, e) => {
-  const b = e.target.closest("button"); if (!b) return;
-  c.prezzi = b.dataset.v; modificata(); disegnaOfferta();
-}));
-$("#c-sotto").addEventListener("click", suCap((c, e) => {
-  const b = e.target.closest("button"); if (!b) return;
-  c.sottocapitoli = b.dataset.v === "SI"; modificata(); disegnaOfferta();
-}));
+const suCap = (fn) => (e) => { const c = capAtt(); if (!c) return; aggiornaCondizioni(c); fn(c, e); };
+const suSeg = (fn) => suCap((c, e) => { const b = e.target.closest("button[data-v]"); if (b) { fn(c, b.dataset.v); modificata(); disegnaOfferta(); } });
+$("#c-acq-modo").addEventListener("click", suSeg((c, v) => (c.acq.modo = v)));
+$("#c-ven-modo").addEventListener("click", suSeg((c, v) => (c.ven.modo = v)));
+$("#c-out-prezzo").addEventListener("click", suSeg((c, v) => (c.out.prezzo = v)));
+$("#c-out-formato").addEventListener("click", suSeg((c, v) => (c.out.formato = v)));
+$("#c-sottocap").addEventListener("click", suSeg((c, v) => (c.sottocapitoli = v === "SI")));
 $("#c-linea").addEventListener("change", suCap((c, e) => { c.lineaPartenza = num(e.target.value) || 10; modificata(); disegnaOfferta(); }));
 $("#c-magazzino").addEventListener("input", suCap((c, e) => { c.magazzino = e.target.value.trim(); modificata(); }));
-$("#c-globali").addEventListener("change", suCap((c, e) => {
-  const k = e.target.dataset.glob; if (!k) return;
-  const v = daPct(e.target.value);
-  if (v) c.globali[k] = v; else delete c.globali[k];
-  e.target.value = pctVal(v);
+/* Testo di sconti o ricarico: si accetta solo se è scritto bene (es. 75+15, 55, +15, 0). */
+function scriviCondizione(inp, ric, salva) {
+  const t = inp.value.trim().replace(/\s+/g, "").replace(/%/g, "");
+  if (!testoValido(t, ric)) {
+    inp.classList.add("errato");
+    toast(ric ? "Ricarico non valido: scrivi per esempio 28 oppure 20+5." : "Sconto non valido: scrivi per esempio 75+15 (al posto dello standard), 55, +15 (in aggiunta allo standard) oppure 0.", 6000);
+    return false;
+  }
+  inp.classList.remove("errato");
+  inp.value = t;
+  salva(t);
   modificata(); ridisegnaOfferta();
-}));
+  return true;
+}
+$("#c-acq-gen").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, false, (t) => (c.acq.gen = t))));
+$("#c-ven-ric").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, true, (t) => (c.ven.ricGen = t))));
+$("#c-ven-sc").addEventListener("change", suCap((c, e) => scriviCondizione(e.target, false, (t) => (c.ven.scGen = t))));
 $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
   if (!target) return toast("Scrivi il prezzo target del capitolo.");
-  const ric = ricaricoPerTarget(c, target, opzCap(c));
-  if (ric === null) return toast("Non riesco a calcolarlo: servono righe senza ricarico forzato sul GMV.");
+  const ris = vendutaPerTarget(c, target, opzCap(c));
+  if (ris === null) return toast("Non riesco a calcolarlo: servono righe senza un valore proprio sul GMA.");
+  const ricarico = ris.campo === "ricGen";
   const applica = () => {
-    c.globali.ric = Math.round(ric * 1e6) / 1e6;
+    c.ven[ris.campo] = pctTesto(ris.valore);
     modificata(); disegnaOfferta();
-    toast(`Ricarico impostato a ${pctTxt(ric)} per arrivare a ${euro(target)}.`, 5000);
+    toast(`${ricarico ? "Ricarico" : "Sconto"} generale impostato a ${pctTxt(ris.valore) || "0%"} per arrivare a ${euro(target)}.`, 5000);
   };
-  if (ric >= 0) return applica();
-  // prezzo target sotto il costo: si vende in perdita (di solito c'è una quantità sbagliata)
   const rc = riepilogoCapitolo(c, opzCap(c));
+  if (target >= rc.acquistato) return applica();
+  // prezzo target sotto il costo: si vende in perdita (di solito c'è una quantità sbagliata)
   const grandi = c.righe.filter((r) => num(r.qta) >= 1000).map((r) => `${esc(r.nOrdine || codiceArticolo(r))}: q.tà ${esc(numIt(r.qta))}`);
   dialogo({
     titolo: "Il prezzo target è sotto il costo",
-    html: `<p>Per arrivare a <b>${euro(target)}</b> servirebbe un ricarico di <b>${pctTxt(ric)}</b>, cioè vendere sotto il prezzo di acquisto
+    html: `<p>Per arrivare a <b>${euro(target)}</b> bisognerebbe vendere sotto il prezzo di acquisto
       (acquistato del capitolo: <b>${euro(rc.acquistato)}</b>).</p>
       ${grandi.length ? `<p>Controlla le quantità: ${grandi.length === 1 ? "questa riga ha" : "queste righe hanno"} una quantità molto alta:</p><ul class="riep">${grandi.slice(0, 8).map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}`,
     pulsanti: [{ label: "Non applicare", value: "annulla" }, { label: "Applica comunque", value: "ok", cls: "danger" }],
@@ -640,7 +675,7 @@ function disegnaOffertaIn(cambioSub) {
     <span class="mini-kpi"><span>Venduto</span><b>${euro(rc.venduto)}</b></span>
     <span class="mini-kpi"><span>Acquistato</span><b>${euro(rc.acquistato)}</b></span>
     <span class="mini-kpi"><span>Margine</span><b>${rc.venduto ? pctTxt(marginePct(rc.venduto, rc.acquistato)) || "0%" : "—"}</b></span>
-    <span class="mini-kpi"><span>Tipo</span><b>${esc(c.tipo)} · ${esc(c.prezzi)}</b></span>`);
+    <span class="mini-kpi"><span>Condizioni</span><b>${esc(descrCondizioni(c))}</b></span>`);
   $$("#subtabs button").forEach((b) => b.classList.toggle("on", b.dataset.sub === S.sub));
   for (const s of ["righe", "prezzi", "export"]) $("#s-" + s).hidden = s !== S.sub;
   $("#conta-righe").textContent = c.righe.length ? `(${c.righe.length})` : "";
@@ -650,6 +685,11 @@ function disegnaOffertaIn(cambioSub) {
   else if (S.sub === "export") disegnaExport(c);
 }
 
+/* Descrizione breve delle condizioni del capitolo */
+function descrCondizioni(c) {
+  const k = condizioni(c);
+  return `Acq. ${MODI_ACQ[k.acq.modo].toLowerCase()} · Vend. ${k.ven.modo === "ricarico" ? "ricarico" : "listino/sconto"} · Oracle: ${OUT_PREZZO[k.out.prezzo].toLowerCase()}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
+}
 /* --- Riepilogo dell'offerta (ex ANALISI PACCHETTO) --- */
 function disegnaRiepilogo() {
   const o = S.off, cli = clienteOff();
@@ -659,7 +699,7 @@ function disegnaRiepilogo() {
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
     tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
     return `<tr><td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button></td>
-      <td class="small nowrap">${esc(c.tipo)} · ${esc(c.prezzi)}</td><td class="num">${r.righe}</td>
+      <td class="small nowrap">${esc(descrCondizioni(c))}</td><td class="num">${r.righe}</td>
       <td class="num"><b>${euro(r.venduto)}</b></td><td class="num">${euro(r.acquistato)}</td>
       <td class="num">${euro(r.materiale.venduto)}</td><td class="num">${euro(r.attivita.venduto)}</td>
       <td class="num">${r.acquistato ? pctTxt(ricaricoPct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
@@ -825,7 +865,7 @@ function disegnaRighe(c) {
       <td class="num"><input class="qta${num(r.qta) >= 1000 ? " qta-alta" : ""}" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"${num(r.qta) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
-          <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} ${c.tipo === "ACQUISTO" ? "disabled" : ""}> a giornate</label>` : ""}</td>
+          <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} > a giornate</label>` : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       ${isGenerico(r)
@@ -847,28 +887,34 @@ function disegnaRighe(c) {
 function disegnaRiepilogoRighe(c) {
   const tb = $("#riepilogo-righe");
   const righe = c.righe.filter((r) => num(r.qta));
-  if (!righe.length) { tb.innerHTML = `<tr><td colspan="13" class="vuoto">Nessuna riga: aggiungile nella pagina “1 · Righe”.</td></tr>`; return; }
-  const linee = lineeOracle(c), opz = opzCap(c);
-  let tot = 0, capPrec = null;
+  if (!righe.length) { tb.innerHTML = `<tr><td colspan="12" class="vuoto">Nessuna riga: aggiungile nella pagina “Righe”.</td></tr>`; return; }
+  const linee = lineeOracle(c), opz = opzCap(c), k = condizioni(c);
+  const ricarico = k.ven.modo === "ricarico";
+  $("#rr-ven").textContent = ricarico ? "Ricarico" : "Sc. vendita";
+  let tot = 0, totA = 0, capPrec = null;
   tb.innerHTML = righe.map((r) => {
-    const x = calcolaRiga(r, c, opz.ricarichi);
-    tot += x.totale;
+    const x = calcolaRiga(r, c, opz.ricarichi, k);
+    tot += x.totale; totA += x.acq.totale;
+    const att = isAttivita(r);
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="13">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
+    const scAcq = 1 - x.acq.fattore, fonte = { gma: "dal GMA", generale: "generale", standard: "standard del database", automatico: "automatico del capitolo" };
     return testa + `<tr data-id="${esc(r.id)}">
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b><div class="d">${esc(r.descrizione)}</div></td>
       <td class="num">${esc(numIt(x.qta))}</td>
-      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo del generico: se lo cambi si aggiorna anche nel database con la data di oggi">` : euro(x.base)}</td>
-      <td class="num">${pctTxt(x.sc3)}</td><td class="num">${pctTxt(x.sc4)}</td><td class="num">${pctTxt(x.sc5)}</td>
-      <td class="num">${pctTxt(x.aum1)}</td><td class="num">${pctTxt(x.ric)}</td>
+      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo del generico: se lo cambi si aggiorna anche nel database con la data di oggi">` : euro(r.listinoAcquisto)}${att ? '<span class="muted small">/g</span>' : ""}</td>
+      <td class="num" title="${esc(fonte[x.acq.fonte])}">${att && x.acq.fonte === "standard" ? "" : pctTxt(scAcq) || "0%"}${x.acq.fonte !== "standard" ? ' <span class="fonte">●</span>' : ""}</td>
+      <td class="num">${euro(x.acq.unitario)}${att ? '<span class="muted small">/g</span>' : ""}</td>
+      <td class="num" title="${esc(fonte[x.fonteVen])}">${ricarico ? pctTxt(x.ric) || "0%" : att ? "" : pctTxt(1 - x.fVen) || "0%"}${x.fonteVen === "gma" || x.fonteVen === "generale" ? ' <span class="fonte">●</span>' : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
+      <td class="num">${x.scontoListino === null ? "" : pctTxt(x.scontoListino) || "0%"}</td>
       <td class="mono">${esc(r.gmv)}</td></tr>`;
-  }).join("") + `<tr class="sotto"><td colspan="11" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td></td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)} · acquistato ${euro(totA)}</td><td class="num">${euro(tot)}</td><td colspan="2"></td></tr>`;
   applicaGruppi(tb);
 }
 /* Stato del prezzo di una riga: si guarda l'articolo nel database (data aggiornata), altrimenti la copia nella riga. */
@@ -1392,38 +1438,51 @@ function aggiornaSoloTotali() {
   try { disegnaOffertaIn(false); } finally { S.noPicker = false; }
 }
 
-/* --- GMV: peso, sconti e cartellino --- */
+/* --- GMA: condizioni specifiche, peso e cartellino --- */
+/* Sconti standard del database per un gruppo di righe: "75" se uguali per tutte, altrimenti "vari". */
+function standardDi(righe) {
+  const testi = new Set(righe.filter((r) => !isAttivita(r)).map((r) => {
+    const p = CAMPI_SCONTO.filter((k) => num(r[k])).map((k) => pctTesto(k === "aum1" ? -num(r[k]) : num(r[k])));
+    return p.length ? p.join("+") : "0";
+  }));
+  if (!testi.size) return "—";
+  return testi.size === 1 ? [...testi][0] + "%" : "vari";
+}
 function disegnaGmv(c, rc) {
+  const k = condizioni(c), ricarico = k.ven.modo === "ricarico", extra = k.acq.modo === "extra";
+  $("#gma-ven").textContent = ricarico ? "Ricarico vendita" : "Sconto vendita";
+  $("#gma-acq").classList.toggle("spento", !extra);
   const esiti = new Map(controlloCartellino(c, clienteOff(), opzCap(c)).map((x) => [x.gmv, x]));
+  const righeCap = c.righe.filter((r) => num(r.qta));
   const html = [...rc.perGmv.entries()].sort((a, b) => b[1].venduto - a[1].venduto).map(([g, info]) => {
     const peso = rc.venduto ? info.venduto / rc.venduto : 0;
-    const comuni = `<td class="num">${info.righe}</td><td class="num">${euro(info.venduto)}</td><td class="num">${euro(info.acquistato)}</td>
+    const dati = `<td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
       <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
       <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>`;
-    if (!g) return `<tr><td class="muted">(senza GMV)</td><td></td>${comuni}<td colspan="8" class="muted small">Senza GMV valgono gli sconti del capitolo o del database.</td></tr>`;
-    const v = c.gmv[g] || {};
+    const std = standardDi(righeCap.filter((r) => (r.gmv || "") === g));
+    if (!g) return `<tr><td class="muted">(senza GMA)</td><td></td><td class="num muted">${std}</td><td colspan="2" class="muted small">Valgono le condizioni generali.</td>${dati}<td colspan="3"></td></tr>`;
     const e = esiti.get(g);
-    const inp = (k) => `<span class="pct-wrap"><input class="pct" data-gmv="${esc(g)}" data-k="${k}" inputmode="decimal" value="${esc(pctVal(v[k]))}"
-      ${k === "ric" && c.tipo !== "VENDITA CLIENTE" ? "disabled" : ""}></span>`;
+    const campo = (tipo, val, ph, dis) => `<input class="cond" data-gma="${esc(g)}" data-campo="${tipo}" value="${esc(val || "")}" placeholder="${esc(ph)}" ${dis ? "disabled" : ""}>`;
+    const acqPh = c.acq.gen || "standard";
+    const venCampo = ricarico
+      ? campo("ric", c.ven.ricGma[g], c.ven.ricGen || `auto ${pctTxt(ricAutoCap(c)) || "0%"}`)
+      : campo("sc", c.ven.scGma[g], c.ven.scGen || "standard");
     const att = e?.tipo === "attivita";
     const badge = !e ? '<span class="muted small">—</span>' :
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
-    return `<tr><td class="mono"><b>${esc(g)}</b></td><td>${esc(fornitore(g))}</td>${comuni}
-      <td>${inp("sc3")}</td><td>${inp("sc4")}</td><td>${inp("sc5")}</td><td>${inp("aum1")}</td>
-      <td>${inp("ric")}</td>
-      <td class="num">${att ? euro(e.offerta) + "/g" : pctTxt(1 - info.prima.c.fattore) || "0%"}</td>
+    const scList = info.prima.c.scontoListino;
+    return `<tr><td class="mono"><b>${esc(g)}</b></td><td>${esc(fornitore(g))}</td><td class="num muted">${std}</td>
+      <td class="spegni">${campo("acq", c.acq.gma[g], acqPh, !extra)}</td><td>${venCampo}</td>${dati}
+      <td class="num">${att ? (e ? euro(e.offerta) + "/g" : "") : scList === null ? "" : pctTxt(scList) || "0%"}</td>
       <td class="num">${e ? (att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
   }).join("");
-  $("#righe-gmv").innerHTML = html || `<tr><td colspan="15" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMV.</td></tr>`;
+  $("#righe-gmv").innerHTML = html || `<tr><td colspan="13" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMA.</td></tr>`;
 }
 $("#righe-gmv").addEventListener("change", suCap((c, e) => {
-  const inp = e.target.closest("input[data-gmv]"); if (!inp) return;
-  const g = inp.dataset.gmv, k = inp.dataset.k;
-  const v = daPct(inp.value);
-  c.gmv[g] ||= {};
-  if (v) c.gmv[g][k] = v; else delete c.gmv[g][k];
-  if (!Object.keys(c.gmv[g]).length) delete c.gmv[g];
-  modificata(); ridisegnaOfferta();
+  const inp = e.target.closest("input[data-gma]"); if (!inp) return;
+  const g = inp.dataset.gma, campo = inp.dataset.campo;
+  const dove = campo === "acq" ? c.acq.gma : campo === "ric" ? c.ven.ricGma : c.ven.scGma;
+  scriviCondizione(inp, campo === "ric", (t) => { if (t) dove[g] = t; else delete dove[g]; });
 }));
 
 /* --- Esportazione per Oracle (un foglio per capitolo) --- */
@@ -1436,7 +1495,8 @@ function disegnaExport(c) {
     const n = r.capitolato || "";
     let g = gruppi.find((x) => x.nome === n);
     if (!g) { g = { nome: n, righe: 0, totale: 0 }; gruppi.push(g); }
-    g.righe++; g.totale += calcolaRiga(r, c, opzCap(c).ricarichi).totale;
+    const x = calcolaRiga(r, c, opzCap(c).ricarichi);
+    g.righe++; g.totale += condizioni(c).out.prezzo === "acquisto" ? x.acq.totale : x.totale;
   }
   const escl = new Set(c.esclusiExport || []);
   $("#export-capitolati").innerHTML = gruppi.length > 1 || escl.size ? `<span class="muted small" style="font-weight:600">Capitolati da caricare in questa offerta Oracle:</span>` +
@@ -2013,4 +2073,4 @@ $("#file-backup").addEventListener("change", async (e) => {
 });
 
 // per i test automatici
-window.__app = { S, calcolaOfferta, prezzoBase, opzCap };
+window.__app = { S, calcolaOfferta, opzCap };

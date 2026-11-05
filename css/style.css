@@ -694,3 +694,16 @@ tbody tr.tagliata td { opacity: .55; border-top: 1px dashed var(--accent) !impor
 .sel-col { width: 28px; }
 #righe-picker tr.sel td { background: var(--accent-soft) !important; }
 #righe-picker td.desc, #righe-picker td.mono { cursor: pointer; }
+
+/* Pagina Prezzi: blocchi acquisto e vendita */
+.cond-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.cond-grid .card { margin: 0; }
+.cond-aiuto { margin: 8px 0 0; line-height: 1.5; }
+.cond-aiuto code, .muted code { background: var(--accent-soft); color: var(--ink); padding: 0 5px; border-radius: 4px; font-size: .85em; }
+input.cond { width: 100%; max-width: 260px; font-variant-numeric: tabular-nums; }
+.tab-gma input.cond { width: 120px; }
+input.cond.errato { border-color: var(--bad) !important; background: var(--bad-soft); }
+.spento input.cond:disabled, .tab-gma input.cond:disabled { opacity: .5; }
+th.spento { opacity: .55; }
+.fonte { color: var(--accent); font-size: .7em; vertical-align: 2px; }
+.seg { align-self: flex-start; width: max-content; max-width: 100%; }

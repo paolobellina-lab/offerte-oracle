@@ -21,23 +21,35 @@ L'app gira nel browser, si pubblica su GitHub Pages e salva i dati su Firebase (
 | Macro "allinea" e controllo "Elenco allineato" | Non servono: l'elenco per Oracle è sempre allineato |
 | Un file per offerta | Tutte le offerte salvate, duplicabili, condivise tra i dispositivi |
 
-I calcoli sono quelli del foglio TIPO OFFERTA:
+**Pagina Prezzi** di ogni capitolo, con due blocchi che restano salvati tutti e due:
 
-- **Prezzo base:**
-  - ACQUISTO: listino acquisto;
-  - LISTINO COMPUTO: prezzo di listino;
-  - attività tecnica: listino acquisto × giorni in VENDITA CLIENTE, prezzo di listino in LISTINO.
-- **Sconti, in quest'ordine di priorità:** sconto del GMV, poi sconto dell'offerta, poi 0 se l'offerta è a listino o la riga è attività tecnica, infine il valore del catalogo.
-- **Ricarico:** solo in VENDITA CLIENTE. Vale quello del GMV, altrimenti quello dell'offerta, altrimenti il ricarico automatico del capitolo.
-- **Unitario** = base × (1−Sc3)(1−Sc4)(1−Sc5)(1+Aum1)(1+Ricarico).
+- **Condizioni di acquisto: Standard / Extra.**
+  - Standard: gli sconti del database (Sconto 3, 4, 5, Aumento 1 dell'articolo).
+  - Extra: uno sconto generale e, se serve, uno per GMA (quello del GMA vince). Si scrive così:
+    - `75+15`: sconti in cascata al posto dello standard;
+    - `55`: al posto dello standard;
+    - `+15`: in aggiunta allo standard;
+    - `0`: nessuno sconto;
+    - vuoto: standard.
+- **Condizioni di vendita: Ricarico / Listino-sconto.**
+  - Ricarico: vendita = acquisto × (1 + ricarico). Vale quello del GMA, poi il generale, poi il ricarico automatico del capitolo.
+  - Listino-sconto: vendita = listino acquisto con lo sconto al cliente, scritto come sopra (vuoto = standard del database).
+  - Attività tecnica: parte dal prezzo di listino di tutti i giorni.
+- **Attività tecnica:** il generale vale solo se è "in aggiunta" (`+3`); per il resto cambia solo dal suo GMA.
+- **Prezzo target:** calcola il ricarico generale (o lo sconto generale) per arrivare al totale voluto.
 
-**Foglio per Oracle:**
+**Pagina Oracle:**
 
+- **Prezzi da esportare:** Vendita o Acquisto.
+- **Come:**
+  - Prezzi netti: si compila solo "Prezzo Netto".
+  - Sconti: si compila solo "Sconto 3 [%]", con un unico sconto sul listino acquisto che somma tutti gli sconti e i ricarichi. È negativo se il prezzo supera il listino.
+- **Sempre a prezzo netto:** attività tecnica (PITATT.TEC) e generici (P000ARTICOLO_GEN).
 - **Linea:** 10, 20, 30…
 - **Codice:** PRECODICE+CODICE.
 - **Magazzino:** BG.
-- **Prezzo netto:** solo con "DA EXCEL", oppure per le righe PITATT.TEC e P000ARTICOLO_GEN.
-- **Sconti e aumenti %:** solo con "DA ORACLE".
+
+Le offerte salvate con il vecchio modello (tipo offerta, DA ORACLE/DA EXCEL) si convertono da sole all'apertura.
 
 Unica differenza voluta: il controllo cartellino dell'attività tecnica confronta il **prezzo a giornata** con la tariffa del cliente. L'Excel invece usava il prezzo di tutti i giorni.
 

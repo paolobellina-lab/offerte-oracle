@@ -1,10 +1,12 @@
 // Motore di calcolo: replica le formule dei fogli TIPO OFFERTA e Sheet1 dell'Excel
 // "Template_Import_Righe-OFFERTA_V22". Nessuna dipendenza: si usa sia nell'app sia nei test.
 
-export const TIPI = ["ACQUISTO", "LISTINO", "VENDITA CLIENTE", "LISTINO COMPUTO"];
-export const FONTI = ["DA ORACLE", "DA EXCEL"];
-export const CAMPI_SCONTO = ["sc3", "sc4", "sc5", "aum1"]; // colonne Q R S T del catalogo
-export const ETICHETTE = { sc3: "Sconto 3", sc4: "Sconto 4", sc5: "Sconto 5", aum1: "Aumento 1", ric: "Ricarico" };
+export const CAMPI_SCONTO = ["sc3", "sc4", "sc5", "aum1"]; // colonne Q R S T del catalogo (lo standard dell'articolo)
+// Condizioni del capitolo (pagina Prezzi) e scelte dell'output (pagina Oracle)
+export const MODI_ACQ = { standard: "Standard", extra: "Extra" };
+export const MODI_VEN = { ricarico: "Ricarico", listino: "Listino / sconto" };
+export const OUT_PREZZO = { vendita: "Vendita", acquisto: "Acquisto" };
+export const OUT_FORMATO = { sconti: "Sconti", netti: "Prezzi netti" };
 
 // Intestazioni di Sheet1, identiche all'Excel (anche lo spazio finale di "Prezzo Netto ").
 export const COLONNE_ORACLE = [
@@ -33,7 +35,6 @@ const arrot = (n, dec = 6) => {
 };
 
 export const isAttivita = (r) => String(r.codice || "").trim().toUpperCase() === "ATT.TEC";
-export const isListino = (tipo) => tipo === "LISTINO" || tipo === "LISTINO COMPUTO";
 /* Codice dell'articolo come scritto nel database (precodice + codice). */
 export const codiceArticolo = (r) => `${r.precodice || ""}${r.codice || ""}`.trim();
 export const CODICE_GENERICO = "P000ARTICOLO_GEN";
@@ -70,63 +71,131 @@ export function prezzoListino(r) {
   return num(r.listino) || listinoCalcolato(r);
 }
 
-/* Colonna M di TIPO OFFERTA: prezzo di partenza della riga in base al tipo di offerta. */
-export function prezzoBase(r, tipo) {
-  if (isAttivita(r)) {
-    if (tipo === "ACQUISTO") return num(r.listinoAcquisto);
-    if (isListino(tipo)) return prezzoListino(r);
-    if (tipo === "VENDITA CLIENTE") return num(r.listinoAcquisto) * num(r.giorni);
-    return num(r.listinoAcquisto);
+/* ================= Condizioni di acquisto e di vendita =================
+   Ogni capitolo dell'offerta ha:
+   acq = { modo: "standard" | "extra", gen: "…", gma: { GMA: "…" } }
+   ven = { modo: "ricarico" | "listino", ricGen, ricGma: {}, scGen, scGma: {} }
+   out = { prezzo: "vendita" | "acquisto", formato: "sconti" | "netti" }
+   Gli sconti si scrivono come testo, in percentuale:
+     "75+15" = sconti in cascata al posto dello standard dell'articolo;
+     "55"    = al posto dello standard;
+     "+15"   = in aggiunta allo standard (es. standard 75 → 75+15);
+     "0"     = nessuno sconto (prezzo pieno); "-5" = aumento del 5%.
+   Vuoto = vale il livello sopra (GMA → generale → standard del database).
+   Restano salvati tutti, anche quando il selettore è sull'altra scelta. */
+const RE_TERMINE = /^-?\d+(?:[.,]\d+)?$/;
+export function leggiSconti(t) {
+  let s = String(t ?? "").replace(/%/g, "").replace(/\s+/g, "");
+  if (!s) return null;
+  const aggiunta = s.startsWith("+");
+  if (aggiunta) s = s.slice(1);
+  const parti = s.split("+");
+  if (!parti.length || !parti.every((p) => RE_TERMINE.test(p))) return { errore: true };
+  const fattore = parti.reduce((f, p) => f * (1 - num(p) / 100), 1);
+  return { aggiunta, fattore, testo: (aggiunta ? "+" : "") + parti.join("+") };
+}
+/* Ricarico in percentuale: "28" = 28%; "20+5" = 20% poi 5%. Restituisce la frazione (0.28) o null. */
+export function leggiRicarico(t) {
+  const s = String(t ?? "").replace(/%/g, "").replace(/\s+/g, "").replace(/^\+/, "");
+  if (!s) return null;
+  const parti = s.split("+");
+  if (!parti.every((p) => RE_TERMINE.test(p))) return null;
+  return parti.reduce((f, p) => f * (1 + num(p) / 100), 1) - 1;
+}
+export const testoValido = (t, ric = false) => !String(t ?? "").trim() || (ric ? leggiRicarico(t) !== null : !leggiSconti(t)?.errore);
+/* Sconti standard dell'articolo (database): Sconto 3, 4, 5 e Aumento 1. L'attività tecnica non ne ha. */
+export const fattoreStandard = (r) => (isAttivita(r) ? 1 : (1 - num(r.sc3)) * (1 - num(r.sc4)) * (1 - num(r.sc5)) * (1 + num(r.aum1)));
+const applica = (sp, f0) => (sp.aggiunta ? f0 * sp.fattore : sp.fattore);
+const valido = (sp) => (sp && !sp.errore ? sp : null);
+/* Il valore generale vale anche per l'attività tecnica solo se è "in aggiunta" (+3):
+   l'attività non ha uno standard da sostituire, quindi un "75+15" non la tocca (come nell'Excel l'extrasconto
+   del capitolo valeva per tutte le righe). */
+const generalePer = (att, testo) => { const sp = valido(leggiSconti(testo)); return sp && (!att || sp.aggiunta) ? sp : null; };
+
+/* Condizioni del capitolo, sempre complete (anche per i capitoli salvati con il vecchio modello). */
+export function condizioni(cap) {
+  const c = cap.acq && cap.ven ? cap : migraCondizioni(cap);
+  return {
+    acq: { modo: c.acq?.modo === "extra" ? "extra" : "standard", gen: c.acq?.gen || "", gma: c.acq?.gma || {} },
+    ven: { modo: c.ven?.modo === "listino" ? "listino" : "ricarico", ricGen: c.ven?.ricGen || "", ricGma: c.ven?.ricGma || {}, scGen: c.ven?.scGen || "", scGma: c.ven?.scGma || {} },
+    out: { prezzo: c.out?.prezzo === "acquisto" ? "acquisto" : "vendita", formato: c.out?.formato === "netti" ? "netti" : "sconti" },
+  };
+}
+/* Frazione → testo in percentuale ("0.125" → "12,5"). */
+export const pctTesto = (v) => String(Math.round(num(v) * 1e8) / 1e6).replace(".", ",");
+/* Dal vecchio modello (tipo offerta, DA ORACLE/DA EXCEL, Sconto 3/4/5, Aumento 1, ricarico) al nuovo.
+   Un campo scritto nel capitolo o nel GMA sostituiva solo quello del database: se c'è lo Sconto 3
+   diventa "al posto dello standard", altrimenti "in aggiunta" (Sconto 4 e 5 nel database sono quasi sempre vuoti). */
+export function migraCondizioni(cap) {
+  const glob = cap.globali || {}, perGmv = cap.gmv || {};
+  const espr = (o) => {
+    const parti = CAMPI_SCONTO.filter((k) => num(o[k])).map((k) => pctTesto(k === "aum1" ? -num(o[k]) : num(o[k])));
+    if (!parti.length) return "";
+    return (num(o.sc3) ? "" : "+") + parti.join("+");
+  };
+  const gen = espr(glob);
+  const gma = {}, ricGma = {};
+  for (const [g, v] of Object.entries(perGmv)) {
+    const e = espr({ ...glob, ...Object.fromEntries(CAMPI_SCONTO.filter((k) => num(v[k])).map((k) => [k, v[k]])) });
+    if (e && e !== gen) gma[g] = e;
+    if (num(v.ric)) ricGma[g] = pctTesto(v.ric);
   }
-  if (tipo === "LISTINO COMPUTO") return prezzoListino(r);
-  return num(r.listinoAcquisto);
+  const tipo = cap.tipo || "VENDITA CLIENTE";
+  const listino = tipo === "LISTINO" || tipo === "LISTINO COMPUTO";
+  return {
+    ...cap,
+    acq: { modo: gen || Object.keys(gma).length ? "extra" : "standard", gen, gma },
+    ven: { modo: listino ? "listino" : "ricarico", ricGen: num(glob.ric) ? pctTesto(glob.ric) : "", ricGma,
+      scGen: listino ? gen.replace(/^\+/, "") || "0" : "", scGma: listino ? Object.fromEntries(Object.entries(gma).map(([g, e]) => [g, e.replace(/^\+/, "")])) : {} },
+    out: { prezzo: tipo === "ACQUISTO" ? "acquisto" : "vendita", formato: cap.prezzi === "DA EXCEL" ? "netti" : "sconti" },
+  };
 }
 
-/* Colonna H di TIPO OFFERTA: per l'attività tecnica in ACQUISTO la quantità sono i giorni. */
-export function quantita(r, tipo) {
-  if (isAttivita(r) && tipo === "ACQUISTO") return num(r.giorni);
-  return num(r.qta);
-}
-
-/* Colonne O P Q R di TIPO OFFERTA. Priorità:
-   sconto del GMV → sconto globale → 0 per offerte a listino → 0 per l'attività tecnica → valore del catalogo. */
-export function sconto(campo, r, off) {
-  const perGmv = num(off.gmv?.[r.gmv]?.[campo]);
-  if (perGmv) return perGmv;
-  const globale = num(off.globali?.[campo]);
-  if (globale) return globale;
-  if (isListino(off.tipo)) return 0;
-  if (isAttivita(r)) return 0;
-  return num(r[campo]);
-}
-
-/* Colonna S di TIPO OFFERTA (Aumento 2): ricarico, solo per VENDITA CLIENTE.
-   Ricarico del GMV → ricarico dell'offerta → ricarico automatico del capitolo. */
-export function ricarico(r, off, ricaricoCapitolo = 0) {
-  if (off.tipo !== "VENDITA CLIENTE") return 0;
-  const perGmv = num(off.gmv?.[r.gmv]?.ric);
-  if (perGmv) return perGmv;
-  const globale = num(off.globali?.ric);
-  if (globale) return globale;
-  return num(ricaricoCapitolo);
-}
-
-/* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO: 0.28, ... } */
-/* Attività "a giornate": in vendita e a listino il prezzo dell'attività è complessivo (quantità 1);
+/* Attività "a giornate": in vendita il prezzo dell'attività è complessivo (quantità 1);
    con questa scelta va in Oracle come valore giornaliero × numero di giorni. In acquisto è sempre così. */
-export const aGiornate = (r, tipo) => isAttivita(r) && !!r.aGiornate && tipo !== "ACQUISTO" && num(r.giorni) > 0;
+export const aGiornate = (r) => isAttivita(r) && !!r.aGiornate && num(r.giorni) > 0;
 
-export function calcolaRiga(r, off, ricarichi = {}) {
-  const tipo = off.tipo;
-  const giornate = aGiornate(r, tipo);
-  const base = giornate ? prezzoBase(r, tipo) / num(r.giorni) : prezzoBase(r, tipo);
-  const sc3 = sconto("sc3", r, off), sc4 = sconto("sc4", r, off), sc5 = sconto("sc5", r, off);
-  const aum1 = sconto("aum1", r, off);
-  const ric = ricarico(r, off, ricarichi[r.capitolo]);
-  const fattore = (1 - sc3) * (1 - sc4) * (1 - sc5) * (1 + aum1) * (1 + ric);
-  const unitario = base * fattore;
-  const qta = giornate ? num(r.giorni) * num(r.qta) : quantita(r, tipo);
-  return { base, sc3, sc4, sc5, aum1, ric, fattore, unitario, qta, totale: unitario * qta };
+/* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO_DATABASE: 0.28, ... } (ricarico automatico).
+   Restituisce i valori di vendita (unitario, qta, totale) e quelli di acquisto in "acq". */
+export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
+  const att = isAttivita(r), g = r.gmv || "";
+  const gg = num(r.giorni), la = num(r.listinoAcquisto);
+  const f0 = fattoreStandard(r);
+  // acquisto: standard del database, oppure le condizioni extra (del GMA o generali)
+  let fAcq = f0, fonteAcq = "standard";
+  if (k.acq.modo === "extra") {
+    const spG = valido(leggiSconti(k.acq.gma[g])), spC = generalePer(att, k.acq.gen);
+    if (spG) { fAcq = applica(spG, f0); fonteAcq = "gma"; } else if (spC) { fAcq = applica(spC, f0); fonteAcq = "generale"; }
+  }
+  const acqUnit = la * fAcq; // per l'attività: al giorno
+  const acqQta = att && gg > 0 ? gg * num(r.qta) : num(r.qta);
+  const acq = { unitario: acqUnit, qta: acqQta, totale: acqUnit * acqQta, fattore: fAcq, fonte: fonteAcq };
+  // vendita: ricarico sull'acquisto, oppure sconto sul listino
+  let perPezzo, ric = null, fVen = null, baseVen, fonteVen;
+  if (k.ven.modo === "ricarico") {
+    const rG = leggiRicarico(k.ven.ricGma[g]), rC = leggiRicarico(k.ven.ricGen);
+    ric = rG ?? rC ?? num(ricarichi[r.capitolo]);
+    fonteVen = rG !== null ? "gma" : rC !== null ? "generale" : "automatico";
+    baseVen = acqUnit * (att && gg > 0 ? gg : 1);
+    perPezzo = baseVen * (1 + ric);
+  } else {
+    baseVen = att ? prezzoListino(r) : la; // attività: il prezzo di listino di tutti i giorni
+    const spG = valido(leggiSconti(k.ven.scGma[g])), spC = generalePer(att, k.ven.scGen);
+    fVen = spG ? applica(spG, f0) : spC ? applica(spC, f0) : f0;
+    fonteVen = spG ? "gma" : spC ? "generale" : "standard";
+    perPezzo = baseVen * fVen;
+  }
+  const giornate = aGiornate(r);
+  const unitario = giornate ? perPezzo / gg : perPezzo;
+  const qta = giornate ? gg * num(r.qta) : num(r.qta);
+  // sconto complessivo rispetto al listino acquisto (quello che Oracle conosce): serve al cartellino
+  const scontoListino = !att && la ? 1 - perPezzo / la : null;
+  return { unitario, qta, totale: unitario * qta, base: baseVen, ric, fVen, fonteVen, scontoListino, acq, f0 };
+}
+
+/* Valori da mandare in Oracle per una riga: vendita o acquisto, come scelto nell'output. */
+export function valoriOutput(c, k) {
+  return k.out.prezzo === "acquisto" ? { unitario: c.acq.unitario, qta: c.acq.qta } : { unitario: c.unitario, qta: c.qta };
 }
 
 /* Ordine delle righe: come nell'Excel, nell'ordine del catalogo, capitolo per capitolo. */
@@ -139,10 +208,11 @@ export function ordinaRighe(righe, ordineCapitoli = []) {
 
 /* Righe effettive di un capitolo dell'offerta, nell'ordine scelto dall'utente:
    solo quelle con quantità diversa da 0 (come il filtro su Q.tà ≠ 0).
-   "off" è un capitolo dell'offerta: { tipo, prezzi, globali, gmv, righe, ... }. */
+   "off" è un capitolo dell'offerta: { acq, ven, out, righe, ... }. */
 export function calcolaOfferta(off, { ricarichi = {} } = {}) {
+  const k = condizioni(off);
   const righe = (off.righe || []).filter((r) => num(r.qta) !== 0)
-    .map((r) => ({ riga: r, c: calcolaRiga(r, off, ricarichi) }));
+    .map((r) => ({ riga: r, c: calcolaRiga(r, off, ricarichi, k) }));
   const totale = righe.reduce((s, x) => s + x.c.totale, 0);
   return { righe, totale };
 }
@@ -154,7 +224,7 @@ export const esclusoDaExport = (r, off) => (off.esclusiExport || []).includes(r.
 export function righeOracle(off, opz = {}) {
   // solo i capitolati spuntati; le linee ripartono dal n° di partenza
   const { righe } = calcolaOfferta({ ...off, righe: (off.righe || []).filter((r) => !esclusoDaExport(r, off)) }, opz);
-  const daExcel = off.prezzi === "DA EXCEL";
+  const k = condizioni(off);
   const start = num(off.lineaPartenza) || 10;
   const out = [], avvisi = [];
   let linea = start;
@@ -164,17 +234,21 @@ export function righeOracle(off, opz = {}) {
       avvisi.push(`Riga senza codice articolo esclusa: ${r.nOrdine || r.descrizione || "(senza descrizione)"} (${r.capitolo})`);
       continue;
     }
-    // Prezzo netto = unitario finale del tipo di offerta scelto (acquisto, listino, vendita…).
-    // Quando c'è il prezzo netto Oracle ignora sconti e aumenti, quindi le percentuali restano vuote.
-    const conNetto = codice === "PITATT.TEC" || isGenerico(r) || daExcel;
-    const prezzoNetto = conNetto ? arrot(c.unitario) : "";
-    const perc = (v) => (v === 0 || conNetto ? "" : arrot(v * 100));
+    const v = valoriOutput(c, k);
+    const la = num(r.listinoAcquisto);
+    // Prezzi netti: solo la colonna del netto. Sconti: un unico sconto in Sconto 3, calcolato sul listino
+    // acquisto (il prezzo che Oracle conosce), anche negativo se il prezzo supera il listino.
+    // Attività tecnica e generici vanno sempre a prezzo netto.
+    let conNetto = k.out.formato === "netti" || codice === "PITATT.TEC" || isGenerico(r);
+    if (!conNetto && !la) { conNetto = true; avvisi.push(`Senza listino acquisto, va a prezzo netto: ${codice} ${r.nOrdine || ""}`); }
+    const prezzoNetto = conNetto ? arrot(v.unitario) : "";
+    const sc = conNetto ? "" : arrot((1 - v.unitario / la) * 100);
     out.push([
-      linea, codice, off.magazzino || "BG", arrot(c.qta),
+      linea, codice, off.magazzino || "BG", arrot(v.qta),
       off.sottocapitoli ? (r.capitolato || "") : "", // capitolato dell'offerta, non il sottocapitolo del database
       prezzoNetto,
-      perc(c.sc3), perc(c.sc4), perc(c.sc5), "", "", "",
-      perc(c.aum1), perc(c.ric), "", "",
+      sc === 0 ? "" : sc, "", "", "", "", "",
+      "", "", "", "",
       notePreRiga(r) !== "0" ? notePreRiga(r).trim() : "",
       notePostRiga(r) !== "0" ? notePostRiga(r).trim() : "",
     ]);
@@ -204,13 +278,13 @@ export function controlloCartellino(off, cliente, opz = {}) {
       if (tariffa === null) continue;
       // tariffa giornaliera: in LISTINO e VENDITA CLIENTE il prezzo dell'attività comprende tutti i giorni
       const gg = num(att.riga.giorni);
-      const prezzo = off.tipo !== "ACQUISTO" && gg > 0 && !aGiornate(att.riga, off.tipo) ? att.c.unitario / gg : att.c.unitario;
+      const prezzo = gg > 0 && !aGiornate(att.riga) ? att.c.unitario / gg : att.c.unitario;
       const stato = tariffa > prezzo + 1e-9 ? "ok" : Math.abs(tariffa - prezzo) < 1e-9 ? "pari" : "fuori";
       esiti.push({ gmv, tipo: "attivita", offerta: prezzo, cartellino: tariffa, stato,
         testo: stato === "ok" ? "OK" : stato === "pari" ? "Valore di cartellino" : "Superiore al valore di cartellino" });
       continue;
     }
-    const scontoOfferta = 1 - x.c.fattore;
+    const scontoOfferta = x.c.scontoListino ?? 0;
     const scCart = num(cliente.sconti?.[gmv]);
     const stato = scCart < scontoOfferta - 1e-9 ? "ok" : Math.abs(scCart - scontoOfferta) < 1e-9 ? "pari" : "fuori";
     esiti.push({ gmv, tipo: "sconto", offerta: scontoOfferta, cartellino: scCart, stato,
@@ -230,27 +304,17 @@ export function freschezza(iso, oggi = new Date()) {
   return "vecchio";
 }
 
-/* Il costo (acquistato): le stesse righe calcolate come ACQUISTO, con sconti ed extrasconti. */
-export function capitoloCosto(cap) {
-  // gli extrasconti valgono sia per l'acquisto sia per la vendita
-  return { ...cap, tipo: "ACQUISTO" };
-}
-
 /* Riepilogo economico di un capitolo (ex foglio ANALISI PACCHETTO).
-   Venduto = totale del capitolo con il suo tipo di offerta.
-   Acquistato = le stesse righe calcolate come ACQUISTO con gli sconti del database e gli extrasconti
-   del fornitore (il costo vero, senza ricarico). */
+   Venduto = condizioni di vendita; Acquistato = condizioni di acquisto (standard o extra). */
 export function riepilogoCapitolo(cap, opz = {}) {
   const v = calcolaOfferta(cap, opz);
-  const a = calcolaOfferta(capitoloCosto(cap), opz);
   const out = {
     righe: v.righe.length, venduto: 0, acquistato: 0,
     attivita: { venduto: 0, acquistato: 0 }, materiale: { venduto: 0, acquistato: 0 },
     perGmv: new Map(),
   };
-  v.righe.forEach((x, i) => {
-    const costo = a.righe[i].c.totale;
-    const vend = x.c.totale;
+  for (const x of v.righe) {
+    const costo = x.c.acq.totale, vend = x.c.totale;
     out.venduto += vend; out.acquistato += costo;
     const parte = isAttivita(x.riga) ? out.attivita : out.materiale;
     parte.venduto += vend; parte.acquistato += costo;
@@ -258,27 +322,30 @@ export function riepilogoCapitolo(cap, opz = {}) {
     if (!out.perGmv.has(g)) out.perGmv.set(g, { righe: 0, venduto: 0, acquistato: 0, prima: x });
     const pg = out.perGmv.get(g);
     pg.righe++; pg.venduto += vend; pg.acquistato += costo;
-  });
+  }
   return out;
 }
 export const ricaricoPct = (venduto, acquistato) => (acquistato ? venduto / acquistato - 1 : 0);
 export const marginePct = (venduto, acquistato) => (venduto ? 1 - acquistato / venduto : 0);
 
-/* Ricarico dell'offerta che porta il capitolo (VENDITA CLIENTE) al prezzo target.
-   Le righe con un ricarico forzato sul GMV restano come sono. Restituisce null se non è possibile. */
-export function ricaricoPerTarget(cap, target, opz = {}) {
-  if (cap.tipo !== "VENDITA CLIENTE") return null;
-  const gmvSenzaRic = Object.fromEntries(Object.entries(cap.gmv || {}).map(([g, v]) => [g, { ...v, ric: 0 }]));
-  const costo = calcolaOfferta({ ...cap, tipo: "VENDITA CLIENTE", globali: { ...cap.globali, ric: 0 }, gmv: gmvSenzaRic },
-    { ...opz, ricarichi: {} });
+/* Valore generale di vendita che porta il capitolo al prezzo target (condizione a pacchetto):
+   con il ricarico, il ricarico generale; con listino / sconto, lo sconto generale.
+   Le righe con un valore proprio sul GMA (e l'attività nel caso dello sconto) restano come sono.
+   Restituisce { campo: "ricGen" | "scGen", valore } (frazione) oppure null. */
+export function vendutaPerTarget(cap, target, opz = {}) {
+  const k = condizioni(cap);
+  const { righe } = calcolaOfferta(cap, opz);
   let fisso = 0, variabile = 0;
-  for (const x of costo.righe) {
-    const ricGmv = num(cap.gmv?.[x.riga.gmv]?.ric);
-    if (ricGmv) fisso += x.c.totale * (1 + ricGmv); else variabile += x.c.totale;
+  for (const x of righe) {
+    const g = x.riga.gmv || "";
+    if (k.ven.modo === "ricarico") {
+      if (leggiRicarico(k.ven.ricGma[g]) !== null) fisso += x.c.totale; else variabile += x.c.acq.totale;
+    } else if (isAttivita(x.riga) || valido(leggiSconti(k.ven.scGma[g]))) fisso += x.c.totale; // il target scrive uno sconto "al posto": l'attività non cambia
+    else variabile += num(x.riga.listinoAcquisto) * x.c.qta;
   }
   if (!variabile) return null;
-  const ric = (num(target) - fisso) / variabile - 1;
-  return Number.isFinite(ric) ? ric : null;
+  const valore = k.ven.modo === "ricarico" ? (num(target) - fisso) / variabile - 1 : 1 - (num(target) - fisso) / variabile;
+  return Number.isFinite(valore) ? { campo: k.ven.modo === "ricarico" ? "ricGen" : "scGen", valore } : null;
 }
 
 /* Stato del prezzo di un articolo, in base alla data di aggiornamento e alla regola del suo precodice.
