@@ -1314,7 +1314,7 @@ function disegnaPicker(c, reset = false) {
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
       sotto = a.sottocapitolo || "";
-      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="9"><input type="checkbox" class="sel-gruppo" data-pickgruppo title="Seleziona tutti gli articoli di questo sottocapitolo"> ${esc(sotto || "—")}</td></tr>`;
+      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="8"><input type="checkbox" class="sel-gruppo" data-pickgruppo title="Seleziona tutti gli articoli di questo sottocapitolo"> ${esc(sotto || "—")}</td></tr>`;
     }
     const att = isAttivita(a);
     const pSel = S.pickSel.has(a.k);
@@ -1322,12 +1322,12 @@ function disegnaPicker(c, reset = false) {
       <td class="sel-col"><input type="checkbox" data-pick-sel ${pSel ? "checked" : ""}></td>
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
-      <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
+      <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       <td class="mono">${esc(a.gmv)}</td>
       <td>${pallino(a)}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
-  $("#righe-picker").innerHTML = html || `<tr><td colspan="9" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
+  $("#righe-picker").innerHTML = html || `<tr><td colspan="8" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
   applicaGruppi($("#righe-picker"));
   S.pickVis = vis.map((a) => a.k);
   aggiornaPickSel();
@@ -1335,10 +1335,10 @@ function disegnaPicker(c, reset = false) {
   if (q.length >= 2) {
     caricaBib();
     const tb = $("#righe-picker");
-    if (!S.bibPronta) tb.insertAdjacentHTML("beforeend", `<tr class="sotto"><td colspan="9" class="muted">Cerco anche nella biblioteca…</td></tr>`);
+    if (!S.bibPronta) tb.insertAdjacentHTML("beforeend", `<tr class="sotto"><td colspan="8" class="muted">Cerco anche nella biblioteca…</td></tr>`);
     else {
       const trovati = cercaBib(q, { escludiDb: true }).slice(0, 40);
-      if (trovati.length) tb.insertAdjacentHTML("beforeend", `<tr class="sotto bib-testa" data-gruppo="__biblioteca"><td colspan="9">Dalla biblioteca (listini fornitore, non nel database)</td></tr>` +
+      if (trovati.length) tb.insertAdjacentHTML("beforeend", `<tr class="sotto bib-testa" data-gruppo="__biblioteca"><td colspan="8">Dalla biblioteca (listini fornitore, non nel database)</td></tr>` +
         trovati.map((a) => rigaBibHtml(a, "picker")).join(""));
       applicaGruppi(tb);
     }
@@ -1738,16 +1738,16 @@ function disegnaCatalogo() {
   let gruppo = null, html = "";
   for (const a of vis) {
     const g = (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
-    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="12">${esc(g)}</td></tr>`; }
+    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="11">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
-      <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td><td class="num">${euro(prezzoListino(a))}</td>
+      <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       <td class="num">${pctTxt(a.sc3)}</td><td class="num">${pctTxt(a.sc4)}</td><td class="num">${pctTxt(a.sc5)}</td>
       <td class="num">${pctTxt(a.aum1)}</td><td class="num">${pctTxt(a.riparam)}</td><td class="mono">${esc(a.gmv)}</td>
       <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
-  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="12" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
+  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="11" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
   applicaGruppi($("#righe-catalogo"));
   $("#c-info").textContent = `${vis.length} di ${lista.length} articoli`;
   $("#c-altri").hidden = vis.length >= lista.length;
@@ -1795,7 +1795,7 @@ function modificaArticolo(a) {
     titolo: nuovo ? "Nuovo articolo" : `${codiceArticolo(a)} · ${a.nOrdine}`,
     html: `<div class="grid-set">
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
-      <label class="f wide">Sottocapitolo del database (scegline uno o scrivine uno nuovo)<input id="m-sotto" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
+      <label class="f wide" title="Scegline uno dall'elenco o scrivine uno nuovo">Sottocapitolo<input id="m-sotto" placeholder="scegli o scrivi un sottocapitolo nuovo" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
       <label class="f">Precodice<input id="m-pre" value="${esc(a.precodice)}"></label>
       <label class="f">Codice<input id="m-cod" value="${esc(a.codice)}"></label>
       <label class="f wide">N° di ordinazione<input id="m-ord" value="${esc(a.nOrdine)}"></label>
@@ -1806,13 +1806,13 @@ function modificaArticolo(a) {
       ${campoNum("m-sc3", "Sconto 3", a.sc3, true)}${campoNum("m-sc4", "Sconto 4", a.sc4, true)}
       ${campoNum("m-sc5", "Sconto 5", a.sc5, true)}${campoNum("m-aum1", "Aumento 1", a.aum1, true)}
       ${campoNum("m-rp", "Riparametrizzazione", a.riparam, true)}
-      ${campoNum("m-li", "Prezzo di listino €", a.listino)}
+      <div hidden>${campoNum("m-li", "Prezzo di listino €", a.listino)}</div>
       <label class="f">Data aggiornamento<input id="m-data" type="date" value="${esc(a.dataAgg || "")}"></label>
     </div>
     <label class="row small" style="margin-top:8px"><input type="checkbox" id="m-gen" ${isGenerico(a) ? "checked" : ""}>
       <b>Tratta come articolo generico</b> — in Oracle: ${CODICE_GENERICO}, prezzo netto, n° di ordinazione nella nota pre-linea e descrizione nella post-linea</label>
     <p class="muted small" style="margin:4px 0 0">Se cambi un prezzo o uno sconto, la data di aggiornamento diventa quella di oggi (puoi correggerla).</p>
-    <label class="row small" style="margin-top:8px"><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}>
+    <label class="row small" style="margin-top:8px" hidden><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}>
       Prezzo di listino calcolato automaticamente (come la colonna K dell'Excel)</label>
     <label class="f" style="margin-top:10px">Descrizione<textarea id="m-des" rows="4">${esc(a.descrizione)}</textarea></label>
     <div class="grid-set" style="margin-top:10px" id="m-note-box">
@@ -2249,7 +2249,7 @@ function rigaBibHtml(a, modo) {
     : `<button type="button" class="btn small primary" data-bib-add="${esc(a.k)}">Aggiungi…</button>`;
   const desc = `<td class="desc"><b>${esc(a.nOrdine || a.codice)}</b>${modo !== "pagina" ? ` <span class="badge info">${esc(a.fornitore)}</span>` : ""}<div class="d">${esc(a.descrizione)}</div>${a.sottocapitolo ? `<div class="muted small">${esc(a.sottocapitolo)}</div>` : ""}</td>`;
   if (modo === "picker") return `<tr class="bib" data-bib="${esc(a.k)}"><td></td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
-    <td class="num">${euro(a.listino)}</td><td class="num">${sc}</td><td class="mono">${esc(k.gma)}</td><td>${decidi}</td><td class="num nowrap">${azione}</td></tr>`;
+    <td class="num">${euro(a.listino)}<div class="muted small">sc. ${sc}</div></td><td class="mono">${esc(k.gma)}</td><td>${decidi}</td><td class="num nowrap">${azione}</td></tr>`;
   return `<tr class="bib" data-bib="${esc(a.k)}"><td>${esc(a.fornitore)}</td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
     <td class="num">${euro(a.listino)}</td><td class="mono small">${a.famiglia ? esc(a.famiglia) + " → " : ""}<b>${esc(k.gma || "—")}</b></td>
     <td class="num nowrap">${sc}${k.fonte === "listino" ? ' <span class="muted small">(listino)</span>' : ""}</td><td class="nowrap">${decidi} ${azione}</td></tr>`;

@@ -760,3 +760,4 @@ tr.bib td { background: color-mix(in srgb, var(--accent-soft) 45%, var(--row)) !
 tr.bib-testa td { font-weight: 700; }
 .btn.ghost { background: transparent; border-style: dashed; }
 #o-imp { flex-wrap: nowrap; } #o-imp button { white-space: nowrap; }
+#dlg .grid-set > label.f { justify-content: flex-end; }
