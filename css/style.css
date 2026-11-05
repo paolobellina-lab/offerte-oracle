@@ -763,3 +763,9 @@ tr.bib-testa td { font-weight: 700; }
 #dlg .grid-set > label.f { justify-content: flex-end; }
 #o-imp { max-width: none; }
 table.modo-listino .solo-av { display: none; }
+
+/* Righe evidenziate più visibili: selezionate (azzurro deciso) e riga in cui si sta scrivendo (giallo) */
+:root[data-theme="chiaro"] { --riga-sel: #a3c6ee; --riga-sel-bordo: #1d4f86; --riga-attiva: #ffe27a; --riga-attiva-bordo: #d69a00; }
+:root[data-theme="scuro"] { --riga-sel: #2c5687; --riga-sel-bordo: #8fc1f0; --riga-attiva: #6e5a12; --riga-attiva-bordo: #f0c24e; }
+tr.sel td, #righe-picker tr.sel td { background: var(--riga-sel) !important; }
+tr.sel td:first-child { box-shadow: inset 4px 0 0 var(--riga-sel-bordo); }
