@@ -94,13 +94,22 @@ export function leggiSconti(t) {
   const fattore = parti.reduce((f, p) => f * (1 - num(p) / 100), 1);
   return { aggiunta, fattore, testo: (aggiunta ? "+" : "") + parti.join("+") };
 }
-/* Ricarico in percentuale: "28" = 28%; "20+5" = 20% poi 5%. Restituisce la frazione (0.28) o null. */
-export function leggiRicarico(t) {
-  const s = String(t ?? "").replace(/%/g, "").replace(/\s+/g, "").replace(/^\+/, "");
+/* Ricarico in percentuale: "28" = 28% al posto dell'automatico; "20+5" = 20% poi 5%;
+   "+5" = in aggiunta al ricarico automatico del capitolo. Restituisce { aggiunta, fattore } o null. */
+export function leggiRicSpec(t) {
+  let s = String(t ?? "").replace(/%/g, "").replace(/\s+/g, "");
   if (!s) return null;
+  const aggiunta = s.startsWith("+");
+  if (aggiunta) s = s.slice(1);
   const parti = s.split("+");
   if (!parti.every((p) => RE_TERMINE.test(p))) return null;
-  return parti.reduce((f, p) => f * (1 + num(p) / 100), 1) - 1;
+  return { aggiunta, fattore: parti.reduce((f, p) => f * (1 + num(p) / 100), 1) };
+}
+/* Ricarico risultante (frazione) dato l'automatico, oppure null se il testo è vuoto o sbagliato. */
+export function leggiRicarico(t, auto = 0) {
+  const sp = leggiRicSpec(t);
+  if (!sp) return null;
+  return (sp.aggiunta ? (1 + num(auto)) * sp.fattore : sp.fattore) - 1;
 }
 export const testoValido = (t, ric = false) => !String(t ?? "").trim() || (ric ? leggiRicarico(t) !== null : !leggiSconti(t)?.errore);
 /* Sconti standard dell'articolo (database): Sconto 3, 4, 5 e Aumento 1. L'attività tecnica non ne ha. */
@@ -163,7 +172,7 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const f0 = fattoreStandard(r);
   // acquisto: standard del database, oppure le condizioni extra (del GMA o generali)
   let fAcq = f0, fonteAcq = "standard";
-  if (k.acq.modo === "extra") {
+  { // le condizioni di acquisto scritte nella pagina Prezzi (vuote = standard del database)
     const spG = valido(leggiSconti(k.acq.gma[g])), spC = generalePer(att, k.acq.gen);
     if (spG) { fAcq = applica(spG, f0); fonteAcq = "gma"; } else if (spC) { fAcq = applica(spC, f0); fonteAcq = "generale"; }
   }
@@ -173,8 +182,9 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   // vendita: ricarico sull'acquisto, oppure sconto sul listino
   let perPezzo, ric = null, fVen = null, baseVen, fonteVen;
   if (k.ven.modo === "ricarico") {
-    const rG = leggiRicarico(k.ven.ricGma[g]), rC = leggiRicarico(k.ven.ricGen);
-    ric = rG ?? rC ?? num(ricarichi[r.capitolo]);
+    const auto = num(ricarichi[r.capitolo]);
+    const rG = leggiRicarico(k.ven.ricGma[g], auto), rC = leggiRicarico(k.ven.ricGen, auto);
+    ric = rG ?? rC ?? auto;
     fonteVen = rG !== null ? "gma" : rC !== null ? "generale" : "automatico";
     baseVen = acqUnit * (att && gg > 0 ? gg : 1);
     perPezzo = baseVen * (1 + ric);

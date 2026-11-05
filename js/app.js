@@ -522,16 +522,13 @@ const ricAutoCap = (c) => num(S.capitoli.find((x) => x.nome === c.nome)?.ricaric
 function disegnaImpostCapitolo() {
   const c = capAtt(); if (!c) return;
   aggiornaCondizioni(c);
-  seg($("#c-acq-modo"), Object.keys(MODI_ACQ), c.acq.modo, (v) => MODI_ACQ[v]);
   seg($("#c-ven-modo"), Object.keys(MODI_VEN), c.ven.modo, (v) => MODI_VEN[v]);
   seg($("#c-out-prezzo"), Object.keys(OUT_PREZZO), c.out.prezzo, (v) => OUT_PREZZO[v]);
   seg($("#c-out-formato"), Object.keys(OUT_FORMATO), c.out.formato, (v) => OUT_FORMATO[v]);
   seg($("#c-sottocap"), ["SI", "NO"], c.sottocapitoli ? "SI" : "NO");
   $("#c-linea").value = c.lineaPartenza ?? 10;
   $("#c-magazzino").value = c.magazzino ?? "BG";
-  const extra = c.acq.modo === "extra", ricarico = c.ven.modo === "ricarico";
-  $("#c-acq").classList.toggle("spento", !extra);
-  $("#cond-ven-tit").textContent = ricarico ? "Ricarico % (sull'acquisto)" : "Sconto al cliente % (sul listino acquisto)";
+  const ricarico = c.ven.modo === "ricarico";
   $("#c-target-calcola").textContent = ricarico ? "Calcola il ricarico" : "Calcola lo sconto";
   $("#c-target-nota").textContent = ricarico ? "Imposta il ricarico generale per arrivare a quel totale (condizione a pacchetto)."
     : "Imposta lo sconto generale sul listino per arrivare a quel totale (condizione a pacchetto).";
@@ -541,7 +538,6 @@ function disegnaImpostCapitolo() {
 }
 const suCap = (fn) => (e) => { const c = capAtt(); if (!c) return; aggiornaCondizioni(c); fn(c, e); };
 const suSeg = (fn) => suCap((c, e) => { const b = e.target.closest("button[data-v]"); if (b) { fn(c, b.dataset.v); modificata(); disegnaOfferta(); } });
-$("#c-acq-modo").addEventListener("click", suSeg((c, v) => (c.acq.modo = v)));
 $("#c-ven-modo").addEventListener("click", suSeg((c, v) => (c.ven.modo = v)));
 $("#c-out-prezzo").addEventListener("click", suSeg((c, v) => (c.out.prezzo = v)));
 $("#c-out-formato").addEventListener("click", suSeg((c, v) => (c.out.formato = v)));
@@ -562,70 +558,72 @@ function scriviCondizione(inp, ric, salva) {
   modificata(); ridisegnaOfferta();
   return true;
 }
-/* Campo sconto: una cella per sconto (in cascata), più la scelta "in aggiunta / al posto" dello standard.
-   Si compila una cella e ne compare una nuova accanto. In una cella: 15 o -15 = sconto, +5 = aumento.
-   Nel capitolo si salva come testo: "+15+5" = in aggiunta, "55" o "75+15" = al posto ("-5" dentro = aumento). */
-const modoDi = (t, def) => (String(t || "").trim() ? (String(t).trim().startsWith("+") ? "agg" : "posto") : def);
-const termini = (t) => String(t || "").trim().replace(/^\+/, "").split("+").filter((x) => x !== "");
-const cellaDaTermine = (x) => (x.startsWith("-") ? "+" + x.slice(1) : x);  // aumento: in cella con il +
-const termineDaCella = (v) => {
-  const t = v.trim().replace(/\s+/g, "").replace(/%/g, "");
+/* Condizione di una riga (Generale o GMA): cella Standard modificabile + celle Extra.
+   Standard = sconto del database (o ricarico automatico). Se lo cambi vale al posto dello standard
+   (0 = niente standard, prezzo di listino). Le celle Extra si aggiungono in cascata: compilata una ne compare un'altra.
+   Sconti: 15 o -15 = sconto, +5 = aumento. Ricarichi: 5 = ricarico, -5 = riduzione.
+   Si salva come testo: "+15+5" = standard più extra; "55+10" = 55 al posto dello standard, poi 10. */
+const normTesto = (v) => String(v ?? "").trim().replace(/\s+/g, "").replace(/%/g, "").replace(/\./g, ",");
+function scomponi(val) {
+  const t = normTesto(val);
+  if (!t) return { over: null, extra: [] };
+  if (t.startsWith("+")) return { over: null, extra: t.slice(1).split("+").filter(Boolean) };
+  const p = t.split("+").filter(Boolean);
+  return { over: p[0] ?? null, extra: p.slice(1) };
+}
+const cellaDaTermine = (x, tipo) => (tipo === "sc" && x.startsWith("-") ? "+" + x.slice(1) : x);
+const termineDaCella = (v, tipo) => {
+  const t = normTesto(v);
   if (!t) return "";
-  if (t.startsWith("+")) return "-" + t.slice(1);   // +5 = aumento del 5%
-  if (t.startsWith("-")) return t.slice(1);          // -15 = sconto del 15%
-  return t;
+  if (tipo === "ric") return t.replace(/^\+/, "");
+  if (t.startsWith("+")) return "-" + t.slice(1); // +5 = aumento del 5%
+  return t.replace(/^-/, "");                      // -15 = sconto del 15%
 };
-function descrSconto(t) {
-  if (!String(t || "").trim()) return "";
-  return `${modoDi(t) === "agg" ? "in aggiunta" : "al posto"}: ${termini(t).map(cellaDaTermine).join(" · ")}%`;
+const RE_CASCATA = /^-?\d+(?:,\d+)?(?:\+-?\d+(?:,\d+)?)*$/;
+const htmlCella = (v, ph = "") => `<input class="cond cella" value="${esc(v)}" placeholder="${esc(ph)}" inputmode="decimal">`;
+function htmlCondizione({ dove, gma = "", val, tipo, std = "", eredita = false, phStd = "", phExtra = "extra" }) {
+  const { over, extra } = scomponi(val);
+  const mod = over !== null;
+  const valStd = mod ? over : eredita ? "" : std;
+  const celle = [...extra.map((x) => cellaDaTermine(x, tipo)), ""];
+  return `<span class="cond-box" data-dove="${dove}" data-gma="${esc(gma)}" data-tipo="${tipo}" data-std="${esc(std)}" data-eredita="${eredita ? 1 : ""}">
+    <span class="std-wrap"><input class="cond std${mod ? " mod" : ""}" value="${esc(valStd)}" placeholder="${esc(eredita ? "come Generale" : phStd)}" inputmode="decimal"
+      title="${mod ? `Modificato: lo standard era ${std || "—"}%` : "Standard: cambialo per sostituirlo (0 = niente standard)"}">${mod && std ? `<s class="std-barrato">${esc(std)}%</s>` : ""}</span>
+    <span class="celle" title="Extra in cascata: compilata una cella ne compare un'altra">${celle.map((v, i) => htmlCella(v, i === 0 && !extra.length ? (mod || extra.length ? "extra" : phExtra) : "")).join("")}</span></span>`;
 }
-const htmlCella = (v, ph, dis) => `<input class="cond cella" value="${esc(v)}" placeholder="${esc(ph)}" ${dis ? "disabled" : ""} inputmode="decimal">`;
-function htmlCampoSconto({ dove, gma = "", val, def, dis = false, ph = "" }) {
-  const m = modoDi(val, def);
-  const celle = termini(val).map(cellaDaTermine);
-  if (!dis) celle.push(""); // una cella vuota in fondo per lo sconto successivo
-  if (!celle.length) celle.push("");
-  return `<span class="cond-box${dis ? " spento" : ""}" data-dove="${dove}" data-gma="${esc(gma)}" data-modo="${m}">
-    <span class="mini-seg"><button type="button" data-cm="agg" class="${m === "agg" ? "on" : ""}" ${dis ? "disabled" : ""} title="In aggiunta allo standard del database">in aggiunta</button><button type="button" data-cm="posto" class="${m === "posto" ? "on" : ""}" ${dis ? "disabled" : ""} title="Al posto dello standard del database">al posto</button></span>
-    <span class="celle">${celle.map((v, i) => htmlCella(v, i === 0 ? ph : "", dis)).join("")}</span></span>`;
-}
-function disegnaCampoSconto(el, o) {
-  if (el.contains(document.activeElement)) return; // non si ridisegna mentre ci scrivi
-  el.innerHTML = htmlCampoSconto(o);
-}
-function salvaCampoSconto(box) {
+function salvaCondizione(box) {
   const c = capAtt(); if (!c) return;
   aggiornaCondizioni(c);
-  const g = box.dataset.gma;
+  const g = box.dataset.gma, tipo = box.dataset.tipo;
   const salva = {
     acqGen: (t) => (c.acq.gen = t),
     venScGen: (t) => (c.ven.scGen = t),
+    ricGen: (t) => (c.ven.ricGen = t),
     acqGma: (t) => { if (t) c.acq.gma[g] = t; else delete c.acq.gma[g]; },
     venScGma: (t) => { if (t) c.ven.scGma[g] = t; else delete c.ven.scGma[g]; },
+    ricGma: (t) => { if (t) c.ven.ricGma[g] = t; else delete c.ven.ricGma[g]; },
   }[box.dataset.dove];
-  const celle = [...box.querySelectorAll("input.cella")];
-  const terms = celle.map((x) => termineDaCella(x.value)).filter(Boolean);
-  const finale = terms.length ? (box.dataset.modo === "agg" ? "+" : "") + terms.join("+") : "";
-  const errate = celle.filter((x) => x.value.trim() && !/^-?\d+(?:[.,]\d+)?$/.test(termineDaCella(x.value)));
+  const stdInp = box.querySelector("input.std"), celle = [...box.querySelectorAll("input.cella")];
+  const t = normTesto(stdInp.value), std = normTesto(box.dataset.std);
+  // uguale allo standard (o vuoto) = non modificato; dove vale il Generale, qualunque valore scritto è proprio del GMA
+  const over = !t || (t === std && !box.dataset.eredita) ? null : t;
+  const extra = celle.map((x) => termineDaCella(x.value, tipo)).filter(Boolean);
+  const errStd = over !== null && !RE_CASCATA.test(over);
+  const errate = celle.filter((x) => x.value.trim() && !RE_CASCATA.test(termineDaCella(x.value, tipo)));
+  stdInp.classList.toggle("errato", errStd);
   celle.forEach((x) => x.classList.toggle("errato", errate.includes(x)));
-  if (errate.length || !testoValido(finale)) return toast("Sconto non valido: in ogni cella un numero (15 o -15 = sconto, +5 = aumento).", 6000);
+  const finale = over === null ? (extra.length ? "+" + extra.join("+") : "") : over + (extra.length ? "+" + extra.join("+") : "");
+  if (errStd || errate.length || !testoValido(finale, tipo === "ric")) return toast("Valore non valido: in ogni cella un numero (es. 15, -15 oppure +5).", 6000);
   salva(finale);
   modificata(); ridisegnaOfferta();
 }
-// compilando l'ultima cella ne compare una nuova accanto
+// compilando l'ultima cella extra ne compare una nuova accanto
 document.addEventListener("input", (e) => {
   const inp = e.target.closest(".cond-box input.cella"); if (!inp) return;
   const celle = inp.parentElement;
-  if (inp === celle.lastElementChild && inp.value.trim()) celle.insertAdjacentHTML("beforeend", htmlCella("", "", false));
+  if (inp === celle.lastElementChild && inp.value.trim()) celle.insertAdjacentHTML("beforeend", htmlCella(""));
 });
-document.addEventListener("change", (e) => { const box = e.target.closest(".cond-box"); if (box && e.target.matches("input.cella")) salvaCampoSconto(box); });
-document.addEventListener("click", (e) => {
-  const b = e.target.closest(".cond-box [data-cm]"); if (!b) return;
-  const box = b.closest(".cond-box");
-  box.dataset.modo = b.dataset.cm;
-  box.querySelectorAll("[data-cm]").forEach((x) => x.classList.toggle("on", x === b));
-  if ([...box.querySelectorAll("input.cella")].some((x) => x.value.trim())) salvaCampoSconto(box);
-});
+document.addEventListener("change", (e) => { const box = e.target.closest(".cond-box"); if (box && e.target.matches("input")) salvaCondizione(box); });
 $("#c-target-calcola").addEventListener("click", suCap((c) => {
   const target = num($("#c-target").value);
   if (!target) return toast("Scrivi il prezzo target del capitolo.");
@@ -741,7 +739,8 @@ function disegnaOffertaIn(cambioSub) {
 /* Descrizione breve delle condizioni del capitolo */
 function descrCondizioni(c) {
   const k = condizioni(c);
-  return `Acq. ${MODI_ACQ[k.acq.modo].toLowerCase()} · Vend. ${k.ven.modo === "ricarico" ? "ricarico" : "listino/sconto"} · Oracle: ${OUT_PREZZO[k.out.prezzo].toLowerCase()}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
+  const conExtra = k.acq.gen || Object.keys(k.acq.gma).length;
+  return `Acq. ${conExtra ? "con condizioni proprie" : "standard"} · Vend. ${k.ven.modo === "ricarico" ? "ricarico" : "listino/sconto"} · Oracle: ${OUT_PREZZO[k.out.prezzo].toLowerCase()}, ${OUT_FORMATO[k.out.formato].toLowerCase()}`;
 }
 /* --- Riepilogo dell'offerta (ex ANALISI PACCHETTO) --- */
 function disegnaRiepilogo() {
@@ -1501,24 +1500,46 @@ function standardDi(righe) {
   if (!testi.size) return "—";
   return testi.size === 1 ? [...testi][0] + "%" : "vari";
 }
+/* Standard del database per un gruppo di righe, come testo ("75", "50+10"); "" se diverso tra le righe; "0" per l'attività. */
+function stdTesto(righe) {
+  const testi = new Set(righe.map((r) => {
+    if (isAttivita(r)) return "0";
+    const p = CAMPI_SCONTO.filter((k) => num(r[k])).map((k) => pctTesto(k === "aum1" ? -num(r[k]) : num(r[k])));
+    return p.length ? p.join("+") : "0";
+  }));
+  return testi.size === 1 ? [...testi][0] : "";
+}
 function disegnaGmv(c, rc) {
-  const k = condizioni(c), ricarico = k.ven.modo === "ricarico", extra = k.acq.modo === "extra";
+  const k = condizioni(c), ricarico = k.ven.modo === "ricarico";
   const righeCap = c.righe.filter((r) => num(r.qta));
   const gmaOrd = [...rc.perGmv.entries()].sort((a, b) => b[1].venduto - a[1].venduto);
   const conGma = gmaOrd.filter(([g]) => g);
   // condizioni: riga Generale + una riga per GMA, nel blocco acquisto e nel blocco vendita
-  const stdTutte = standardDi(righeCap);
-  const ricAuto = `automatico ${pctTxt(ricAutoCap(c)) || "0%"}`;
-  const ricCampo = (g, val, ph) => `<input class="cond" data-ric="${esc(g)}" value="${esc(val || "")}" placeholder="${esc(ph)}" inputmode="decimal">`;
-  const riga = (g, std, campo, gen = false) => `<tr class="${gen ? "cond-gen" : ""}"><td class="mono"><b>${gen ? "Generale" : esc(g)}</b></td>
-    <td>${gen ? '<span class="muted small">tutti i GMA senza valore proprio</span>' : esc(fornitore(g))}</td><td class="num muted">${std}</td><td>${campo}</td></tr>`;
-  const stdDi = (g) => standardDi(righeCap.filter((r) => (r.gmv || "") === g));
-  $("#cond-acq").innerHTML = riga("", stdTutte, htmlCampoSconto({ dove: "acqGen", val: c.acq.gen, def: "agg", dis: !extra, ph: "standard" }), true) +
-    conGma.map(([g]) => riga(g, stdDi(g), htmlCampoSconto({ dove: "acqGma", gma: g, val: c.acq.gma[g], def: "agg", dis: !extra, ph: descrSconto(c.acq.gen) || "generale" }))).join("");
+  const stdDi = (g) => stdTesto(righeCap.filter((r) => (r.gmv || "") === g));
+  const soloAtt = (g) => righeCap.filter((r) => (r.gmv || "") === g).every(isAttivita);
+  // il Generale vale per il GMA senza valori propri (sull'attività solo se è in aggiunta):
+  // se cambia lo standard, la cella standard del GMA dice "come Generale"; se aggiunge solo extra, resta lo standard del GMA
+  const vale = (gen, g) => !!normTesto(gen) && (!soloAtt(g) || normTesto(gen).startsWith("+"));
+  const opzGen = (gen, g, tipo = "sc") => {
+    if (!vale(gen, g)) return {};
+    const { over, extra } = scomponi(gen);
+    return { eredita: over !== null, phExtra: extra.length ? `Gen.: ${extra.map((x) => cellaDaTermine(x, tipo)).join(" · ")}` : "extra" };
+  };
+  const riga = (g, campo, gen = false) => `<tr class="${gen ? "cond-gen" : ""}"><td class="mono"><b>${gen ? "Generale" : esc(g)}</b></td>
+    <td>${gen ? '<span class="muted small">GMA senza valori propri</span>' : esc(fornitore(g))}</td><td>${campo}</td></tr>`;
+  $("#cond-acq").innerHTML = riga("", htmlCondizione({ dove: "acqGen", val: c.acq.gen, tipo: "sc", phStd: "standard" }), true) +
+    conGma.map(([g]) => riga(g, htmlCondizione({ dove: "acqGma", gma: g, val: c.acq.gma[g], tipo: "sc", std: stdDi(g), ...opzGen(c.acq.gen, g) }))).join("");
+  const ricStd = pctTesto(ricAutoCap(c));
   $("#cond-ven").innerHTML = ricarico
-    ? riga("", stdTutte, ricCampo("", c.ven.ricGen, ricAuto), true) + conGma.map(([g]) => riga(g, stdDi(g), ricCampo(g, c.ven.ricGma[g], c.ven.ricGen ? `generale ${c.ven.ricGen}%` : ricAuto))).join("")
-    : riga("", stdTutte, htmlCampoSconto({ dove: "venScGen", val: c.ven.scGen, def: "posto", ph: "standard" }), true) +
-      conGma.map(([g]) => riga(g, stdDi(g), htmlCampoSconto({ dove: "venScGma", gma: g, val: c.ven.scGma[g], def: "posto", ph: descrSconto(c.ven.scGen) || "generale" }))).join("");
+    ? riga("", htmlCondizione({ dove: "ricGen", val: c.ven.ricGen, tipo: "ric", std: ricStd }), true) +
+      conGma.map(([g]) => riga(g, htmlCondizione({ dove: "ricGma", gma: g, val: c.ven.ricGma[g], tipo: "ric", std: ricStd, ...(normTesto(c.ven.ricGen) ? (() => { const { over, extra } = scomponi(c.ven.ricGen); return { eredita: over !== null, phExtra: extra.length ? `Gen.: ${extra.join(" · ")}` : "extra" }; })() : {}) }))).join("")
+    : riga("", htmlCondizione({ dove: "venScGen", val: c.ven.scGen, tipo: "sc", phStd: "standard" }), true) +
+      conGma.map(([g]) => riga(g, htmlCondizione({ dove: "venScGma", gma: g, val: c.ven.scGma[g], tipo: "sc", std: stdDi(g), ...opzGen(c.ven.scGen, g) }))).join("");
+  // intestazione "Standard" barrata in rosso se in quel riquadro uno standard è stato cambiato
+  $("#cond-acq-std").classList.toggle("barrato", !!$("#cond-acq input.std.mod"));
+  $("#cond-ven-std").classList.toggle("barrato", !!$("#cond-ven input.std.mod"));
+  $("#cond-ven-std").textContent = ricarico ? "Ricarico automatico" : "Standard";
+  $("#cond-ven-extra").textContent = ricarico ? "Ricarichi extra" : "Extra";
   // riepilogo per GMA (solo lettura)
   const esiti = new Map(controlloCartellino(c, clienteOff(), opzCap(c)).map((x) => [x.gmv, x]));
   const html = gmaOrd.map(([g, info]) => {
@@ -1537,11 +1558,6 @@ function disegnaGmv(c, rc) {
   }).join("");
   $("#righe-gmv").innerHTML = html || `<tr><td colspan="11" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMA.</td></tr>`;
 }
-$("#cond-ven").addEventListener("change", suCap((c, e) => {
-  const inp = e.target.closest("input[data-ric]"); if (!inp) return;
-  const g = inp.dataset.ric;
-  scriviCondizione(inp, true, (t) => { if (!g) c.ven.ricGen = t; else if (t) c.ven.ricGma[g] = t; else delete c.ven.ricGma[g]; });
-}));
 
 /* --- Esportazione per Oracle (un foglio per capitolo) --- */
 const datiOracle = (c) => righeOracle(c, opzCap(c));

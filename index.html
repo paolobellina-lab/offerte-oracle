@@ -197,22 +197,19 @@
           <div class="cond-grid">
             <div class="card cond-card" id="c-acq">
               <h3 class="titolo-sez">Condizioni di acquisto</h3>
-              <div class="seg" id="c-acq-modo"></div>
               <div class="tbl-wrap cond-tab"><table>
-                <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Standard</th><th>Sconto di acquisto %</th></tr></thead>
+                <thead><tr><th>GMA</th><th>Fornitore</th><th><span id="cond-acq-std">Standard</span> <span class="muted">·</span> Extra (sconto di acquisto %)</th></tr></thead>
                 <tbody id="cond-acq"></tbody>
               </table></div>
-              <p class="muted small cond-aiuto"><b>Standard</b> = sconti del database. <b>Extra</b>: scrivi lo sconto e scegli
-                <b>in aggiunta</b> (es. standard 75, extra 15) oppure <b>al posto</b> dello standard (es. 55 invece di 75).
-                Una cella per sconto: compilata una, ne compare un'altra accanto per lo sconto successivo (in cascata).
-                In una cella <code>15</code> o <code>-15</code> = sconto, <code>+5</code> = aumento.
-                Vuoto: il GMA prende la riga Generale, il Generale prende lo standard. Sull'attività tecnica il generale vale solo se è in aggiunta.</p>
+              <p class="muted small cond-aiuto">La prima cella è lo <b>standard</b> del database: se lo cambi vale al posto dello standard (<code>0</code> = niente standard, prezzo di listino)
+                e l'intestazione si barra in rosso. Nelle celle accanto gli <b>extra</b> in cascata: compilata una, ne compare un'altra.
+                <code>15</code> o <code>-15</code> = sconto, <code>+5</code> = aumento. Una riga GMA vuota prende il Generale.</p>
             </div>
             <div class="card cond-card">
               <h3 class="titolo-sez">Condizioni di vendita</h3>
               <div class="seg" id="c-ven-modo"></div>
               <div class="tbl-wrap cond-tab"><table>
-                <thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Standard</th><th id="cond-ven-tit">Ricarico %</th></tr></thead>
+                <thead><tr><th>GMA</th><th>Fornitore</th><th><span id="cond-ven-std">Standard</span> <span class="muted">·</span> <span id="cond-ven-extra">Extra</span> %</th></tr></thead>
                 <tbody id="cond-ven"></tbody>
               </table></div>
               <div class="row" style="margin-top:12px">
