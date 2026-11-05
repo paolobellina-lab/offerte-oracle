@@ -119,12 +119,12 @@
           <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle di tutti i capitoli</button>
         </div>
         <div class="tbl-wrap senza-limite"><table>
-          <thead><tr><th>Capitolo</th><th>Tipo · prezzi</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th>
+          <thead><tr><th>Capitolo</th><th>Condizioni</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Acquistato</th>
             <th class="num">Materiale</th><th class="num">Attività</th><th class="num">Ricarico</th><th class="num">Margine</th><th>Cartellino</th><th></th></tr></thead>
           <tbody id="riepilogo-capitoli"></tbody>
         </table></div>
-        <p class="muted small">Venduto = totale del capitolo con il suo tipo di offerta. Acquistato = il costo vero: listino acquisto con gli sconti
-          del database e gli extrasconti, senza ricarico. Margine = 1 − acquistato / venduto.</p>
+        <p class="muted small">Venduto = totale con le condizioni di vendita del capitolo. Acquistato = totale con le condizioni di acquisto
+          (standard o extra). Margine = 1 − acquistato / venduto.</p>
         <div class="card">
           <label class="f">Note dell'offerta (uso interno, non vanno in Oracle)
             <textarea id="o-note" rows="5"></textarea>

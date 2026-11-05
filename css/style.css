@@ -728,3 +728,19 @@ tr.cond-gen td { background: var(--accent-soft) !important; font-weight: 600; }
 .cond-tab input.cond:not(.cella) { width: 150px; }
 .cond-box .celle { flex-wrap: nowrap; }
 .cond-box .mini-seg { flex: none; }
+
+/* Sfondo scuro sotto i riquadri (blu notte nel tema chiaro, quasi nero nel tema scuro):
+   i riquadri bianchi risaltano; testi e titoli scritti direttamente sullo sfondo diventano chiari. */
+:root[data-theme="chiaro"] { --bg: #1d2836; --su-sfondo: #e3e9f0; --su-sfondo-muted: #a8b6c6; }
+:root[data-theme="scuro"] { --bg: #0b0d10; --su-sfondo: #c9d4df; --su-sfondo-muted: #8794a2; }
+body { background: var(--bg) !important; }
+main :is(h1, h2, h3, h4, p, label, .muted, .small, summary, .titolo-sez, .riepilogo-label):not(.card *, .tbl-wrap *, dialog *, .menu-dx *, .avviso *, .pick-bar *, .seg *, .btn, .btn *, .mini-kpi *, .badge, .chip-check *, .bulk *, .vuoto) {
+  color: var(--su-sfondo-muted);
+}
+main :is(h1, h2, h3, h4, .titolo-sez, b, strong):not(.card *, .tbl-wrap *, dialog *, .menu-dx *, .avviso *, .pick-bar *, .seg *, .btn, .btn *, .mini-kpi *, .badge, .chip-check *, .bulk *, .vuoto) {
+  color: var(--su-sfondo);
+}
+main .titolo-sez:not(.card *) { border-left-color: #7fb0e3; }
+main label.f:not(.card *) > input, main label.f:not(.card *) > select { color: var(--ink); }
+/* contorno leggero per staccare i riquadri */
+.card, .tbl-wrap { box-shadow: 0 2px 10px rgba(0, 0, 0, .28) !important; }
