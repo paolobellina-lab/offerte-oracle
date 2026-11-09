@@ -123,8 +123,8 @@ Il cliente ricorda la data del censimento. Nell'offerta il cliente è **verde** 
 
 ## Impostazioni
 
-Pagina del menu con: **Elenco GMA** (fornitore, nuovo GMA, rinomina/unisci), **Acquisti standard**, **Scadenze prezzi**,
-**Capitoli del database** (ricarico automatico).
+Pagina del menu con: **GMA e acquisti standard** (fornitore, nuovo GMA, rinomina/unisci, sconti standard), **Scadenze prezzi**,
+**Ricarico standard** (per capitolo).
 
 **Acquisti standard**: per ogni GMA, divisi per fornitore, Sconto 1, 2, 3 (in cascata) e Aumento. Un articolo del database
 **senza sconti propri** usa questi (nella scheda articolo in grigio, nel database in corsivo); se ne ha anche uno solo, valgono i
