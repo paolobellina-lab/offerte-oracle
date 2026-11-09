@@ -317,13 +317,17 @@ export function controlloCartellino(off, cliente, opz = {}) {
   const visti = new Map();
   for (const x of righe) {
     const g = x.riga.gmv || "";
+    // articoli generici: prezzo del fornitore, nessuno sconto di cartellino da confrontare
+    if (isGenerico(x.riga) || String(g).toUpperCase() === "ARTGEN") continue;
+    // prestazioni prese dall'offerta di un fornitore: valore complessivo del fornitore, non una tariffa a giornata
+    if (isAttivita(x.riga) && x.riga.daOfferta) continue;
     if (!g || visti.has(g)) continue; // come CERCA.VERT: vale la prima riga del GMA
     visti.set(g, x);
   }
   const esiti = [];
   for (const [gmv, x] of visti) {
     if (gmv === "ATT" || isAttivita(x.riga)) {
-      const att = righe.find((y) => isAttivita(y.riga)) || x;
+      const att = righe.find((y) => isAttivita(y.riga) && !y.riga.daOfferta) || x;
       const tariffa = cliente.att === undefined || cliente.att === "" ? null : num(cliente.att);
       if (tariffa === null) continue;
       // tariffa giornaliera: in LISTINO e VENDITA CLIENTE il prezzo dell'attività comprende tutti i giorni

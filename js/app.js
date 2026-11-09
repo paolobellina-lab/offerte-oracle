@@ -1141,7 +1141,7 @@ function disegnaRiepilogoRighe(c) {
       <td class="num">${euro(x.acq.unitario)}${att ? '<span class="muted small">/g</span>' : ""}</td>
       <td class="num" title="${esc(fonte[x.fonteVen])}">${lisM ? pctTxt(x.scLis) || "0%" : ricarico ? pctTxt(x.ric) || "0%" : att ? "" : pctTxt(1 - x.fVen) || "0%"}${x.fonteVen === "gma" || x.fonteVen === "generale" ? ' <span class="fonte">●</span>' : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
-      <td class="num">${x.scontoListino === null ? "" : pctTxt(x.scontoListino) || "0%"}</td>
+      <td class="num">${x.scontoListino === null || isGenerico(r) ? "" : pctTxt(x.scontoListino) || "0%"}</td>
       <td class="mono">${esc(r.gmv)}</td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)} · acquistato ${euro(totA)}</td><td class="num">${euro(tot)}</td><td colspan="2"></td></tr>`;
   applicaGruppi(tb);
@@ -1870,9 +1870,10 @@ function disegnaGmv(c, rc) {
   const html = gmaOrd.map(([g, info]) => {
     const peso = rc.venduto ? info.venduto / rc.venduto : 0;
     const e = esiti.get(g), att = e?.tipo === "attivita";
-    const badge = !e ? '<span class="muted small">—</span>' :
+    const badge = !e ? `<span class="muted small">${isGenerico(info.prima.riga) || String(g).toUpperCase() === "ARTGEN" ? "generici: nessun cartellino" : "—"}</span>` :
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
-    const scList = info.prima.c.scontoListino;
+    const gen = isGenerico(info.prima.riga) || String(g).toUpperCase() === "ARTGEN";
+    const scList = gen ? null : info.prima.c.scontoListino;
     return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitore(g))}</td>
       <td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
       <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
