@@ -79,6 +79,31 @@ La biblioteca raccoglie i listini dei fornitori. Gli articoli restano nascosti f
   - **Aggiungi…** chiede quantità, capitolato e note, e ogni volta se mettere l'articolo anche nel database (capitolo e sottocapitolo).
 - **PDF**: i listini a tabella (es. Siemens Fire) e le righe dentro una mail si leggono bene; i cataloghi con descrizioni lunghe (es. Advanced) danno codici e prezzi giusti ma descrizioni meno pulite. Se il fornitore ha la versione Excel, meglio quella. I PDF scansionati (immagini) non si possono leggere.
 
+## Offerte dei fornitori (articoli generici)
+
+Nel menu dell'offerta, **Importa offerta fornitore** legge il PDF (o Excel / CSV) dell'offerta di un fornitore:
+
+- ogni **sezione** del documento diventa un **capitolo** dell'offerta (il nome si può cambiare nell'anteprima);
+- ogni riga diventa un articolo generico **P000 ARTICOLO_GEN**: n° di ordinazione = codice del fornitore,
+  descrizione completa, prezzo netto = listino acquisto. Se il documento ha listino e sconto, si prende il netto;
+- le **prestazioni** (codice o descrizione che inizia con "Prestazioni", "Servizi", "Attività"…) entrano come
+  attività tecnica **PITATT.TEC**, evidenziate in viola. La quantità del fornitore va nei giorni (1 × valore complessivo);
+  codice e descrizione del fornitore vanno nelle note pre-linea e post-linea. Con il tasto destro su una riga:
+  "Trasforma in attività" / "Trasforma in articolo generico";
+- le righe restano **solo nell'offerta**: non vanno nel database né in biblioteca;
+- le NOTE del fornitore si possono aggiungere alle note dell'offerta.
+
+**Controllo**: nell'anteprima si confronta la somma delle righe con i totali di sezione e il totale generale del
+documento (✓ / ✗) e si segnalano in rosso le righe in cui q.tà × unitario ≠ totale.
+
+**Come legge il PDF**: niente intelligenza artificiale né OCR. Si legge il testo scritto nel PDF con la sua posizione
+e si riconosce la tabella: una riga è un articolo se a destra ha quantità e importi; la descrizione sono le righe di
+testo centrate su quella riga; i titoli più grandi (o righe numerate senza prezzo) sono le sezioni; le righe "TOTALE…"
+servono al controllo. I PDF scansionati (immagini) non si leggono. Se il PDF non viene riconosciuto, o per Excel/CSV,
+si scelgono le colonne (codice, descrizione, U.M., quantità, prezzo, sconto, totale, sezione).
+
+Nel **riepilogo** la colonna **Esporta** decide quali capitoli scaricare con "Scarica i fogli Oracle dei capitoli spuntati".
+
 ## Come sono organizzati i dati (Firestore)
 
 | Collezione | Contenuto |
@@ -181,6 +206,8 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
 | `js/app.js` | Interfaccia |
 | `js/calc.js` | Calcoli prezzi, tracciato Oracle, controllo cartellino (le formule dell'Excel) |
 | `js/importa.js` | Lettura del file Excel |
+| `js/biblioteca.js` | Lettura dei listini fornitore (Excel, CSV, PDF) per la biblioteca |
+| `js/offforn.js` | Lettura delle offerte dei fornitori (PDF, Excel, CSV) in sezioni e righe |
 | `js/xlsx-lite.js` | Lettura e scrittura dei file Excel, senza librerie esterne |
 | `js/firebase.js` | Firestore, login Google, modalità prova |
 | `firebase-config.js` | La configurazione del tuo progetto Firebase |

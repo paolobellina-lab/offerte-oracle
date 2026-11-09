@@ -53,6 +53,8 @@
           <div class="sb-lista" id="cap-tabs"></div>
           <button type="button" class="sb-voce sb-add" id="sb-add" title="Aggiungi capitolo"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="sb-testo">Aggiungi capitolo</span></button>
           <select id="add-cap" class="add-cap sb-testo"></select>
+          <button type="button" class="sb-voce" id="sb-imp-off" title="Importa un'offerta fornitore (PDF, Excel o CSV): ogni sezione diventa un capitolo di articoli generici"><span class="sb-ico"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M12 10v7M9 14l3 3 3-3"/></svg></span><span class="sb-testo">Importa offerta fornitore</span></button>
+          <input type="file" id="imp-off-file" accept=".pdf,.xlsx,.xlsm,.csv,.txt" hidden>
           <div id="sb-capitolo">
             <div class="sb-sez"><span class="sb-testo" id="sb-cap-nome">Capitolo</span></div>
             <nav class="sb-lista" id="subtabs">
@@ -119,10 +121,10 @@
       <div id="p-riepilogo" hidden>
         <div class="row" style="margin-bottom:8px">
           <h2 class="grow titolo-sez" style="margin:0">Riepilogo per capitolo</h2>
-          <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle di tutti i capitoli</button>
+          <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle dei capitoli spuntati</button>
         </div>
         <div class="tbl-wrap senza-limite"><table>
-          <thead><tr><th>Capitolo</th><th>Condizioni</th><th class="num">Righe</th><th class="num" id="rc-vend">Venduto</th><th class="num solo-av">Acquistato</th>
+          <thead><tr><th title="Capitoli da esportare con “Scarica i fogli Oracle”"><input type="checkbox" id="esp-tutti" title="Esporta tutti / nessuno"> Esporta</th><th>Capitolo</th><th>Condizioni</th><th class="num">Righe</th><th class="num" id="rc-vend">Venduto</th><th class="num solo-av">Acquistato</th>
             <th class="num">Materiale</th><th class="num">Attività</th><th class="num solo-av">Ricarico</th><th class="num solo-av">Margine</th><th>Cartellino</th><th></th></tr></thead>
           <tbody id="riepilogo-capitoli"></tbody>
         </table></div>

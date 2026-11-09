@@ -852,3 +852,17 @@ tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !importa
 .cond-box input.cond.std, .cond-box input.cond.std:placeholder-shown { width: 76px !important; text-align: right !important; }
 .cond-box input.cond.cella, .cond-box input.cond.cella:first-child:placeholder-shown { width: 64px !important; text-align: right !important; }
 .cond-box input.cond::placeholder { font-size: .78em; }
+
+/* ===== Prestazioni (attività tecnica PITATT): righe evidenziate in viola chiaro ===== */
+:root, :root[data-theme="chiaro"] { --riga-att: #e6dcff; --riga-att-bordo: #7c3aed; --att-testo: #5b21b6; }
+:root[data-theme="scuro"] { --riga-att: #3b2d63; --riga-att-bordo: #b69cff; --att-testo: #d4c4ff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="chiaro"]) { --riga-att: #3b2d63; --riga-att-bordo: #b69cff; --att-testo: #d4c4ff; } }
+tr.riga-att > td { background: var(--riga-att); }
+tr.riga-att > td:first-child { box-shadow: inset 4px 0 0 var(--riga-att-bordo); }
+tr.riga-att.sel > td { background: var(--riga-sel) !important; }
+.att-txt { color: var(--att-testo); }
+/* anteprima dell'offerta fornitore */
+.of-nome { width: 100%; min-width: 260px; }
+table.of-righe td { vertical-align: top; }
+tr.of-ko > td { box-shadow: inset 0 0 0 1px #dc2626; }
+tr.of-ko > td:last-child { color: #b91c1c; font-weight: 600; }

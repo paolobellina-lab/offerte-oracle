@@ -9,6 +9,7 @@ import {
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel } from "./xlsx-lite.js";
 import * as BIB from "./biblioteca.js";
+import * as OFF from "./offforn.js";
 
 /* ================= Stato ================= */
 const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte", bib: "oracle_biblioteca" };
@@ -780,7 +781,8 @@ function disegnaRiepilogo() {
     const r = riepilogoCapitolo(c, opzCap(c));
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
     tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
-    return `<tr><td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button></td>
+    return `<tr class="${c.esporta === false ? "qta-zero" : ""}"><td><input type="checkbox" data-esporta="${esc(c.nome)}" ${c.esporta === false ? "" : "checked"} title="Esporta questo capitolo"></td>
+      <td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button>${c.fonte ? `<div class="muted small" title="Importato dall'offerta del fornitore">da ${esc(c.fonte)}</div>` : ""}</td>
       <td class="small nowrap">${esc(descrCondizioni(c))}</td><td class="num">${r.righe}</td>
       <td class="num"><b>${euro(r.venduto)}</b></td><td class="num solo-av">${euro(r.acquistato)}</td>
       <td class="num">${euro(r.materiale.venduto)}</td><td class="num">${euro(r.attivita.venduto)}</td>
@@ -790,13 +792,21 @@ function disegnaRiepilogo() {
       <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"} title="Scarica il foglio per Oracle di questo capitolo">⤓ Excel</button>
         <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
-  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
+  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td></td><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
       <td class="num">${euro(tot.venduto)}</td><td class="num solo-av">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>
       <td class="num solo-av">${tot.acquistato ? pctTxt(ricaricoPct(tot.venduto, tot.acquistato)) || "0%" : ""}</td>
       <td class="num solo-av">${tot.venduto ? pctTxt(marginePct(tot.venduto, tot.acquistato)) || "0%" : ""}</td><td></td><td></td></tr>`
-    : `<tr><td colspan="11" class="vuoto">Nessun capitolo: aggiungine uno con “+ Aggiungi capitolo”.</td></tr>`;
-  $("#scarica-tutti").disabled = !tot.righe;
+    : `<tr><td colspan="12" class="vuoto">Nessun capitolo: aggiungine uno con “+ Aggiungi capitolo” o importa un'offerta fornitore.</td></tr>`;
+  const daEsp = o.capitoli.filter((c) => c.esporta !== false);
+  $("#scarica-tutti").disabled = !daEsp.some((c) => calcolaOfferta(c).righe.length);
+  const et = $("#esp-tutti"); et.checked = daEsp.length === o.capitoli.length && o.capitoli.length > 0; et.indeterminate = daEsp.length > 0 && !et.checked;
 }
+$("#riepilogo-capitoli").addEventListener("change", (e) => {
+  const t = e.target.closest("[data-esporta]"); if (!t) return;
+  const c = S.off.capitoli.find((x) => x.nome === t.dataset.esporta); if (!c) return;
+  c.esporta = t.checked; modificata(); disegnaRiepilogo();
+});
+$("#esp-tutti").addEventListener("change", (e) => { for (const c of S.off.capitoli) c.esporta = e.target.checked; modificata(); disegnaRiepilogo(); });
 $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const v = e.target.closest("[data-vai-cap]");
   if (v) { S.capAtt = v.dataset.vaiCap; S.sub = "righe"; S.sel = new Set(); return disegnaOfferta(true); }
@@ -806,7 +816,7 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
   if (x) impostaEScarica(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
 });
 $("#scarica-tutti").addEventListener("click", () => {
-  const caps = S.off.capitoli.filter((c) => calcolaOfferta(c).righe.length);
+  const caps = S.off.capitoli.filter((c) => c.esporta !== false && calcolaOfferta(c).righe.length);
   const vai = async () => { for (const c of caps) { scaricaXlsx(c); await new Promise((r) => setTimeout(r, 600)); } };
   const senza = caps.filter((c) => righeSenzaCapitolato(c));
   if (!senza.length) return vai();
@@ -941,7 +951,7 @@ function disegnaRighe(c) {
         ? `${esc(capPrec)}<button type="button" class="tg-ed" data-rinomina="${esc(capPrec)}" title="Rinomina il capitolato">✎</button><button type="button" class="tg-ed" data-capsposta="-1" title="Sposta il capitolato prima">▲</button><button type="button" class="tg-ed" data-capsposta="1" title="Sposta il capitolato dopo">▼</button>`
         : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
-    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${num(r.qta) ? "" : " qta-zero"}${S.appunti?.taglio && S.appunti.ids.has(r.id) ? " tagliata" : ""}">
+    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${att ? " riga-att" : ""}${num(r.qta) ? "" : " qta-zero"}${S.appunti?.taglio && S.appunti.ids.has(r.id) ? " tagliata" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
@@ -989,7 +999,7 @@ function disegnaRiepilogoRighe(c) {
       testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
     const scAcq = 1 - x.acq.fattore, fonte = { gma: "dal GMA", generale: "generale", standard: "standard del database", automatico: "automatico del capitolo" };
-    return testa + `<tr data-id="${esc(r.id)}">
+    return testa + `<tr data-id="${esc(r.id)}"${isAttivita(r) ? ' class="riga-att"' : ""}>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b><div class="d">${esc(r.descrizione)}</div></td>
@@ -1052,6 +1062,8 @@ function apriMenuDx(x, y) {
   const c = capAtt(); if (!c) return;
   const n = S.sel.size, m = $("#menu-dx");
   const caps = c.capitolati.map((k) => `<button type="button" data-dx="cap" data-cap-dx="${esc(k)}">${esc(k)}</button>`).join("");
+  const selR = c.righe.filter((r) => S.sel.has(r.id));
+  const convertibili = { gen: selR.filter((r) => isGenerico(r)).length, att: selR.filter((r) => isAttivita(r) && r.daOfferta).length };
   m.innerHTML = `
     <div class="dx-titolo">${n === 1 ? "1 riga selezionata" : `${n} righe selezionate`}</div>
     <button type="button" data-dx="tutte">Seleziona tutte</button>
@@ -1073,6 +1085,8 @@ function apriMenuDx(x, y) {
     <button type="button" data-dx="note">✎ Note…</button>
     ${n === 1 ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : ""}
     <button type="button" data-dx="nota">Applica la nota post-linea…</button>
+    ${convertibili.gen ? `<button type="button" data-dx="inatt">⇄ Trasforma in attività (PITATT)${convertibili.gen > 1 ? ` · ${convertibili.gen}` : ""}</button>` : ""}
+    ${convertibili.att ? `<button type="button" data-dx="ingen">⇄ Trasforma in articolo generico (P000)${convertibili.att > 1 ? ` · ${convertibili.att}` : ""}</button>` : ""}
     <hr>
     <button type="button" data-dx="togli" class="dx-danger">✕ Elimina</button>`;
   m.hidden = false;
@@ -1099,6 +1113,17 @@ $("#menu-dx").addEventListener("click", (e) => {
   if (!c) return;
   const sceltaCap = (sel = "") => `<label class="f">Capitolato<select id="dx-cap"><option value="">— lascia com'è —</option>${c.capitolati.map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label>`;
   if (az === "cap") return azioneRighe("cap", { cap: b.dataset.capDx, vuoto: true });
+  if (az === "inatt" || az === "ingen") {
+    let n = 0;
+    c.righe = c.righe.map((r) => {
+      if (!S.sel.has(r.id)) return r;
+      if (az === "inatt" && isGenerico(r)) { n++; return convertiRiga(r, true); }
+      if (az === "ingen" && isAttivita(r) && r.daOfferta) { n++; return convertiRiga(r, false); }
+      return r;
+    });
+    modificata(); disegnaOfferta();
+    return toast(az === "inatt" ? `${n} righe trasformate in attività tecnica (PITATT).` : `${n} righe trasformate in articoli generici (P000 ARTICOLO_GEN).`);
+  }
   if (az === "moddb") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaNelDatabase(r._kCatalogo || r.k); }
   if (az === "capnuovo") return dialogo({
     titolo: "Nuovo capitolato", html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="dx-nuovo" placeholder="es. PIANO TERRA"></label>`,
@@ -2526,6 +2551,161 @@ document.addEventListener("click", (e) => {
   }
 });
 
+/* ================= Offerte dei fornitori → capitoli di articoli generici =================
+   Il PDF (o Excel / CSV) dell'offerta del fornitore si legge in automatico: ogni sezione diventa un capitolo,
+   ogni riga un articolo generico P000 ARTICOLO_GEN (n° di ordinazione = codice del fornitore) e le prestazioni
+   un'attività tecnica PITATT. Le righe restano solo nell'offerta: non vanno nel database né in biblioteca. */
+const tolTot = (t) => Math.max(1, Math.abs(t) * 0.0005);
+const sommaRighe = (rr) => rr.reduce((a, r) => a + num(r.totale), 0);
+function rigaDaOffertaForn(x, att, fonte, capNome) {
+  const base = {
+    id: db.nuovoId(), capitolo: capNome, sottocapitolo: "", rifCap: "", pos: "",
+    nOrdine: x.codice || "", descrizione: x.descrizione || "", um: x.um || "n.",
+    riparam: 0, sc3: 0, sc4: 0, sc5: 0, aum1: 0, notePre: "", notePost: "", capitolato: "", dataAgg: oggiIso(), daOfferta: fonte,
+  };
+  const r = att
+    // prestazione: in Oracle PITATT.TEC; la quantità del fornitore va nei "giorni" (1 × valore complessivo, arrotondato come l'attività)
+    ? { ...base, precodice: "PIT", codice: "ATT.TEC", generico: false, qta: 1, giorni: num(x.qta) || 1, aGiornate: false, listinoAcquisto: num(x.unitario), gmv: "ATT",
+        notePre: x.codice || "", notePost: x.descrizione || "" }
+    : { ...base, precodice: "P000", codice: "ARTICOLO_GEN", generico: true, qta: num(x.qta), giorni: 0, listinoAcquisto: num(x.unitario), gmv: "ARTGEN" };
+  r.listino = listinoCalcolato(r);
+  return r;
+}
+/* Riga generica ↔ attività (tasto destro sulle righe). */
+function convertiRiga(r, inAttivita) {
+  const x = isAttivita(r)
+    ? { codice: r.notePre || r.nOrdine, descrizione: r.notePost || r.descrizione, um: r.um, qta: num(r.qta) * (num(r.giorni) || 1), unitario: num(r.listinoAcquisto) }
+    : { codice: r.nOrdine, descrizione: r.descrizione, um: r.um, qta: num(r.qta), unitario: num(r.listinoAcquisto) * fattoreStandard(r) };
+  const n = rigaDaOffertaForn(x, inAttivita, r.daOfferta || "", r.capitolo);
+  return { ...n, id: r.id, capitolato: r.capitolato || "" };
+}
+
+async function leggiFileOfferta(file) {
+  const nome = file.name || "";
+  if (/\.pdf$/i.test(nome)) {
+    const pagine = await testoPdf(file);
+    const o = OFF.leggiOffertaPdf(pagine);
+    if (o) return { o };
+    const fogli = BIB.righeDaPdf(pagine);
+    if (!fogli.length) throw new Error("Nel PDF non trovo righe con un prezzo (se è una scansione, il testo non si può leggere).");
+    return { fogli };
+  }
+  return { fogli: await righeDaFile(file) };
+}
+
+async function importaOffertaFornitore(file) {
+  if (!S.off) return;
+  toast(`Leggo ${file.name}…`, 2500);
+  let letto;
+  try { letto = await leggiFileOfferta(file); } catch (x) { return errore(x, "File non leggibile"); }
+  // tabella (Excel, CSV o PDF non riconosciuto): colonne da scegliere
+  let fogli = null, mappa = {}, celle = [];
+  if (!letto.o) {
+    fogli = letto.fogli.filter((f) => BIB.trovaIntestazione(f.righe));
+    if (!fogli.length) return toast("Non trovo la riga delle intestazioni: servono almeno le colonne codice, quantità e prezzo.", 7000);
+    celle = [...new Set(fogli.flatMap((f) => BIB.trovaIntestazione(f.righe).celle.filter(Boolean)))];
+    mappa = OFF.indovinaMappaOff(BIB.trovaIntestazione(fogli[0].righe).celle);
+  }
+  const rif = file.name.replace(/\.[^.]+$/, "");
+  const st = { o: letto.o, aperte: new Set(), att: new Map(), nomi: new Map(), escluse: new Set(), note: true };
+  const rileggi = () => {
+    if (fogli) st.o = OFF.leggiOffertaTabella(fogli, mappa) || { sezioni: [], totaleGenerale: null, note: [] };
+    st.att = new Map(); st.nomi = new Map();
+    st.o.sezioni.forEach((sz, i) => { st.nomi.set(i, sz.nome); sz.righe.forEach((r, j) => st.att.set(`${i}|${j}`, OFF.sembraPrestazione(r.codice, r.descrizione))); });
+  };
+  rileggi();
+  const opzCol = (v) => `<option value="">— nessuna —</option>` + celle.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
+  const nomeLibero = (n) => { let x = n, k = 2; while (S.off.capitoli.some((c) => c.nome === x)) x = `${n} (${k++})`; return x; };
+  const disegna = (d) => {
+    const o = st.o, tutte = o.sezioni.flatMap((x) => x.righe), tot = sommaRighe(tutte);
+    const nAtt = [...st.att.values()].filter(Boolean).length, nNo = tutte.filter((r) => r.nonTorna).length;
+    const okGen = o.totaleGenerale === null ? null : Math.abs(tot - o.totaleGenerale) <= tolTot(o.totaleGenerale);
+    $("#of-riep", d).innerHTML = !tutte.length ? `<div class="avviso">Nessuna riga letta${fogli ? ": controlla le colonne codice, quantità e prezzo" : ""}.</div>` : `
+      <div class="row" style="flex-wrap:wrap;gap:6px 14px;align-items:center">
+        <span><b>${tutte.length}</b> righe in <b>${o.sezioni.length}</b> ${o.sezioni.length === 1 ? "sezione" : "sezioni"}</span>
+        <span>di cui <b class="att-txt">${nAtt}</b> prestazioni → PITATT</span>
+        <span>totale letto <b>${euro(tot)}</b></span>
+        ${okGen === null ? "" : okGen ? `<span class="badge ok">✓ uguale al totale del documento (${euro(o.totaleGenerale)})</span>` : `<span class="badge bad">✗ il documento dice ${euro(o.totaleGenerale)}</span>`}
+        ${nNo ? `<span class="badge bad">${nNo} righe con q.tà × prezzo ≠ totale</span>` : ""}
+      </div>`;
+    $("#of-sez", d).innerHTML = o.sezioni.map((sz, i) => {
+      const somma = sommaRighe(sz.righe), ok = sz.totalePdf === null ? null : Math.abs(somma - sz.totalePdf) <= tolTot(sz.totalePdf);
+      const nA = sz.righe.filter((_, j) => st.att.get(`${i}|${j}`)).length, aperta = st.aperte.has(i);
+      return `<tr class="of-sez${st.escluse.has(i) ? " qta-zero" : ""}"><td><input type="checkbox" data-of-inc="${i}" ${st.escluse.has(i) ? "" : "checked"} title="Importa questa sezione"></td>
+        <td><input class="of-nome" data-of-nome="${i}" value="${esc(st.nomi.get(i))}"></td>
+        <td class="num">${sz.righe.length}</td><td class="num">${nA || ""}</td><td class="num">${euro(somma)}</td>
+        <td class="num">${sz.totalePdf === null ? '<span class="muted">—</span>' : euro(sz.totalePdf)}</td>
+        <td>${ok === null ? "" : ok ? '<span class="badge ok">✓</span>' : `<span class="badge bad" title="Differenza ${euro(somma - sz.totalePdf)}">✗</span>`}</td>
+        <td><button type="button" class="btn small" data-of-apri="${i}">${aperta ? "▾ chiudi" : "▸ righe"}</button></td></tr>` +
+        (!aperta ? "" : `<tr><td colspan="8" style="padding:0 0 8px 28px"><div class="tbl-wrap" style="max-height:340px"><table class="of-righe">
+          <thead><tr><th title="Prestazione → attività tecnica PITATT">Att.</th><th>Codice fornitore</th><th>Descrizione</th><th>U.M.</th><th class="num">Q.tà</th><th class="num">Unitario</th><th class="num">Totale</th></tr></thead><tbody>
+          ${sz.righe.map((r, j) => { const a = st.att.get(`${i}|${j}`); return `<tr class="${a ? "riga-att" : ""}${r.nonTorna ? " of-ko" : ""}">
+            <td><input type="checkbox" data-of-att="${i}|${j}" ${a ? "checked" : ""}></td><td class="mono small">${esc(r.codice) || '<span class="badge bad">senza codice</span>'}</td>
+            <td class="small">${esc(r.descrizione.length > 220 ? r.descrizione.slice(0, 220) + "…" : r.descrizione)}</td><td>${esc(r.um)}</td>
+            <td class="num">${numIt(r.qta)}</td><td class="num">${euro(r.unitario)}${r.listino && r.listino - r.unitario > 0.005 ? `<div class="muted small" title="Listino del fornitore">list. ${euro(r.listino)}</div>` : ""}</td>
+            <td class="num">${euro(r.totale)}${r.nonTorna ? '<div class="small" title="Quantità × unitario non dà questo totale">≠ q.tà × unit.</div>' : ""}</td></tr>`; }).join("")}
+          </tbody></table></div></td></tr>`);
+    }).join("");
+    $("#of-note", d).hidden = !o.note.length;
+    $("#of-note-n", d).textContent = o.note.length;
+    $("#of-note-lista", d).innerHTML = o.note.map((n) => `<li class="small">${esc(n)}</li>`).join("");
+  };
+  dialogo({
+    titolo: `Importa offerta fornitore · ${file.name}`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">Ogni sezione diventa un capitolo dell'offerta. Le righe entrano come articoli generici
+        <b>P000 ARTICOLO_GEN</b> (n° di ordinazione = codice del fornitore, prezzo = listino acquisto); quelle con <b>Att.</b> spuntato come attività tecnica
+        <b>PITATT</b>. Non vanno nel database né nella biblioteca. Quali capitoli esportare lo decidi poi nel riepilogo.</p>
+      ${fogli ? `<div style="margin:8px 0 10px"><span class="muted small" style="font-weight:600">Colonne del file</span>
+        <div class="lg-mappa">${OFF.CAMPI_OFF.map((c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-of-campo="${c.k}">${opzCol(mappa[c.k])}</select></label>`).join("")}</div>
+        <p class="muted small" style="margin:4px 0 0">Una riga con solo un testo (senza codice e senza prezzo) apre una nuova sezione.</p></div>` : ""}
+      <label class="f" style="max-width:420px">Riferimento dell'offerta del fornitore<input id="of-rif" value="${esc(rif)}"></label>
+      <div id="of-riep" style="margin:10px 0"></div>
+      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th></th><th>Capitolo (nome della sezione)</th><th class="num">Righe</th><th class="num">Prestaz.</th>
+        <th class="num">Somma righe</th><th class="num">Totale nel documento</th><th></th><th></th></tr></thead><tbody id="of-sez"></tbody></table></div>
+      <details id="of-note" style="margin-top:10px" hidden><summary class="small"><b id="of-note-n"></b> note del fornitore</summary>
+        <ul class="riep" id="of-note-lista"></ul>
+        <label class="row small"><input type="checkbox" id="of-note-ok" checked> aggiungile alle note dell'offerta</label></details>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Importa", value: "ok", cls: "primary" }],
+    onApri(d) {
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.dataset.ofCampo) { if (t.value) mappa[t.dataset.ofCampo] = t.value; else delete mappa[t.dataset.ofCampo]; rileggi(); }
+        else if (t.dataset.ofInc !== undefined) { const i = +t.dataset.ofInc; t.checked ? st.escluse.delete(i) : st.escluse.add(i); }
+        else if (t.dataset.ofAtt !== undefined) st.att.set(t.dataset.ofAtt, t.checked);
+        else if (t.dataset.ofNome !== undefined) { st.nomi.set(+t.dataset.ofNome, t.value.trim()); return; }
+        else if (t.id === "of-note-ok") { st.note = t.checked; return; }
+        else return;
+        disegna(d);
+      });
+      d.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-of-apri]"); if (!b) return;
+        const i = +b.dataset.ofApri; st.aperte.has(i) ? st.aperte.delete(i) : st.aperte.add(i); disegna(d);
+      });
+      disegna(d);
+    },
+    onConferma(v, d) {
+      const o = st.o, fonte = $("#of-rif", d).value.trim() || rif;
+      const scelte = o.sezioni.map((sz, i) => ({ sz, i })).filter((x) => !st.escluse.has(x.i) && x.sz.righe.length);
+      if (!scelte.length) { toast("Nessuna sezione da importare."); return false; }
+      if (scelte.some((x) => !st.nomi.get(x.i))) { toast("Ogni capitolo deve avere un nome."); return false; }
+      const nuovi = [];
+      for (const { sz, i } of scelte) {
+        const nome = nomeLibero(st.nomi.get(i));
+        const c = nuovoCapitolo(nome, { imp: impOfferta(S.off) });
+        c.fonte = fonte;
+        c.righe = sz.righe.map((r, j) => rigaDaOffertaForn(r, st.att.get(`${i}|${j}`), fonte, nome));
+        S.off.capitoli.push(c); nuovi.push(nome);
+      }
+      if (st.note && o.note.length) S.off.note = [S.off.note, `Note dell'offerta ${fonte}:`, ...o.note.map((n) => "- " + n)].filter(Boolean).join("\n");
+      S.capAtt = nuovi[0]; S.sub = "righe"; S.sel = new Set();
+      modificata(); disegnaTestata(); disegnaOfferta(true);
+      toast(`${nuovi.length === 1 ? "Creato il capitolo" : `Creati ${nuovi.length} capitoli`} con ${scelte.reduce((a, x) => a + x.sz.righe.length, 0)} righe da ${fonte}.`, 5000);
+    },
+  });
+}
+$("#sb-imp-off").addEventListener("click", () => $("#imp-off-file").click());
+$("#imp-off-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); importaOffertaFornitore(f); } });
+
 /* Testo di un PDF con le posizioni, pagina per pagina (pdf.js di Mozilla, caricato solo quando serve). */
 async function testoPdf(file) {
   const pdfjs = await import("./vendor/pdfjs/pdf.min.js");
@@ -2534,7 +2714,7 @@ async function testoPdf(file) {
   const pagine = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const tc = await (await doc.getPage(p)).getTextContent();
-    pagine.push(tc.items.filter((i) => i.str && i.str.trim()).map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height })));
+    pagine.push(tc.items.filter((i) => i.str && i.str.trim()).map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height, f: i.fontName })));
   }
   return pagine;
 }
