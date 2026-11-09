@@ -834,3 +834,4 @@ tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !importa
 /* riga di intestazione delle tabelle più scura (scritte sempre scure) */
 :root[data-theme="chiaro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
 :root[data-theme="scuro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
+:root[data-theme="chiaro"], :root[data-theme="scuro"] { --th-fondo: #5a83b8; --th-testo: #000a18; }
