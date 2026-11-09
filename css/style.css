@@ -888,3 +888,13 @@ select#o-cliente.cli-no { background-color: var(--cli-no-fondo); border-color: v
 .gmv-colonne .gmv-forn:first-of-type { border-top: 1px solid var(--line, #d5dbe3); padding-top: 6px; }
 .gmv-colonne .lista-gmv { display: block; }
 .gmv-colonne .lista-gmv label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
+
+/* ===== Passaggio del mouse: la riga resta del suo colore, solo più scura =====
+   non selezionate: azzurro più scuro; selezionate: verde più scuro; prestazioni: viola più scuro */
+:root, :root[data-theme="chiaro"] { --riga-hover: #c3d8f1; --riga-sel-hover: #a5dbb5; --riga-att-hover: #d2c2fb; }
+:root[data-theme="scuro"] { --riga-hover: #2f4d72; --riga-sel-hover: #2a6a46; --riga-att-hover: #4b3a7d; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="chiaro"]) { --riga-hover: #2f4d72; --riga-sel-hover: #2a6a46; --riga-att-hover: #4b3a7d; } }
+tbody tr[data-id]:not(.sel):not(.totale):hover > td,
+tbody tr[data-k]:not(.sel):hover > td { background: var(--riga-hover) !important; }
+tbody tr.riga-att:not(.sel):hover > td { background: var(--riga-att-hover) !important; }
+tbody tr.sel:hover > td, #righe-picker tr.sel:hover > td { background: var(--riga-sel-hover) !important; }
