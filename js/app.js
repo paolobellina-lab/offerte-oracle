@@ -2158,8 +2158,50 @@ $("#c-sotto").addEventListener("change", () => { S.limiteCat = 300; disegnaCatal
 $("#c-cerca").addEventListener("input", () => { S.limiteCat = 300; disegnaCatalogo(); });
 $("#c-altri").addEventListener("click", () => { S.limiteCat += 300; disegnaCatalogo(); });
 
+/* Filtri del database: precodice, fornitore, GMA, tipo, stato del prezzo. */
+function opzFiltro(sel, valori, tutti) {
+  const v = sel.value;
+  sel.innerHTML = `<option value="">${tutti}</option>` + valori.map((x) => `<option value="${esc(x)}" ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("");
+  if (v && !valori.includes(v)) { sel.insertAdjacentHTML("beforeend", `<option value="${esc(v)}" selected>${esc(v)}</option>`); }
+}
+function aggiornaFiltriCat() {
+  const pre = [...new Set(S.catalogo.map((a) => String(a.precodice || "").trim().toUpperCase()).filter(Boolean))].sort();
+  opzFiltro($("#cf-pre"), pre, "Tutti");
+  opzFiltro($("#cf-forn"), fornitoriGma(), "Tutti");
+  const f = $("#cf-forn").value;
+  const gmas = [...new Set(S.catalogo.map((a) => a.gmv).filter((g) => g && (!f || fornitore(g) === f)))].sort();
+  opzFiltro($("#cf-gma"), gmas, "Tutti");
+  const attivi = ["#cf-pre", "#cf-forn", "#cf-gma", "#cf-tipo", "#cf-prezzo"].filter((id) => $(id).value).length;
+  $("#cf-azzera").disabled = !attivi;
+  $(".filtri-cat").classList.toggle("attivi", !!attivi);
+}
+function passaFiltriCat(a) {
+  const pre = $("#cf-pre").value, f = $("#cf-forn").value, g = $("#cf-gma").value, t = $("#cf-tipo").value, pz = $("#cf-prezzo").value;
+  if (pre && String(a.precodice || "").trim().toUpperCase() !== pre) return false;
+  if (f && fornitore(a.gmv) !== f) return false;
+  if (g && a.gmv !== g) return false;
+  if (t === "gen" && !isGenerico(a)) return false;
+  if (t === "att" && !isAttivita(a)) return false;
+  if (t === "art" && (isGenerico(a) || isAttivita(a))) return false;
+  if (pz) { const l = stato(a).livello || "nd"; if ((pz === "nd" ? !["fresco", "medio", "vecchio"].includes(l) : l !== pz)) return false; }
+  return true;
+}
+for (const id of ["#cf-pre", "#cf-forn", "#cf-gma", "#cf-tipo", "#cf-prezzo"]) $(id).addEventListener("change", () => { S.limiteCat = 300; disegnaCatalogo(); });
+$("#cf-azzera").addEventListener("click", () => { for (const id of ["#cf-pre", "#cf-forn", "#cf-gma", "#cf-tipo", "#cf-prezzo"]) $(id).value = ""; S.limiteCat = 300; disegnaCatalogo(); });
+$("#cf-esporta").addEventListener("click", () => {
+  const lista = ordinaRighe(S.catListaFiltrata || [], ordineCap());
+  if (!lista.length) return toast("Nessun articolo da esportare.");
+  const pc = (x) => (num(x) ? num(x) : "");
+  const righe = [["Capitolo", "Sottocapitolo", "Precodice", "Codice", "Codice Oracle", "N° ordinazione", "Descrizione", "U.M.", "Listino acquisto", "Sconto 3", "Sconto 4", "Sconto 5", "Aumento 1", "Giorni", "GMA", "Fornitore", "Generico", "Data aggiornamento", "Stato prezzo"],
+    ...lista.map((a) => [a.capitolo, a.sottocapitolo || "", a.precodice || "", a.codice || "", codiceOracle(a), a.nOrdine || "", a.descrizione || "", a.um || "", num(a.listinoAcquisto) || "",
+      pc(a.sc3), pc(a.sc4), pc(a.sc5), pc(a.aum1), num(a.giorni) || "", a.gmv || "", fornitore(a.gmv) || "", isGenerico(a) ? "SI" : "", a.dataAgg || "", stato(a).testo || ""])];
+  const parti = [$("#c-capitolo").value, $("#cf-pre").value, $("#cf-forn").value, $("#cf-gma").value].filter(Boolean).join("_") || "tutto";
+  scarica(scriviExcel(righe, "Database"), `DATABASE_${parti.replace(/[^A-Za-z0-9_-]+/g, "_")}_${oggiIso()}.xlsx`);
+  toast(`Esportati ${lista.length} articoli.`);
+});
 function disegnaCatalogo() {
   aggiornaRitorno();
+  aggiornaFiltriCat();
   const sel = $("#c-capitolo");
   const prev = sel.value;
   sel.innerHTML = `<option value="">Tutti i capitoli</option>` +
@@ -2172,22 +2214,23 @@ function disegnaCatalogo() {
   const sotto = ss.value;
   const q = $("#c-cerca").value.trim().toLowerCase();
   const lista = S.catalogo.filter((a) => (!cap || a.capitolo === cap) && (!sotto || a.sottocapitolo === sotto) &&
-    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
+    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)) && passaFiltriCat(a));
+  S.catListaFiltrata = lista;
   const ord = ordinaRighe(lista, ordineCap());
   const vis = ord.slice(0, S.limiteCat);
   let gruppo = null, html = "";
   for (const a of vis) {
     const g = (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
-    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="11">${esc(g)}</td></tr>`; }
+    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="10">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       <td class="num">${pctTxt(a.sc3)}</td><td class="num">${pctTxt(a.sc4)}</td><td class="num">${pctTxt(a.sc5)}</td>
-      <td class="num">${pctTxt(a.aum1)}</td><td class="num">${pctTxt(a.riparam)}</td><td class="mono">${esc(a.gmv)}</td>
+      <td class="num">${pctTxt(a.aum1)}</td><td class="mono">${esc(a.gmv)}</td>
       <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
-  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="11" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
+  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="10" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
   applicaGruppi($("#righe-catalogo"));
   $("#c-info").textContent = `${vis.length} di ${lista.length} articoli`;
   $("#c-altri").hidden = vis.length >= lista.length;
@@ -2267,7 +2310,6 @@ function modificaArticolo(a) {
       ${campoNum("m-gg", "Giorni (attività)", a.giorni)}
       ${campoNum("m-sc3", "Sconto 3", a.sc3, true)}${campoNum("m-sc4", "Sconto 4", a.sc4, true)}
       ${campoNum("m-sc5", "Sconto 5", a.sc5, true)}${campoNum("m-aum1", "Aumento 1", a.aum1, true)}
-      ${campoNum("m-rp", "Riparametrizzazione", a.riparam, true)}
       <div hidden>${campoNum("m-li", "Prezzo di listino €", a.listino)}</div>
       <label class="f">Data aggiornamento<input id="m-data" type="date" value="${esc(a.dataAgg || "")}"></label>
     </div>
@@ -2305,7 +2347,7 @@ function modificaArticolo(a) {
       };
       const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value, generico: $("#m-gen", b).checked }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
       // data automatica: quando cambia un prezzo o uno sconto, la data di aggiornamento diventa oggi
-      const prezzi = ["#m-la", "#m-li", "#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1", "#m-rp"];
+      const prezzi = ["#m-la", "#m-li", "#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"];
       const iniziali = prezzi.map((id) => $(id, b).value);
       let dataToccata = false;
       $("#m-data", b).addEventListener("input", () => (dataToccata = true));
@@ -2356,7 +2398,7 @@ function modificaArticolo(a) {
       capitolo: g("#m-cap"), sottocapitolo: g("#m-sotto").trim(), precodice: g("#m-pre").trim(), codice: g("#m-cod").trim(),
       nOrdine: g("#m-ord").trim(), um: g("#m-um").trim(), gmv: g("#m-gmv").trim(),
       listinoAcquisto: num(g("#m-la")), giorni: num(g("#m-gg")),
-      sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: daPct(g("#m-rp")),
+      sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: num(a.riparam) || 0,
       listino: num(g("#m-li")), dataAgg: g("#m-data"), descrizione: g("#m-des"), notePre: g("#m-npre"), notePost: g("#m-npost"),
       generico: $("#m-gen", b).checked,
     };

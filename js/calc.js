@@ -211,8 +211,9 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   let perPezzo, ric = null, fVen = null, baseVen, fonteVen, scLis = null;
   if (k.imp === "listino") {
     // listino riparametrizzato: il prezzo di listino è quello che, con lo sconto di listino, dà il prezzo di acquisto.
-    // Standard = riparametrizzazione dell'articolo (colonna P del database). Attività: arrotondata alle centinaia come nell'Excel.
-    const f0L = att ? 1 - num(r.riparam) : 1 - (k.lis.std || 0);
+    // Standard: articoli = sconto di listino del GMA con più righe; attività = nessuno sconto (si imposta nella riga ATT
+    // della pagina prezzi). La riparametrizzazione dell'articolo nel database non si usa più. Attività arrotondata alle centinaia.
+    const f0L = att ? 1 : 1 - (k.lis.std || 0);
     const spG = valido(leggiSconti(k.lis.gma[g])), spC = generalePer(att, k.lis.gen);
     const fL = spG ? applica(spG, f0L) : spC ? applica(spC, f0L) : f0L;
     fonteVen = spG ? "gma" : spC ? "generale" : "standard";

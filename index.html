@@ -315,6 +315,17 @@
         <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMA">
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
       </div>
+      <div class="card row filtri-cat" style="margin-bottom:10px;gap:8px 12px;flex-wrap:wrap;align-items:flex-end">
+        <b style="align-self:center">Filtri</b>
+        <label class="f">Precodice<select id="cf-pre"></select></label>
+        <label class="f">Fornitore<select id="cf-forn"></select></label>
+        <label class="f">GMA<select id="cf-gma"></select></label>
+        <label class="f">Tipo<select id="cf-tipo"><option value="">Tutti</option><option value="gen">Solo generici</option><option value="att">Solo attività</option><option value="art">Solo articoli normali</option></select></label>
+        <label class="f">Prezzo<select id="cf-prezzo"><option value="">Tutti</option><option value="fresco">Valido</option><option value="medio">In scadenza</option><option value="vecchio">Da aggiornare</option><option value="nd">Data non indicata</option></select></label>
+        <button type="button" class="btn small" id="cf-azzera">Azzera filtri</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn verde forte" id="cf-esporta">⤓ Esporta in Excel</button>
+      </div>
       <div class="row" style="margin-bottom:8px">
         <div class="legenda">
           <span><span class="dot fresco"></span>prezzo valido</span>
@@ -327,7 +338,7 @@
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th>
-          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th class="num">Ripar.</th><th>GMA</th><th>Aggiornato</th></tr></thead>
+          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th>GMA</th><th>Aggiornato</th></tr></thead>
         <tbody id="righe-catalogo"></tbody>
       </table></div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="c-altri" hidden>Mostra altri</button></div>

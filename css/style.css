@@ -908,3 +908,5 @@ tbody tr.sel:hover > td, #righe-picker tr.sel:hover > td { background: var(--rig
 .impost-card { display: flex; flex-direction: column; gap: 8px; }
 .impost-card h3 { margin: 0; }
 .impost-card .btn { align-self: flex-start; margin-top: auto; }
+.filtri-cat select { min-width: 120px; }
+.filtri-cat.attivi { box-shadow: inset 4px 0 0 #15803d; }
