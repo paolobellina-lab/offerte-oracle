@@ -916,6 +916,93 @@ function spostaCapitolato(c, nome, verso) {
   modificata(); disegnaOfferta();
 }
 
+
+/* Gestione dei sottocapitoli (capitolati) del capitolo: rinomina, ordine, raggruppa, nuovi, elimina.
+   Le modifiche si fanno su una copia e si applicano con "Salva". */
+function gestisciSottocapitoli(c) {
+  raggruppa(c);
+  const opz = opzCap(c);
+  const infoDi = (nomi) => { let n = 0, t = 0; for (const r of c.righe) if (nomi.includes(r.capitolato || "")) { n++; if (num(r.qta)) t += calcolaRiga(r, c, opz.ricarichi).totale; } return { n, t }; };
+  let voci = c.capitolati.map((k) => ({ orig: [k], nome: k, del: "" }));
+  const senza = infoDi([""]);
+  const disegna = (d) => {
+    $("#gs-righe", d).innerHTML = voci.map((v, i) => { const x = infoDi(v.orig); return `<tr class="${v.del ? "qta-zero" : ""}">
+      <td><input type="checkbox" data-gs-sel="${i}" ${v.sel ? "checked" : ""} ${v.del ? "disabled" : ""}></td>
+      <td><input data-gs-nome="${i}" value="${esc(v.nome)}" style="width:100%;min-width:240px" ${v.del ? "disabled" : ""}>${v.orig.length > 1 ? `<div class="muted small">uniti: ${v.orig.map(esc).join(", ")}</div>` : ""}</td>
+      <td class="num">${x.n}</td><td class="num">${euro(x.t)}</td>
+      <td class="nowrap"><button type="button" class="tg-ed" data-gs-su="${i}" title="Sposta su" ${i ? "" : "disabled"}>▲</button><button type="button" class="tg-ed" data-gs-giu="${i}" title="Sposta giù" ${i < voci.length - 1 ? "" : "disabled"}>▼</button></td>
+      <td><select data-gs-del="${i}"><option value="">tieni</option><option value="cap" ${v.del === "cap" ? "selected" : ""}>elimina (le righe restano senza sottocapitolo)</option><option value="tutto" ${v.del === "tutto" ? "selected" : ""}>elimina con le sue righe</option></select></td></tr>`; }).join("")
+      || `<tr><td colspan="6" class="vuoto">Nessun sottocapitolo.</td></tr>`;
+    const nSel = voci.filter((v) => v.sel).length;
+    $("#gs-unisci", d).disabled = nSel < 2;
+    $("#gs-nsel", d).textContent = nSel < 2 ? "spunta almeno due sottocapitoli" : `${nSel} sottocapitoli selezionati`;
+  };
+  dialogo({
+    titolo: `Sottocapitoli di ${c.nome}`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">Il nome del sottocapitolo va in Oracle come “Nome Capitolato”. Cambia il nome nella casella, sposta con ▲ ▼,
+        spunta più sottocapitoli per raggrupparli in uno solo. ${senza.n ? `Righe senza sottocapitolo: <b>${senza.n}</b>.` : ""} Le modifiche si applicano con <b>Salva</b>.</p>
+      <div class="tbl-wrap" style="max-height:48vh"><table><thead><tr><th></th><th>Sottocapitolo</th><th class="num">Righe</th><th class="num">Totale</th><th>Ordine</th><th>Elimina</th></tr></thead>
+        <tbody id="gs-righe"></tbody></table></div>
+      <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <b style="align-self:center">Raggruppa</b><span class="muted small" id="gs-nsel" style="align-self:center"></span>
+        <label class="f grow">Nome del sottocapitolo unico<input id="gs-unisci-nome" placeholder="es. PIANO TERRA"></label>
+        <button type="button" class="btn" id="gs-unisci">Raggruppa i selezionati</button></div>
+      <div class="card row" style="margin-top:8px;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <b style="align-self:center">+ Nuovo sottocapitolo</b>
+        <label class="f grow">Nome<input id="gs-nuovo" placeholder="es. PIANO PRIMO"></label>
+        <button type="button" class="btn" id="gs-aggiungi">Aggiungi</button></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    onApri(d) {
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.dataset.gsSel !== undefined) { voci[+t.dataset.gsSel].sel = t.checked; disegna(d); }
+        else if (t.dataset.gsDel !== undefined) { const v = voci[+t.dataset.gsDel]; v.del = t.value; if (v.del) v.sel = false; disegna(d); }
+      });
+      d.addEventListener("input", (e) => { const t = e.target; if (t.dataset.gsNome !== undefined) voci[+t.dataset.gsNome].nome = t.value; });
+      d.addEventListener("click", (e) => {
+        const su = e.target.closest("[data-gs-su]"), giu = e.target.closest("[data-gs-giu]");
+        if (su || giu) { const i = +(su || giu).dataset[su ? "gsSu" : "gsGiu"], j = i + (su ? -1 : 1); [voci[i], voci[j]] = [voci[j], voci[i]]; disegna(d); return; }
+        if (e.target.id === "gs-unisci") {
+          const sel = voci.filter((v) => v.sel);
+          const nome = $("#gs-unisci-nome", d).value.trim() || sel[0].nome;
+          const primo = sel[0];
+          primo.orig = sel.flatMap((v) => v.orig); primo.nome = nome; primo.sel = false;
+          voci = voci.filter((v) => v === primo || !sel.includes(v));
+          $("#gs-unisci-nome", d).value = "";
+          disegna(d); return;
+        }
+        if (e.target.id === "gs-aggiungi") {
+          const n = $("#gs-nuovo", d).value.trim();
+          if (!n) return toast("Scrivi il nome.");
+          if (voci.some((v) => v.nome === n)) return toast("C'è già un sottocapitolo con questo nome.");
+          voci.push({ orig: [], nome: n, del: "" }); $("#gs-nuovo", d).value = ""; disegna(d);
+        }
+      });
+      $("#gs-nuovo", d).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); $("#gs-aggiungi", d).click(); } });
+      $("#gs-unisci-nome", d).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (!$("#gs-unisci", d).disabled) $("#gs-unisci", d).click(); } });
+      disegna(d);
+    },
+    onConferma() {
+      if (voci.some((v) => !v.del && !v.nome.trim())) { toast("Ogni sottocapitolo deve avere un nome."); return false; }
+      const nuovoNome = new Map(); // nome vecchio → nuovo ("" = senza; null = righe eliminate)
+      for (const v of voci) for (const k of v.orig) nuovoNome.set(k, v.del === "tutto" ? null : v.del === "cap" ? "" : v.nome.trim());
+      const prima = c.righe.length;
+      c.righe = c.righe.filter((r) => nuovoNome.get(r.capitolato || "") !== null || !r.capitolato);
+      for (const r of c.righe) if (r.capitolato && nuovoNome.has(r.capitolato)) r.capitolato = nuovoNome.get(r.capitolato);
+      c.capitolati = [...new Set(voci.filter((v) => !v.del).map((v) => v.nome.trim()))];
+      const mappa = (k) => (nuovoNome.has(k) ? nuovoNome.get(k) : k);
+      c.esclusiExport = [...new Set((c.esclusiExport || []).map(mappa).filter(Boolean))];
+      if (c.capNuove) c.capNuove = mappa(c.capNuove) || "";
+      for (const id of [...S.sel]) if (!c.righe.some((r) => r.id === id)) S.sel.delete(id);
+      raggruppa(c);
+      modificata(); disegnaOfferta();
+      const tolte = prima - c.righe.length;
+      toast(`Sottocapitoli aggiornati${tolte ? `; ${tolte} righe eliminate` : ""}.`);
+    },
+  });
+}
+$("#gestisci-sotto").addEventListener("click", () => { const c = capAtt(); if (c) gestisciSottocapitoli(c); });
+
 /* Pagina Righe: database a tutta pagina, righe dell'offerta a tutta pagina, oppure tutte e due */
 function applicaVistaRighe(c) {
   if (!S.vistaRighe) S.vistaRighe = c && c.righe.length ? "righe" : "db";
