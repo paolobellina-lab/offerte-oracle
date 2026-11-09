@@ -1629,7 +1629,8 @@ function disegnaExport(c) {
     g.righe++; g.totale += condizioni(c).out.prezzo === "acquisto" ? x.acq.totale : x.totale;
   }
   const escl = new Set(c.esclusiExport || []);
-  $("#export-capitolati").innerHTML = gruppi.length > 1 || escl.size ? `<span class="muted small" style="font-weight:600">Capitolati da caricare in questa offerta Oracle:</span>` +
+  $("#export-cap-card").hidden = !(gruppi.length > 1 || escl.size);
+  $("#export-capitolati").innerHTML = gruppi.length > 1 || escl.size ? "" +
     gruppi.map((g) => `<label class="chip-check"><input type="checkbox" data-escl="${esc(g.nome)}" ${escl.has(g.nome) ? "" : "checked"}>
       <b>${g.nome ? esc(g.nome) : "senza capitolato"}</b> <span class="muted">${g.righe} righe · ${euro(g.totale)}</span></label>`).join("") +
     `<button class="btn small" id="export-tutti" type="button">Tutti</button>` : "";
