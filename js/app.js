@@ -1491,7 +1491,7 @@ function disegnaPicker(c, reset = false) {
     html += `<tr data-k="${esc(a.k)}" class="${pSel ? "sel" : ""}">
       <td class="sel-col"><input type="checkbox" data-pick-sel ${pSel ? "checked" : ""}></td>
       <td class="mono nowrap">${codiceVis(a)}</td>
-      <td class="desc"><b>${esc(a.nOrdine)}</b>${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
+      <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       <td class="mono">${esc(a.gmv)}</td>
       <td>${pallino(a)}</td>
