@@ -3762,7 +3762,7 @@ function apriAcquistiStandard() {
         gli sconti di acquisto standard in cascata (Sconto 1, poi 2, poi 3) più un eventuale aumento. Gli articoli del database <b>senza sconti propri</b> usano questi valori
         (in grigio nella scheda articolo, in corsivo nel database); quelli con sconti propri restano un'eccezione.</p>
       <div class="row" style="margin-bottom:6px"><input id="as-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
-      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num" title="Articoli con sconti propri: non seguono lo standard">Eccezioni</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead>
+      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num" title="Articoli con sconti propri: non seguono lo standard">Con sconti propri</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead>
       <tbody id="as-righe">${perFornitore(lista.map((g) => g.codice)).map(([forn, gs]) => `<tr class="sotto as-forn"><td colspan="8">${esc(forn)}</td></tr>` +
         gs.map((c) => { const g = lista.find((x) => x.codice === c), x = conta.get(c) || { n: 0, propri: 0 };
           return `<tr data-as-riga="${esc(c)}" data-forn="${esc(forn)}"><td class="mono nowrap"><b>${esc(c)}</b> <button type="button" class="tg-ed" data-sg-rin="${esc(c)}" title="Rinomina il GMA (ovunque: database, biblioteca, clienti, offerte)">✎</button></td>
@@ -3802,6 +3802,58 @@ function apriAcquistiStandard() {
 }
 $("#c-acqstd").addEventListener("click", () => apriAcquistiStandard());
 
+/* Lega tutti gli articoli all'acquisto standard del loro GMA: gli sconti propri si tolgono. Per i GMA senza standard
+   si propone come standard la combinazione di sconti più frequente tra i loro articoli (modificabile). */
+function legaAllaStandard() {
+  const perGma = new Map();
+  for (const a of S.catalogo) {
+    if (isAttivita(a) || !a.gmv || !haScontiPropri(a)) continue;
+    const t = [a.sc3, a.sc4, a.sc5, a.aum1].map((x) => Math.round(num(x) * 1e6) / 1e6).join("|");
+    if (!perGma.has(a.gmv)) perGma.set(a.gmv, { n: 0, combo: new Map() });
+    const x = perGma.get(a.gmv); x.n++; x.combo.set(t, (x.combo.get(t) || 0) + 1);
+  }
+  if (!perGma.size) return toast("Tutti gli articoli seguono già l'acquisto standard del loro GMA.");
+  const righe = [...perGma.entries()].sort((a, b) => (fornitore(a[0]) || "").localeCompare(fornitore(b[0]) || "") || a[0].localeCompare(b[0])).map(([g, x]) => {
+    const st = standardGma(g);
+    const top = [...x.combo.entries()].sort((a, b) => b[1] - a[1])[0];
+    const [p1, p2, p3, pa] = top[0].split("|").map(Number);
+    const val = st ? [st.sc1, st.sc2, st.sc3, st.aum].map(num) : [p1, p2, p3, pa];
+    const chiave = val.map((v) => Math.round(v * 1e6) / 1e6).join("|");
+    return { g, n: x.n, haStd: !!st, val, diversi: x.n - (x.combo.get(chiave) || 0) };
+  });
+  const cella = (r, i) => `<td><span class="pct-wrap"><input class="pct" data-lg="${esc(r.g)}" data-i="${i}" value="${esc(pctVal(r.val[i]))}" style="width:70px"></span></td>`;
+  dialogo({
+    titolo: "Lega gli articoli all'acquisto standard", largo: true,
+    html: `<p style="margin-top:0">Gli articoli qui sotto hanno <b>sconti propri</b>: confermando li tolgo e tutti seguono l'acquisto standard del loro GMA.
+        Poi puoi rimettere a mano gli sconti propri sugli articoli che fanno eccezione.</p>
+      <p class="muted small">Per i GMA che non hanno ancora uno standard propongo la combinazione di sconti più frequente tra i loro articoli: controllala e cambiala se serve.
+        La colonna <b>Con prezzo che cambia</b> conta gli articoli il cui sconto oggi è diverso dallo standard: dopo l'operazione il loro prezzo di acquisto cambia.</p>
+      <div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num">Con prezzo che cambia</th><th>Standard</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead><tbody>
+      ${righe.map((r) => `<tr><td><label class="row" style="gap:6px"><input type="checkbox" data-lg-on="${esc(r.g)}" checked><b class="mono">${esc(r.g)}</b></label></td><td class="small">${esc(fornitore(r.g) || "")}</td>
+        <td class="num">${r.n}</td><td class="num">${r.diversi ? `<b style="color:#b91c1c">${r.diversi}</b>` : "0"}</td><td class="small">${r.haStd ? "già impostato" : "<b>proposto</b>"}</td>
+        ${[0, 1, 2, 3].map((i) => cella(r, i)).join("")}</tr>`).join("")}</tbody></table></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Lega gli articoli spuntati", value: "ok", cls: "primary" }],
+    async onConferma(v, d) {
+      const scelti = new Set($$("[data-lg-on]", d).filter((x) => x.checked).map((x) => x.dataset.lgOn));
+      if (!scelti.size) { toast("Nessun GMA spuntato."); return false; }
+      const lista = S.gmv.map((g) => ({ ...g }));
+      for (const g of scelti) {
+        const val = [0, 1, 2, 3].map((i) => daPct($(`[data-lg="${CSS.escape(g)}"][data-i="${i}"]`, d).value));
+        let e = lista.find((x) => x.codice === g); if (!e) { e = { codice: g, fornitore: "" }; lista.push(e); }
+        ["sc1", "sc2", "sc3", "aum"].forEach((k, i) => { if (val[i]) e[k] = val[i]; else delete e[k]; });
+        delete e.sconto;
+      }
+      const caps = new Set(); let n = 0;
+      for (const a of S.catalogo) if (scelti.has(a.gmv) && !isAttivita(a) && haScontiPropri(a)) { a.sc3 = 0; a.sc4 = 0; a.sc5 = 0; a.aum1 = 0; caps.add(a.capitolo); n++; }
+      const ops = [{ tipo: "set", coll: COLL.cfg, id: "gmv", data: { lista } }];
+      for (const c of caps) ops.push(...opsCapitolo(c, S.catalogo.filter((a) => a.capitolo === c)));
+      try { await db.scrivi(ops); } catch (x) { errore(x, "Operazione non riuscita"); return false; }
+      S.gmv = lista; impostaStandardGma(S.gmv); ridisegna(true);
+      toast(`${n} articoli legati all'acquisto standard di ${scelti.size} GMA.`, 6000);
+    },
+  });
+}
+$("#c-lega").addEventListener("click", () => legaAllaStandard());
 function apriElencoGma() { apriAcquistiStandard(); }
 
 /* ================= Copia di sicurezza ================= */
