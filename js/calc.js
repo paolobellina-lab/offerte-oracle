@@ -118,16 +118,29 @@ export const testoValido = (t, ric = false) => !String(t ?? "").trim() || (ric ?
 /* Acquisti standard per GMA (Impostazioni › Acquisti standard): Sconto 1, 2, 3 e Aumento.
    Un articolo senza sconti propri usa quelli del suo GMA; se ne ha anche uno solo, valgono i suoi (eccezione).
    Nei dati gli sconti dell'articolo restano nei campi sc3, sc4, sc5, aum1 (Sconto 1, 2, 3, Aumento 1). */
-let STD_GMA = new Map();
+// Un GMA è identificato da fornitore + codice: lo stesso codice con due fornitori sono due GMA diversi.
+let STD_GMA = new Map(), PER_CODICE = new Map();
+const chiaveGma = (forn, g) => `${String(forn || "").trim().toUpperCase()}|${g}`;
 export function impostaStandardGma(lista) {
-  STD_GMA = new Map((lista || []).filter((g) => num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)).map((g) => [g.codice, g]));
+  STD_GMA = new Map(); PER_CODICE = new Map();
+  for (const g of lista || []) {
+    if (!PER_CODICE.has(g.codice)) PER_CODICE.set(g.codice, []);
+    PER_CODICE.get(g.codice).push(g);
+    if (num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)) STD_GMA.set(chiaveGma(g.fornitore, g.codice), g);
+  }
 }
-export const standardGma = (g) => STD_GMA.get(g) || null;
+/* Voce GMA di un articolo: quella del suo fornitore; se l'articolo non ha fornitore, la prima con quel codice. */
+export function voceGma(g, forn) {
+  const l = PER_CODICE.get(g) || [];
+  if (forn) return l.find((x) => String(x.fornitore || "").trim().toUpperCase() === String(forn).trim().toUpperCase()) || null;
+  return l[0] || null;
+}
+export const standardGma = (g, forn) => { const v = voceGma(g, forn); return v && STD_GMA.get(chiaveGma(v.fornitore, v.codice)) ? v : null; };
 export const haScontiPropri = (r) => !!(num(r.sc3) || num(r.sc4) || num(r.sc5) || num(r.aum1));
 export function scontiEffettivi(r) {
   // le righe prese dall'offerta di un fornitore hanno già il prezzo netto del fornitore
   if (haScontiPropri(r) || isAttivita(r) || r.daOfferta) return { sc3: num(r.sc3), sc4: num(r.sc4), sc5: num(r.sc5), aum1: num(r.aum1), daGma: false };
-  const s = STD_GMA.get(r.gmv);
+  const s = standardGma(r.gmv, r.fornitore);
   return s ? { sc3: num(s.sc1), sc4: num(s.sc2), sc5: num(s.sc3), aum1: num(s.aum), daGma: true } : { sc3: 0, sc4: 0, sc5: 0, aum1: 0, daGma: false };
 }
 /* Sconti standard dell'articolo: i suoi o quelli del GMA. L'attività tecnica non ne ha. */

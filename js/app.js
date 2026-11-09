@@ -4,7 +4,7 @@ import {
   listinoCalcolato, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
-  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri,
+  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
@@ -43,6 +43,10 @@ const ricarichi = () => Object.fromEntries(S.capitoli.map((c) => [c.nome, num(c.
 const ordineCap = () => S.capitoli.map((c) => c.nome);
 const clienteOff = () => S.clienti.find((c) => c.id === S.off?.cliente) || null;
 const fornitore = (g) => S.gmv.find((x) => x.codice === g)?.fornitore || "";
+// tutti i fornitori che hanno quel codice GMA (per le viste che conoscono solo il codice)
+const fornitoriTxt = (g) => [...new Set(S.gmv.filter((x) => x.codice === g).map((x) => x.fornitore || "").filter(Boolean))].join(" / ");
+/* Fornitore di un articolo: il suo (lo stesso GMA può esistere con più fornitori), altrimenti quello del GMA. */
+const fornitoreDi = (a) => (a?.fornitore || "").trim() || fornitore(a?.gmv);
 /* Regole di scadenza dei prezzi per precodice */
 const regole = () => Object.fromEntries(S.precodici.filter((p) => p.tipo).map((p) => [String(p.precodice).toUpperCase(), p]));
 const stato = (a) => statoPrezzo(a, regole());
@@ -1662,7 +1666,7 @@ function modificaMultipla(c) {
     },
     onConferma(v, d) {
       const val = (id) => ($(id, d) ? $(id, d).value.trim() : "");
-      const q = val("#mm-qta"), um = val("#mm-um"), cap = $("#mm-cap", d).value, g = $("#mm-gmv", d).value;
+      const q = val("#mm-qta"), um = val("#mm-um"), cap = $("#mm-cap", d).value, g = $("#mm-gmv", d).value, gf = g !== "__no" ? fornScelto($("#mm-gmv", d), $("#mm-forn", d)) : "";
       const la = val("#mm-la"), vr = val("#mm-var"), gg = val("#mm-gg"), npre = val("#mm-npre"), npost = val("#mm-npost");
       if (la && vr) { toast("Scegli il prezzo oppure la variazione %, non tutti e due."); return false; }
       let n = 0;
@@ -1670,7 +1674,7 @@ function modificaMultipla(c) {
         if (q) r.qta = num(q);
         if (um) r.um = um;
         if (cap !== "__no") { r.capitolato = cap; }
-        if (g !== "__no") r.gmv = g;
+        if (g !== "__no") { r.gmv = g; r.fornitore = gf; }
         if (la) r.listinoAcquisto = num(la);
         if (vr) r.listinoAcquisto = Math.round(num(r.listinoAcquisto) * (1 + num(vr) / 100) * 1e4) / 1e4;
         if (gg && isAttivita(r)) r.giorni = num(gg);
@@ -1698,8 +1702,8 @@ function modificaRigaOfferta(c, r) {
       <div class="grid-set">
         <label class="f">Codice fornitore (n° di ordinazione)<input id="mr-cod" value="${esc(codF)}"></label>
         <label class="f">U.M.<input id="mr-um" value="${esc(r.um || "n.")}"></label>
-        <label class="f">Fornitore<select id="mr-forn">${opzioniFornitoriGma(fornitore(r.gmv))}</select></label>
-        <label class="f">GMA<select id="mr-gmv">${opzioniGma(fornitore(r.gmv), r.gmv)}</select></label>
+        <label class="f">Fornitore<select id="mr-forn">${opzioniFornitoriGma(fornitoreDi(r))}</select></label>
+        <label class="f">GMA<select id="mr-gmv">${opzioniGma(fornitoreDi(r), r.gmv)}</select></label>
         ${campoNum("mr-la", att ? "Valore attività €" : "Listino acquisto € (prezzo del fornitore)", r.listinoAcquisto)}
         ${att ? campoNum("mr-gg", "Giorni / quantità del fornitore", r.giorni) : ""}
       </div>
@@ -1712,7 +1716,7 @@ function modificaRigaOfferta(c, r) {
         </div></div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(d) {
-      $("#mr-forn", d).addEventListener("change", (e) => { const g = $("#mr-gmv", d).value, f = e.target.value; $("#mr-gmv", d).innerHTML = opzioniGma(f, !f || fornitore(g) === f ? g : "").replace(/<option value="__nuovo">.*?<\/option>/, ""); });
+      $("#mr-forn", d).addEventListener("change", (e) => { const g = $("#mr-gmv", d).value, f = e.target.value; $("#mr-gmv", d).innerHTML = opzioniGma(f, !f || voceGma(g, f) ? g : "").replace(/<option value="__nuovo">.*?<\/option>/, ""); });
       $("#mr-gmv", d).innerHTML = $("#mr-gmv", d).innerHTML.replace(/<option value="__nuovo">.*?<\/option>/, "");
       $("#mr-db", d).addEventListener("change", (e) => { $("#mr-db-box", d).hidden = !e.target.checked; });
     },
@@ -1721,6 +1725,7 @@ function modificaRigaOfferta(c, r) {
       const x = { codice: cod, descrizione: des, um: $("#mr-um", d).value.trim() || "n.", qta: att ? num($("#mr-gg", d).value) : num(r.qta), unitario: num($("#mr-la", d).value) };
       const n = { ...rigaDaOffertaForn(x, att, r.daOfferta || "", r.capitolo), id: r.id, capitolato: r.capitolato || "", qta: att ? 1 : r.qta };
       n.gmv = $("#mr-gmv", d).value || (att ? "ATT" : "ARTGEN");
+      n.fornitore = fornScelto($("#mr-gmv", d), $("#mr-forn", d));
       if (att) { n.notePre = cod; n.notePost = des; n.aGiornate = !!r.aGiornate; }
       if ($("#mr-db", d).checked) {
         const art = { ...n, capitolo: $("#mr-cap", d).value, sottocapitolo: $("#mr-sotto", d).value.trim(), rifCap: "", dataAgg: oggiIso() };
@@ -1892,7 +1897,7 @@ function disegnaGmv(c, rc) {
     return { eredita: over !== null, phExtra: extra.length ? `Gen.: ${extra.map((x) => cellaDaTermine(x, tipo)).join(" · ")}` : "extra" };
   };
   const riga = (g, campo, gen = false) => `<tr class="${gen ? "cond-gen" : ""}"><td class="mono"><b>${gen ? "Generale" : esc(g)}</b></td>
-    <td>${gen ? '<span class="muted small">GMA senza valori propri</span>' : esc(fornitore(g))}</td><td>${campo}</td></tr>`;
+    <td>${gen ? '<span class="muted small">GMA senza valori propri</span>' : esc(fornitoriTxt(g))}</td><td>${campo}</td></tr>`;
   $("#cond-acq").innerHTML = riga("", htmlCondizione({ dove: "acqGen", val: c.acq.gen, tipo: "sc", phStd: "standard" }), true) +
     conGma.map(([g]) => riga(g, htmlCondizione({ dove: "acqGma", gma: g, val: c.acq.gma[g], tipo: "sc", std: stdDi(g), ...opzGen(c.acq.gen, g) }))).join("");
   const ricStd = pctTesto(ricAutoCap(c));
@@ -1923,7 +1928,7 @@ function disegnaGmv(c, rc) {
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
     const gen = isGenerico(info.prima.riga) || String(g).toUpperCase() === "ARTGEN";
     const scList = gen ? null : info.prima.c.scontoListino;
-    return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitore(g))}</td>
+    return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitoriTxt(g))}</td>
       <td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
       <td class="num"><div class="peso"><span style="width:${Math.max(0, Math.min(100, peso * 100)).toFixed(1)}%"></span></div>${pctTxt(peso) || "0%"}</td>
       <td class="num">${info.acquistato ? pctTxt(ricaricoPct(info.venduto, info.acquistato)) || "0%" : "—"}</td>
@@ -2172,7 +2177,7 @@ function aggiornaFiltriCat() {
   opzFiltro($("#cf-pre"), pre, "Tutti");
   opzFiltro($("#cf-forn"), fornitoriGma(), "Tutti");
   const f = $("#cf-forn").value;
-  const gmas = [...new Set(S.catalogo.map((a) => a.gmv).filter((g) => g && (!f || fornitore(g) === f)))].sort();
+  const gmas = [...new Set(S.catalogo.filter((a) => a.gmv && (!f || fornitoreDi(a) === f)).map((a) => a.gmv))].sort();
   opzFiltro($("#cf-gma"), gmas, "Tutti");
   const attivi = ["#cf-pre", "#cf-forn", "#cf-gma", "#cf-tipo", "#cf-prezzo", "#cf-dop"].filter((id) => $(id).value).length;
   $("#cf-azzera").disabled = !attivi;
@@ -2196,7 +2201,7 @@ function passaFiltriCat(a) {
   if (dp === "tutti" && !doppioCod(a) && !doppioOrd(a)) return false;
   const pre = $("#cf-pre").value, f = $("#cf-forn").value, g = $("#cf-gma").value, t = $("#cf-tipo").value, pz = $("#cf-prezzo").value;
   if (pre && String(a.precodice || "").trim().toUpperCase() !== pre) return false;
-  if (f && fornitore(a.gmv) !== f) return false;
+  if (f && fornitoreDi(a) !== f) return false;
   if (g && a.gmv !== g) return false;
   if (t === "gen" && !isGenerico(a)) return false;
   if (t === "att" && !isAttivita(a)) return false;
@@ -2284,15 +2289,19 @@ function campoNum(id, label, valore, pct = false) {
 const fornitoriGma = () => [...new Set(S.gmv.map((g) => (g.fornitore || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 const opzioniFornitoriGma = (sel = "") => `<option value="">— tutti i fornitori —</option>` + fornitoriGma().map((f) => `<option ${f === sel ? "selected" : ""}>${esc(f)}</option>`).join("");
 function opzioniGma(forn = "", sel = "") {
-  const lista = S.gmv.filter((g) => !forn || (g.fornitore || "").trim() === forn).map((g) => g.codice).sort();
-  if (sel && !lista.includes(sel)) lista.unshift(sel);
-  return `<option value="">— nessun GMA —</option>` + lista.map((g) => `<option value="${esc(g)}" ${g === sel ? "selected" : ""}>${esc(g)}${forn ? "" : fornitore(g) ? " · " + esc(fornitore(g)) : ""}</option>`).join("") +
-    `<option value="__nuovo">+ Nuovo GMA…</option>`;
+  // una voce per ogni GMA (fornitore + codice): con "tutti i fornitori" lo stesso codice può comparire più volte
+  const voci = S.gmv.filter((g) => !forn || (g.fornitore || "").trim() === forn).map((g) => ({ c: g.codice, f: (g.fornitore || "").trim() }))
+    .sort((a, b) => a.c.localeCompare(b.c) || a.f.localeCompare(b.f));
+  let scelto = false;
+  const html = voci.map((v) => { const on = !scelto && v.c === sel; if (on) scelto = true; return `<option value="${esc(v.c)}" data-forn="${esc(v.f)}" ${on ? "selected" : ""}>${esc(v.c)}${forn ? "" : v.f ? " · " + esc(v.f) : ""}</option>`; }).join("");
+  return `<option value="">— nessun GMA —</option>` + (sel && !scelto ? `<option value="${esc(sel)}" selected>${esc(sel)}</option>` : "") + html + `<option value="__nuovo">+ Nuovo GMA…</option>`;
 }
+/* Fornitore della voce scelta in un menu dei GMA (o quello del menu fornitore accanto). */
+const fornScelto = (selGma, selForn) => selForn?.value || selGma.selectedOptions[0]?.dataset.forn || fornitore(selGma.value);
 /* Aggiunge un GMA all'elenco (oracle_config/gmv). */
 async function aggiungiGma(codice, forn, sconto = "") {
   codice = codice.trim().toUpperCase();
-  if (!codice || S.gmv.some((g) => g.codice === codice)) return codice;
+  if (!codice || S.gmv.some((g) => g.codice === codice && (g.fornitore || "").trim().toUpperCase() === forn.trim().toUpperCase())) return codice;
   const lista = [...S.gmv.map((g) => ({ ...g })), { codice, fornitore: forn.trim(), ...(sconto ? { sconto } : {}) }];
   await db.salva(COLL.cfg, "gmv", { lista });
   S.gmv = lista; impostaStandardGma(S.gmv);
@@ -2313,8 +2322,8 @@ function modificaArticolo(a) {
       <label class="f">Codice<input id="m-cod" value="${esc(a.codice)}"></label>
       <label class="f wide">N° di ordinazione<input id="m-ord" value="${esc(a.nOrdine)}"></label>
       <label class="f">U.M.<input id="m-um" value="${esc(a.um)}"></label>
-      <label class="f">Fornitore<select id="m-forn">${opzioniFornitoriGma(fornitore(a.gmv))}</select></label>
-      <label class="f">GMA<select id="m-gmv">${opzioniGma(fornitore(a.gmv), a.gmv)}</select></label>
+      <label class="f">Fornitore<select id="m-forn">${opzioniFornitoriGma(fornitoreDi(a))}</select></label>
+      <label class="f">GMA<select id="m-gmv">${opzioniGma(fornitoreDi(a), a.gmv)}</select></label>
       <div class="f wide nuovo-gma" id="m-nuovo-gma" hidden><span>Nuovo GMA</span><div class="row" style="gap:6px">
         <input id="m-ng-cod" placeholder="codice GMA" style="width:120px"><input id="m-ng-forn" list="m-ng-forns" placeholder="fornitore" class="grow">
         <datalist id="m-ng-forns">${fornitoriGma().map((f) => `<option value="${esc(f)}">`).join("")}</datalist></div></div>
@@ -2343,14 +2352,14 @@ function modificaArticolo(a) {
       // il fornitore riduce l'elenco dei GMA; scegliendo un GMA il fornitore si allinea
       $("#m-forn", b).addEventListener("change", (e) => {
         const att = $("#m-gmv", b).value, f = e.target.value;
-        $("#m-gmv", b).innerHTML = opzioniGma(f, !f || fornitore(att) === f ? att : "");
+        $("#m-gmv", b).innerHTML = opzioniGma(f, !f || voceGma(att, f) ? att : "");
         $("#m-nuovo-gma", b).hidden = true;
       });
       $("#m-gmv", b).addEventListener("change", (e) => {
         const v = e.target.value;
         $("#m-nuovo-gma", b).hidden = v !== "__nuovo";
         if (v === "__nuovo") { $("#m-ng-forn", b).value = $("#m-forn", b).value; setTimeout(() => $("#m-ng-cod", b).focus(), 30); return; }
-        const f = fornitore(v);
+        const f = $("#m-gmv", b).selectedOptions[0]?.dataset.forn || "";
         if (f && $("#m-forn", b).value !== f) { $("#m-forn", b).innerHTML = opzioniFornitoriGma(f); $("#m-gmv", b).innerHTML = opzioniGma(f, v); }
       });
       const sync = () => {
@@ -2361,7 +2370,7 @@ function modificaArticolo(a) {
       const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value, generico: $("#m-gen", b).checked }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
       // sconti vuoti = acquisto standard del GMA: si mostrano come suggerimento grigio
       const stdUpd = () => {
-        const g = $("#m-gmv", b).value, st = standardGma(g);
+        const g = $("#m-gmv", b).value, st = standardGma(g, fornScelto($("#m-gmv", b), $("#m-forn", b)));
         const vals = st ? [st.sc1, st.sc2, st.sc3, st.aum] : [];
         ["#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"].forEach((id, i) => { $(id, b).placeholder = st && num(vals[i]) ? pctVal(vals[i]) : ""; });
         const propri = ["#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"].some((id) => num($(id, b).value));
@@ -2422,7 +2431,7 @@ function modificaArticolo(a) {
     return {
       ...a,
       capitolo: g("#m-cap"), sottocapitolo: g("#m-sotto").trim(), precodice: g("#m-pre").trim(), codice: g("#m-cod").trim(),
-      nOrdine: g("#m-ord").trim(), um: g("#m-um").trim(), gmv: g("#m-gmv").trim(),
+      nOrdine: g("#m-ord").trim(), um: g("#m-um").trim(), gmv: g("#m-gmv").trim(), fornitore: fornScelto($("#m-gmv", b), $("#m-forn", b)),
       listinoAcquisto: num(g("#m-la")), giorni: num(g("#m-gg")),
       sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: num(a.riparam) || 0,
       listino: num(g("#m-li")), dataAgg: g("#m-data"), descrizione: g("#m-des"), notePre: g("#m-npre"), notePost: g("#m-npost"),
@@ -2513,7 +2522,7 @@ $("#cl-nuovo").addEventListener("click", () => modificaCliente(null));
 /* GMA raggruppati per fornitore (in ordine alfabetico; quelli senza fornitore in fondo). */
 function perFornitore(gmvs) {
   const m = new Map();
-  for (const g of gmvs) { const f = (fornitore(g) || "").trim().toUpperCase() || "ALTRI"; if (!m.has(f)) m.set(f, []); m.get(f).push(g); }
+  for (const g of gmvs) { const f = (fornitoriTxt(g) || "").trim().toUpperCase() || "ALTRI"; if (!m.has(f)) m.set(f, []); m.get(f).push(g); }
   for (const l of m.values()) l.sort();
   return [...m.entries()].sort((a, b) => (a[0] === "ALTRI") - (b[0] === "ALTRI") || a[0].localeCompare(b[0]));
 }
@@ -2577,7 +2586,7 @@ $("#cl-cens-scarica").addEventListener("click", () => {
     const n = righe.filter((x) => x.on && x.cod).length;
     $("#ce-righe", d).innerHTML = righe.map((x, i) => `<tr class="${x.on && x.cod ? "" : "qta-zero"}">
       <td><input type="checkbox" data-ce-on="${i}" ${x.on ? "checked" : ""} title="Includi questo GMA"></td>
-      <td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td>
+      <td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitoriTxt(x.g))}</td>
       <td><input class="mono" data-ce-cod="${i}" list="ce-l${i}" value="${esc(x.cod)}" placeholder="codice articolo Oracle" style="width:220px">
         <datalist id="ce-l${i}">${x.cand.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></td>
       <td class="small" data-ce-des="${i}">${esc(descr(x.cod))}${x.on && !x.cod ? '<span class="badge warn">scrivi un codice</span>' : ""}</td></tr>`).join("");
@@ -2689,7 +2698,7 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
     const prima = cli ? (att ? (cli.att === "" || cli.att === undefined ? "" : euro(cli.att)) : scontoCliTxt(cli, x.g) ? scontoCliTxt(cli, x.g) + "%" : "") : "";
     const dopo = att ? (x.unit ? euro(x.unit * (1 - x.f)) : "") : x.f ? (x.testo || pctVal(x.f)) + "%" : "0%";
     const cambia = cli && prima !== dopo;
-    return `<tr><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td><td class="mono small">${esc(x.cod)}</td>
+    return `<tr><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitoriTxt(x.g))}</td><td class="mono small">${esc(x.cod)}</td>
       <td class="small">${x.termini.map((t) => `${esc(t.n)} ${pctTxt(t.v)}`).join(" · ") || '<span class="muted">nessuno sconto</span>'}${x.aum.length ? ` · aumento ${x.aum.map(pctTxt).join("+")}` : ""}${x.forzata ? ' <span class="badge warn" title="Nella riga c\'è un prezzo netto forzato">netto forzato</span>' : ""}</td>
       <td class="num">${prima ? esc(prima) : '<span class="muted">—</span>'}</td><td class="num"><b>${esc(dopo)}</b>${cambia ? ' <span class="badge warn">cambia</span>' : ""}</td></tr>`;
   }).join("");
@@ -2954,7 +2963,7 @@ function caricaBib() {
 }
 const profiloDi = (nome) => S.fornitori.find((f) => f.nome === nome) || { nome, famiglie: {} };
 const testoStd = (x) => [x.sc1, x.sc2, x.sc3].filter((v) => num(v)).map((v) => pctTesto(v)).concat(num(x.aum) ? [pctTesto(-num(x.aum))] : []).join("+");
-const scontoGmaTxt = (g) => { const x = S.gmv.find((y) => y.codice === g); return x ? testoStd(x) || x.sconto || "" : ""; };
+const scontoGmaTxt = (g, forn) => { const x = voceGma(g, forn) || voceGma(g); return x ? testoStd(x) || x.sconto || "" : ""; };
 /* Condizioni di un articolo della biblioteca: GMA e sconto standard, confronto con quanto dice il listino. */
 function condBib(a) {
   const p = profiloDi(a.fornitore);
@@ -2962,7 +2971,7 @@ function condBib(a) {
   const gmaListino = a.gma || "";
   const diffGma = !!(gmaListino && gmaFam && gmaListino !== gmaFam);
   const gma = a.decisione === "listino" ? gmaListino || gmaFam : gmaFam || gmaListino;
-  const stdTxt = scontoGmaTxt(gma);
+  const stdTxt = scontoGmaTxt(gma, a.fornitore);
   const stdTerm = BIB.terminiSconto(stdTxt);
   const scL = a.scListino ?? null;
   const diffSc = scL !== null && Math.abs(1 - BIB.fattoreDi(stdTerm) - scL) > 0.0005;
@@ -3098,9 +3107,10 @@ function articoloDaBib(a, capitolo, sottocapitolo) {
     precodice: a.precodice ?? p.precodice ?? "", codice: a.codice, nOrdine: a.nOrdine || "", descrizione: a.descrizione || "", um: a.um || "n.",
     listinoAcquisto: num(a.listino), giorni: 0, riparam: 0,
     // sconti uguali all'acquisto standard del GMA: l'articolo non li salva e segue lo standard
-    ...(k.fonte === "gma" && standardGma(k.gma) ? { sc3: 0, sc4: 0, sc5: 0, aum1: 0 } : { sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0 }),
+    ...(k.fonte === "gma" && standardGma(k.gma, (voceGma(k.gma, a.fornitore) || voceGma(k.gma))?.fornitore) ? { sc3: 0, sc4: 0, sc5: 0, aum1: 0 } : { sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0 }),
     gmv: k.gma, notePre: "", notePost: "", dataAgg: a.dataAgg || oggiIso(), daBiblioteca: a.fornitore,
   };
+  { const v = voceGma(k.gma, a.fornitore) || voceGma(k.gma); if (v?.fornitore) art.fornitore = v.fornitore; }
   art.listino = listinoCalcolato(art);
   const base = `${capitolo}||${codiceArticolo(art)}|${art.nOrdine}`;
   let kk = base, n = 1;
@@ -3566,19 +3576,25 @@ function impostaFornitore(nome) {
 $("#b-sconti").addEventListener("click", () => apriElencoGma());
 /* Rinomina un GMA ovunque: elenco GMA, database, biblioteca, cartellini dei clienti, offerte, censimento.
    Se il nuovo codice esiste già, i due GMA si uniscono (restano fornitore e sconto del nuovo). */
-async function rinominaGma(vecchio, nuovo) {
+async function rinominaGma(vecchio, nuovo, forn = "") {
   const ops = [], conta = { art: 0, bib: 0, cli: 0, off: 0 };
-  const esiste = S.gmv.some((g) => g.codice === nuovo);
-  const lista = S.gmv.map((g) => ({ ...g })).filter((g) => !(esiste && g.codice === vecchio)).map((g) => (g.codice === vecchio ? { ...g, codice: nuovo } : g));
+  const FU = (x) => String(x || "").trim().toUpperCase(), F = FU(forn);
+  const questo = (g) => g.codice === vecchio && FU(g.fornitore) === F;
+  const esiste = S.gmv.some((g) => g.codice === nuovo && FU(g.fornitore) === F);
+  const lista = S.gmv.map((g) => ({ ...g })).filter((g) => !(esiste && questo(g))).map((g) => (questo(g) ? { ...g, codice: nuovo } : g));
+  // lo stesso codice resta con altri fornitori? allora clienti, offerte e censimento (che conoscono solo il codice) non si toccano
+  const altri = lista.some((g) => g.codice === vecchio);
   ops.push({ tipo: "set", coll: COLL.cfg, id: "gmv", data: { lista } });
-  // database
+  // database: solo gli articoli di questo fornitore
   const capCat = new Set();
-  for (const a of S.catalogo) if (a.gmv === vecchio) { a.gmv = nuovo; capCat.add(a.capitolo); conta.art++; }
+  for (const a of S.catalogo) if (a.gmv === vecchio && FU(fornitoreDi(a)) === F) { a.gmv = nuovo; if (forn) a.fornitore = forn; capCat.add(a.capitolo); conta.art++; }
   for (const cap of capCat) ops.push(...opsCapitolo(cap, S.catalogo.filter((a) => a.capitolo === cap)));
   // biblioteca
   const chBib = new Set();
-  for (const a of S.bib || []) if (a.gma === vecchio) { a.gma = nuovo; chBib.add(a._chunk); conta.bib++; }
+  for (const a of S.bib || []) if (a.gma === vecchio && (!altri || FU(a.fornitore) === F)) { a.gma = nuovo; chBib.add(a._chunk); conta.bib++; }
   for (const id of chBib) { const ch = S.bibChunks.find((c) => c.id === id); if (!ch) continue; const { id: _i, ...dati } = ch; ops.push({ tipo: "set", coll: COLL.bib, id, data: { ...dati, articoli: S.bib.filter((a) => a._chunk === id).map(({ _chunk, ...a }) => a) } }); }
+  // cartellini, offerte e censimento conoscono solo il codice: si toccano solo se il vecchio codice sparisce del tutto
+  if (!altri) {
   // cartellini dei clienti
   for (const c of S.clienti) {
     if (!c.sconti || !(vecchio in c.sconti)) continue;
@@ -3608,19 +3624,29 @@ async function rinominaGma(vecchio, nuovo) {
     const righe = S.censCfg.righe.filter((x) => !(esiste && x.g === vecchio && S.censCfg.righe.some((y) => y.g === nuovo))).map((x) => (x.g === vecchio ? { ...x, g: nuovo } : x));
     ops.push({ tipo: "set", coll: COLL.cfg, id: "censimento", data: { righe } });
   }
+  } else if (S.off) {
+    // solo le righe dell'offerta aperta di questo fornitore
+    let c2 = false;
+    for (const c of S.off.capitoli || []) for (const r of c.righe || []) if (r.gmv === vecchio && FU(r.fornitore) === F && F) { r.gmv = nuovo; c2 = true; }
+    if (c2) { conta.off++; modificata(); }
+  }
   await db.scrivi(ops);
   S.gmv = lista; impostaStandardGma(S.gmv);
   return conta;
 }
-function chiediRinominaGma(vecchio) {
+function chiediRinominaGma(vecchio, forn = "") {
+  const FU = (x) => String(x || "").trim().toUpperCase();
+  const altri = S.gmv.filter((g) => g.codice === vecchio && FU(g.fornitore) !== FU(forn)).map((g) => g.fornitore || "senza fornitore");
   dialogo({
-    titolo: `Rinomina il GMA ${vecchio}`,
+    titolo: `Rinomina il GMA ${vecchio}${forn ? " · " + forn : ""}`,
     html: `<label class="f">Nuovo codice<input id="rg-nuovo" value="${esc(vecchio)}" style="text-transform:uppercase"></label>
-      <p class="muted small">Il codice cambia ovunque: elenco GMA, articoli del database e della biblioteca, cartellini dei clienti, condizioni e righe di tutte le offerte.
-        Se scrivi un codice che esiste già, i due GMA vengono uniti.</p><p class="small" id="rg-info"></p>`,
+      <p class="muted small">Cambia solo il GMA <b>${esc(vecchio)}</b> di <b>${esc(forn || "senza fornitore")}</b> e i suoi articoli del database e della biblioteca.
+        ${altri.length ? `Lo stesso codice esiste anche per ${esc(altri.join(", "))}: quello resta com'è, e quindi cartellini dei clienti e condizioni delle offerte (che conoscono solo il codice) non vengono toccati.`
+          : "Il codice cambia anche nei cartellini dei clienti e nelle condizioni e righe di tutte le offerte."}
+        Se scrivi un codice che esiste già per lo stesso fornitore, i due GMA vengono uniti.</p><p class="small" id="rg-info"></p>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Rinomina", value: "ok", cls: "primary" }],
     onApri(d) {
-      const i = $("#rg-nuovo", d), info = () => { const n = i.value.trim().toUpperCase(); $("#rg-info", d).innerHTML = n && n !== vecchio && S.gmv.some((g) => g.codice === n) ? `<b>${esc(n)}</b> esiste già (${esc(fornitore(n) || "senza fornitore")}): ${esc(vecchio)} verrà unito a ${esc(n)}.` : ""; };
+      const i = $("#rg-nuovo", d), info = () => { const n = i.value.trim().toUpperCase(); $("#rg-info", d).innerHTML = n && n !== vecchio && S.gmv.some((g) => g.codice === n && FU(g.fornitore) === FU(forn)) ? `<b>${esc(n)}</b> esiste già per ${esc(forn || "senza fornitore")}: ${esc(vecchio)} verrà unito a ${esc(n)}.` : ""; };
       i.addEventListener("input", info); setTimeout(() => { i.focus(); i.select(); }, 50);
     },
     async onConferma(v, d) {
@@ -3628,7 +3654,7 @@ function chiediRinominaGma(vecchio) {
       if (!n) { toast("Scrivi il codice."); return false; }
       if (n === vecchio) return;
       try {
-        const c = await rinominaGma(vecchio, n);
+        const c = await rinominaGma(vecchio, n, forn);
         toast(`GMA ${vecchio} → ${n}: ${c.art} articoli, ${c.bib} in biblioteca, ${c.cli} clienti, ${c.off} offerte aggiornati.`, 7000);
       } catch (x) { errore(x, "Rinomina non riuscita"); return false; }
       setTimeout(() => apriAcquistiStandard(), 50);
@@ -3646,22 +3672,32 @@ function apriAcquistiStandard() {
     const t = BIB.terminiSconto(g.sconto); const pos = t.filter((x) => x > 0), neg = t.filter((x) => x < 0);
     [g.sc1, g.sc2, g.sc3] = [pos[0] || 0, pos[1] || 0, pos[2] || 0]; g.aum = neg.length ? BIB.fattoreDi(neg) - 1 : 0;
   }
+  // articoli per GMA (fornitore + codice)
+  const kv = (f, c) => `${String(f || "").trim().toUpperCase()}|${c}`;
   const conta = new Map();
-  for (const a of S.catalogo) { if (isAttivita(a) || !a.gmv) continue; const x = conta.get(a.gmv) || { n: 0, propri: 0 }; x.n++; if (haScontiPropri(a)) x.propri++; conta.set(a.gmv, x); }
-  const cella = (g, k) => `<td><span class="pct-wrap"><input class="pct" data-as="${esc(g.codice)}" data-k="${k}" value="${esc(pctVal(g[k]))}" style="width:72px"></span></td>`;
+  for (const a of S.catalogo) {
+    if (isAttivita(a) || !a.gmv) continue;
+    const v = voceGma(a.gmv, a.fornitore) || { codice: a.gmv, fornitore: fornitoreDi(a) };
+    const k = kv(v.fornitore, v.codice), x = conta.get(k) || { n: 0, propri: 0 }; x.n++; if (haScontiPropri(a)) x.propri++; conta.set(k, x);
+  }
+  const cella = (i, g, k) => `<td><span class="pct-wrap"><input class="pct" data-as="${i}" data-k="${k}" value="${esc(pctVal(g[k]))}" style="width:72px"></span></td>`;
+  const gruppi = new Map();
+  lista.forEach((g, i) => { const f = (g.fornitore || "").trim().toUpperCase() || "ALTRI"; if (!gruppi.has(f)) gruppi.set(f, []); gruppi.get(f).push(i); });
+  const ordG = [...gruppi.entries()].sort((a, b) => (a[0] === "ALTRI") - (b[0] === "ALTRI") || a[0].localeCompare(b[0]));
   dialogo({
     titolo: "GMA e acquisti standard", largo: true,
-    html: `<p class="muted small" style="margin-top:0">Tutti i GMA, divisi per fornitore: qui cambi il fornitore, rinomini o unisci un GMA (✎), ne aggiungi uno nuovo e imposti
-        gli sconti di acquisto standard in cascata (Sconto 1, poi 2, poi 3) più un eventuale aumento. Gli articoli del database <b>senza sconti propri</b> usano questi valori
-        (in grigio nella scheda articolo, in corsivo nel database); quelli con sconti propri restano un'eccezione.</p>
+    html: `<p class="muted small" style="margin-top:0">Tutti i GMA, divisi per fornitore. <b>Un GMA è fornitore + codice</b>: lo stesso codice con due fornitori sono due GMA distinti,
+        ognuno con i suoi sconti. Qui cambi il fornitore, rinomini o unisci un GMA (✎), ne aggiungi uno nuovo e imposti gli sconti di acquisto standard in cascata
+        (Sconto 1, poi 2, poi 3) più un eventuale aumento. Gli articoli <b>senza sconti propri</b> usano questi valori; quelli con sconti propri restano un'eccezione.</p>
       <div class="row" style="margin-bottom:6px"><input id="as-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
       <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num" title="Articoli con sconti propri: non seguono lo standard">Con sconti propri</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead>
-      <tbody id="as-righe">${perFornitore(lista.map((g) => g.codice)).map(([forn, gs]) => `<tr class="sotto as-forn"><td colspan="8">${esc(forn)}</td></tr>` +
-        gs.map((c) => { const g = lista.find((x) => x.codice === c), x = conta.get(c) || { n: 0, propri: 0 };
-          return `<tr data-as-riga="${esc(c)}" data-forn="${esc(forn)}"><td class="mono nowrap"><b>${esc(c)}</b> <button type="button" class="tg-ed" data-sg-rin="${esc(c)}" title="Rinomina il GMA (ovunque: database, biblioteca, clienti, offerte)">✎</button></td>
-            <td><input data-as-f="${esc(c)}" list="as-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore" style="width:170px"></td>
+      <tbody id="as-righe">${ordG.map(([forn, idx]) => `<tr class="sotto as-forn"><td colspan="8">${esc(forn)}</td></tr>` +
+        idx.sort((x, y) => lista[x].codice.localeCompare(lista[y].codice)).map((i) => { const g = lista[i], x = conta.get(kv(g.fornitore, g.codice)) || { n: 0, propri: 0 };
+          const doppio = lista.filter((y) => y.codice === g.codice).length > 1;
+          return `<tr data-as-riga="${esc(g.codice)}" data-forn="${esc(forn)}"><td class="mono nowrap"><b>${esc(g.codice)}</b>${doppio ? ' <span class="badge info" title="Lo stesso codice esiste anche con un altro fornitore">+ altro fornitore</span>' : ""} <button type="button" class="tg-ed" data-sg-rin="${i}" title="Rinomina il GMA di questo fornitore">✎</button></td>
+            <td><input data-as-f="${i}" list="as-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore" style="width:170px"></td>
             <td class="num">${x.n || ""}</td><td class="num">${x.propri || ""}</td>
-            ${cella(g, "sc1")}${cella(g, "sc2")}${cella(g, "sc3")}${cella(g, "aum")}</tr>`; }).join("")).join("")}</tbody></table></div>
+            ${cella(i, g, "sc1")}${cella(i, g, "sc2")}${cella(i, g, "sc3")}${cella(i, g, "aum")}</tr>`; }).join("")).join("")}</tbody></table></div>
       <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap"><b style="align-self:center">+ Nuovo GMA</b>
         <label class="f">Codice<input id="as-nuovo" placeholder="es. SN07" style="width:110px"></label>
         <label class="f grow">Fornitore<input id="as-nuovo-f" list="as-forns" placeholder="scegli o scrivi"></label>
@@ -3674,20 +3710,29 @@ function apriAcquistiStandard() {
         $$("#as-righe tr[data-as-riga]", d).forEach((tr) => { const f = $("[data-as-f]", tr)?.value || ""; tr.hidden = !!q && !(tr.dataset.asRiga + " " + tr.dataset.forn + " " + f).toLowerCase().includes(q); });
         $$("#as-righe tr.as-forn", d).forEach((tr) => { let n = tr.nextElementSibling, vis = false; while (n && !n.classList.contains("as-forn")) { if (!n.hidden) vis = true; n = n.nextElementSibling; } tr.hidden = !vis; });
       });
-      d.addEventListener("click", (e) => { const b = e.target.closest("[data-sg-rin]"); if (b) chiediRinominaGma(b.dataset.sgRin); });
+      d.addEventListener("click", (e) => { const b = e.target.closest("[data-sg-rin]"); if (b) { const g = lista[+b.dataset.sgRin]; chiediRinominaGma(g.codice, g.fornitore || ""); } });
     },
     async onConferma(v, d) {
-      for (const i of $$("[data-as]", d)) { const g = lista.find((x) => x.codice === i.dataset.as); const x = daPct(i.value); if (x) g[i.dataset.k] = x; else delete g[i.dataset.k]; }
-      for (const i of $$("[data-as-f]", d)) lista.find((x) => x.codice === i.dataset.asF).fornitore = i.value.trim();
-      const n = $("#as-nuovo", d).value.trim().toUpperCase();
+      for (const i of $$("[data-as]", d)) { const g = lista[+i.dataset.as]; const x = daPct(i.value); if (x) g[i.dataset.k] = x; else delete g[i.dataset.k]; }
+      // fornitore cambiato: gli articoli che avevano quel fornitore scritto lo seguono
+      const cambi = [];
+      for (const i of $$("[data-as-f]", d)) { const g = lista[+i.dataset.asF], nf = i.value.trim(); if ((g.fornitore || "") !== nf) { cambi.push({ c: g.codice, da: g.fornitore || "", a: nf }); g.fornitore = nf; } }
+      const dup = new Set(); for (const g of lista) { const k = kv(g.fornitore, g.codice); if (dup.has(k)) { toast(`Il GMA ${g.codice} c'è due volte con il fornitore ${g.fornitore || "(nessuno)"}: uniscili con ✎.`, 6000); return false; } dup.add(k); }
+      const n = $("#as-nuovo", d).value.trim().toUpperCase(), nf = $("#as-nuovo-f", d).value.trim();
       if (n) {
-        if (lista.some((g) => g.codice === n)) { toast(`Il GMA ${n} c'è già.`); return false; }
-        const g = { codice: n, fornitore: $("#as-nuovo-f", d).value.trim() };
+        if (lista.some((g) => kv(g.fornitore, g.codice) === kv(nf, n))) { toast(`Il GMA ${n} di ${nf || "nessun fornitore"} c'è già.`); return false; }
+        const g = { codice: n, fornitore: nf };
         ["sc1", "sc2", "sc3", "aum"].forEach((k, i) => { const x = daPct($(`#as-nuovo-${i}`, d).value); if (x) g[k] = x; });
         lista.push(g);
       }
       for (const g of lista) if (num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)) delete g.sconto;
-      try { await db.salva(COLL.cfg, "gmv", { lista }); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
+      const ops = [{ tipo: "set", coll: COLL.cfg, id: "gmv", data: { lista } }];
+      if (cambi.length) {
+        const caps = new Set();
+        for (const c of cambi) for (const a of S.catalogo) if (a.gmv === c.c && a.fornitore && a.fornitore.trim().toUpperCase() === c.da.trim().toUpperCase()) { a.fornitore = c.a; caps.add(a.capitolo); }
+        for (const c of caps) ops.push(...opsCapitolo(c, S.catalogo.filter((a) => a.capitolo === c)));
+      }
+      try { await db.scrivi(ops); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
       S.gmv = lista; impostaStandardGma(S.gmv); ridisegna(true);
       toast(n ? `GMA ${n} aggiunto.` : "GMA e acquisti standard salvati.");
     },
