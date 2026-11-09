@@ -831,3 +831,6 @@ tr.totale td, tbody tr.sotto:not([data-gruppo]) td {
   border-top: 3px solid #b45309 !important;
 }
 tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !important; }
+/* riga di intestazione delle tabelle più scura (scritte sempre scure) */
+:root[data-theme="chiaro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
+:root[data-theme="scuro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
