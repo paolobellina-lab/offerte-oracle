@@ -803,7 +803,7 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const t = e.target.closest("[data-togli-cap]");
   if (t) return togliCapitolo(S.off.capitoli.find((c) => c.nome === t.dataset.togliCap));
   const x = e.target.closest("[data-xlsx-cap]");
-  if (x) scaricaXlsx(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
+  if (x) impostaEScarica(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
 });
 $("#scarica-tutti").addEventListener("click", () => {
   const caps = S.off.capitoli.filter((c) => calcolaOfferta(c).righe.length);
@@ -1692,6 +1692,51 @@ function controllaCapitolati(c, procedi) {
     onConferma(v) {
       if (v === "righe") { S.sub = "righe"; disegnaOfferta(true); return; }
       procedi();
+    },
+  });
+}
+/* Dal riepilogo: prima le impostazioni dell'output (le stesse della pagina Oracle), poi il download. */
+function impostaEScarica(c) {
+  if (!c) return;
+  aggiornaCondizioni(c);
+  const st = { prezzo: c.out.prezzo, formato: c.out.formato, sotto: !!c.sottocapitoli, escl: new Set(c.esclusiExport || []) };
+  const gruppi = new Map();
+  for (const r of c.righe) { if (!num(r.qta)) continue; const g = r.capitolato || ""; gruppi.set(g, (gruppi.get(g) || 0) + 1); }
+  const lis = c.imp === "listino";
+  const segHtml = (id, valori, att, et) => `<div class="seg" id="${id}">${valori.map((v) => `<button type="button" data-v="${v}" class="${v === att ? "on" : ""}">${esc(et(v))}</button>`).join("")}</div>`;
+  const campo = (titolo, html) => `<div style="display:flex;flex-direction:column;gap:3px"><span class="muted small" style="font-weight:600">${titolo}</span>${html}</div>`;
+  dialogo({
+    titolo: `Scarica il foglio Oracle di ${c.nome}`,
+    html: `<div class="row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
+        ${campo("Prezzi da esportare", segHtml("ie-prezzo", ["vendita", "acquisto"], st.prezzo, (v) => (v === "vendita" && lis ? "Listino" : OUT_PREZZO[v])))}
+        ${campo("Come", segHtml("ie-formato", ["sconti", "netti"], st.formato, (v) => OUT_FORMATO[v]))}
+        ${campo("Capitolati in Oracle", segHtml("ie-sotto", ["SI", "NO"], st.sotto ? "SI" : "NO", (v) => v))}
+        <label class="f">N° partenza righe<input id="ie-linea" type="number" min="0" step="10" style="width:100px" value="${esc(c.lineaPartenza ?? 10)}"></label>
+        <label class="f">Magazzino<input id="ie-mag" maxlength="10" style="width:80px" value="${esc(c.magazzino ?? "BG")}"></label>
+      </div>
+      ${gruppi.size > 1 || st.escl.size ? `<div style="margin-top:14px"><span class="muted small" style="font-weight:600">Capitolati da caricare in questa offerta Oracle</span>
+        <div class="capitolati" style="margin-top:4px">${[...gruppi.entries()].map(([g, n]) => `<label class="chip-check"><input type="checkbox" data-ie-cap="${esc(g)}" ${st.escl.has(g) ? "" : "checked"}> <b>${g ? esc(g) : "senza capitolato"}</b> <span class="muted">${n} righe</span></label>`).join("")}</div></div>` : ""}
+      <p class="muted small" style="margin:12px 0 0">Le impostazioni restano salvate nel capitolo (sono le stesse della pagina Oracle).</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "⤓ Scarica Excel", value: "ok", cls: "primary" }],
+    onApri(d) {
+      d.addEventListener("click", (e) => {
+        const b = e.target.closest(".seg button[data-v]"); if (!b) return;
+        const sg = b.parentElement;
+        sg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+        if (sg.id === "ie-prezzo") st.prezzo = b.dataset.v;
+        if (sg.id === "ie-formato") st.formato = b.dataset.v;
+        if (sg.id === "ie-sotto") st.sotto = b.dataset.v === "SI";
+      });
+    },
+    onConferma(v, d) {
+      c.out.prezzo = st.prezzo; c.out.formato = st.formato; c.sottocapitoli = st.sotto;
+      c.lineaPartenza = num($("#ie-linea", d).value) || 10;
+      c.magazzino = $("#ie-mag", d).value.trim() || "BG";
+      const escl = $$("[data-ie-cap]", d).filter((x) => !x.checked).map((x) => x.dataset.ieCap);
+      if (gruppi.size && escl.length === gruppi.size) { toast("Lascia almeno un capitolato da caricare."); return false; }
+      c.esclusiExport = escl;
+      modificata(); ridisegna(true);
+      setTimeout(() => controllaCapitolati(c, () => scaricaXlsx(c)), 50);
     },
   });
 }
