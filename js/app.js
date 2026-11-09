@@ -2472,6 +2472,20 @@ async function aggiungiGma(codice, forn, sconto = "") {
   S.gmv = lista; impostaStandardGma(S.gmv);
   return codice;
 }
+/* Menu a tendina dei sottocapitoli (stesso aspetto degli altri menu) con la voce "+ Nuovo sottocapitolo…". */
+function opzioniSotto(sotti, sel = "") {
+  const l = [...new Set(sotti)].filter(Boolean);
+  if (sel && !l.includes(sel)) l.unshift(sel);
+  return `<option value="">— nessun sottocapitolo —</option>` + l.map((x) => `<option ${x === sel ? "selected" : ""}>${esc(x)}</option>`).join("") + `<option value="__nuovo">+ Nuovo sottocapitolo…</option>`;
+}
+const campoSotto = (id, sel, sotti) => `<select id="${id}">${opzioniSotto(sotti, sel)}</select><input id="${id}-nuovo" placeholder="nome del nuovo sottocapitolo" hidden style="margin-top:6px">`;
+function legaSotto(id, root) {
+  $("#" + id, root).addEventListener("change", (e) => { const n = e.target.value === "__nuovo"; $(`#${id}-nuovo`, root).hidden = !n; if (n) setTimeout(() => $(`#${id}-nuovo`, root).focus(), 30); });
+}
+const aggiornaSotto = (id, root, sotti, tieni = false) => { const s = $("#" + id, root), v = s.value === "__nuovo" ? "" : s.value; s.innerHTML = opzioniSotto(sotti, tieni || sotti.includes(v) ? v : ""); $(`#${id}-nuovo`, root).hidden = true; };
+const valSotto = (id, root) => { const v = $("#" + id, root).value; return (v === "__nuovo" ? $(`#${id}-nuovo`, root).value : v).trim(); };
+const sottoDelCap = (cap) => [...new Set(S.catalogo.filter((x) => x.capitolo === cap).map((x) => x.sottocapitolo).filter(Boolean))];
+
 /* ================= Cloni =================
    Un clone è la stessa riga del database messa in più punti (es. una base sotto ogni rivelatore compatibile).
    I cloni hanno lo stesso "clone" (id del gruppo): tutto è in comune tranne la posizione. */
@@ -2548,7 +2562,7 @@ function modificaArticolo(a) {
         (${cloniDi(a).map((x) => `${esc(x.capitolo)} · ${esc(x.sottocapitolo || "—")}${x === a ? " <i>(questa)</i>" : ""}`).join("; ")}).
         Le modifiche valgono per tutte; capitolo e sottocapitolo sono solo di questa copia.</div>` : ""}<div class="grid-set">
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
-      <label class="f wide" title="Scegline uno dall'elenco o scrivine uno nuovo">Sottocapitolo<input id="m-sotto" placeholder="scegli o scrivi un sottocapitolo nuovo" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
+      <label class="f wide" title="Scegline uno dall'elenco o creane uno nuovo">Sottocapitolo${campoSotto("m-sotto", a.sottocapitolo || "", sotti)}</label>
       <label class="f">Precodice<input id="m-pre" value="${esc(a.precodice)}"></label>
       <label class="f">Codice<input id="m-cod" value="${esc(a.codice)}"></label>
       <label class="f wide">N° di ordinazione<input id="m-ord" value="${esc(a.nOrdine)}"></label>
@@ -2582,6 +2596,8 @@ function modificaArticolo(a) {
         { label: "🔗 Crea clone…", value: "clone" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(b) {
+      legaSotto("m-sotto", b);
+      $("#m-cap", b).addEventListener("change", (e) => aggiornaSotto("m-sotto", b, sottoDelCap(e.target.value)));
       // il fornitore riduce l'elenco dei GMA; scegliendo un GMA il fornitore si allinea
       $("#m-forn", b).addEventListener("change", (e) => {
         const att = $("#m-gmv", b).value, f = e.target.value;
@@ -2668,7 +2684,7 @@ function modificaArticolo(a) {
     const g = (id) => $(id, b).value;
     return {
       ...a,
-      capitolo: g("#m-cap"), sottocapitolo: g("#m-sotto").trim(), precodice: g("#m-pre").trim(), codice: g("#m-cod").trim(),
+      capitolo: g("#m-cap"), sottocapitolo: valSotto("m-sotto", b), precodice: g("#m-pre").trim(), codice: g("#m-cod").trim(),
       nOrdine: g("#m-ord").trim(), um: g("#m-um").trim(), gmv: g("#m-gmv").trim(), fornitore: fornScelto($("#m-gmv", b), $("#m-forn", b)),
       listinoAcquisto: num(g("#m-la")), giorni: num(g("#m-gg")),
       sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: num(a.riparam) || 0,
@@ -3391,14 +3407,15 @@ function aggiungiDaBib(a) {
         <label class="row"><input type="checkbox" id="ad-db"> <b>Metti l'articolo anche nel database</b> (la prossima volta lo trovi tra gli articoli normali)</label>
         <div class="row" id="ad-db-box" hidden style="margin-top:8px">
           <label class="f">Capitolo del database<select id="ad-dbcap">${opzCapitoliDb(capDef)}</select></label>
-          <label class="f grow">Sottocapitolo<input id="ad-sotto" list="ad-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="ad-sotti"></datalist></label>
+          <label class="f grow">Sottocapitolo${campoSotto("ad-sotto", a.sottocapitolo || "", [])}</label>
         </div>
       </div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiungi all'offerta", value: "ok", cls: "primary" }],
     onApri(d) {
-      const sotti = () => { $("#ad-sotti", d).innerHTML = sottoDi($("#ad-dbcap", d).value).map((x) => `<option value="${esc(x)}">`).join(""); };
+      legaSotto("ad-sotto", d);
+      const sotti = (tieni) => aggiornaSotto("ad-sotto", d, sottoDi($("#ad-dbcap", d).value), tieni === true);
       $("#ad-db", d).addEventListener("change", (e) => { $("#ad-db-box", d).hidden = !e.target.checked; });
-      $("#ad-dbcap", d).addEventListener("change", sotti); sotti();
+      $("#ad-dbcap", d).addEventListener("change", sotti); sotti(true);
       setTimeout(() => $("#ad-qta", d).focus(), 50);
     },
     async onConferma(v, d) {
@@ -3408,7 +3425,7 @@ function aggiungiDaBib(a) {
       if (dec) { a.decisione = dec; salvaBloccoBib([a._chunk]).catch((x) => errore(x)); }
       let art;
       if ($("#ad-db", d).checked) {
-        art = articoloDaBib(a, $("#ad-dbcap", d).value, $("#ad-sotto", d).value.trim());
+        art = articoloDaBib(a, $("#ad-dbcap", d).value, valSotto("ad-sotto", d));
         try { await scriviNelDatabase(art); } catch (x) { errore(x, "Non riesco a salvarlo nel database"); return false; }
       } else {
         art = articoloDaBib(a, c.nome, a.sottocapitolo);
@@ -3432,18 +3449,19 @@ function mettiNelDatabase(a) {
     html: `<p class="muted small" style="margin-top:0">${esc(a.fornitore)} · <span class="mono">${esc(codiceBib(a))}</span> · ${esc(a.descrizione)}<br>
       Listino ${euro(a.listino)} · GMA ${esc(k.gma || "—")} · sconto ${pctTxt(k.sconto) || "0%"}</p>
       <div class="row"><label class="f">Capitolo<select id="md-cap">${opzCapitoliDb(S.capitoli[0]?.nome)}</select></label>
-      <label class="f grow">Sottocapitolo<input id="md-sotto" list="md-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="md-sotti"></datalist></label></div>
+      <label class="f grow">Sottocapitolo${campoSotto("md-sotto", a.sottocapitolo || "", [])}</label></div>
       ${htmlDecisione(k)}`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Metti nel database", value: "ok", cls: "primary" }],
     onApri(d) {
-      const sotti = () => { $("#md-sotti", d).innerHTML = sottoDi($("#md-cap", d).value).map((x) => `<option value="${esc(x)}">`).join(""); };
-      $("#md-cap", d).addEventListener("change", sotti); sotti();
+      legaSotto("md-sotto", d);
+      const sotti = (tieni) => aggiornaSotto("md-sotto", d, sottoDi($("#md-cap", d).value), tieni === true);
+      $("#md-cap", d).addEventListener("change", sotti); sotti(true);
     },
     async onConferma(v, d) {
       if (!S.capitoli.length) { toast("Prima crea un capitolo del database."); return false; }
       const dec = $('input[name="ad-dec"]:checked', d)?.value;
       if (dec) { a.decisione = dec; salvaBloccoBib([a._chunk]).catch((x) => errore(x)); }
-      const art = articoloDaBib(a, $("#md-cap", d).value, $("#md-sotto", d).value.trim());
+      const art = articoloDaBib(a, $("#md-cap", d).value, valSotto("md-sotto", d));
       try { await scriviNelDatabase(art); toast(`${a.nOrdine || a.codice} è nel database (${art.capitolo}).`); disegnaBiblioteca(); }
       catch (x) { errore(x, "Non riesco a salvarlo nel database"); return false; }
     },
