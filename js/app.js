@@ -1535,6 +1535,10 @@ function kDelBloccoPick(h) {
   for (let tr = h.nextElementSibling; tr && !tr.hasAttribute("data-gruppo"); tr = tr.nextElementSibling) if (tr.dataset.k) ks.push(tr.dataset.k);
   return ks;
 }
+/* Maiusc+clic o Ctrl+clic sulle righe: niente selezione del testo (il browser la mostrerebbe per un attimo). */
+for (const id of ["#righe-offerta", "#righe-picker"]) $(id).addEventListener("mousedown", (e) => {
+  if ((e.shiftKey || e.ctrlKey || e.metaKey) && e.target.closest("tr[data-id], tr[data-k]") && !e.target.closest("input:not([type=checkbox]), select, textarea")) e.preventDefault();
+});
 $("#righe-picker").addEventListener("click", (e) => {
   const g = e.target.closest("[data-pickgruppo]");
   if (g) { kDelBloccoPick(g.closest("tr")).forEach((k) => (g.checked ? S.pickSel.add(k) : S.pickSel.delete(k))); return aggiornaPickSel(); }
