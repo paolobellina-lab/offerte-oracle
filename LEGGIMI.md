@@ -104,6 +104,21 @@ si scelgono le colonne (codice, descrizione, U.M., quantità, prezzo, sconto, to
 
 Nel **riepilogo** la colonna **Esporta** decide quali capitoli scaricare con "Scarica i fogli Oracle dei capitoli spuntati".
 
+## Censimento dei cartellini clienti da Oracle
+
+Nella pagina **Clienti**:
+
+1. **Offerta di censimento**: scarica un file Sheet1 con un articolo per ogni GMA (preso dal database), quantità 1,
+   senza prezzi né sconti (nota pre-linea "GMA xxx"). Si importa in Oracle in un'offerta intestata al cliente:
+   Oracle applica le condizioni del cliente.
+2. **Carica censimento**: si caricano le linee di quell'offerta scaricate da Oracle (Excel, CSV o PDF), si sceglie
+   il cliente (o se ne crea uno nuovo) e per ogni GMA gli sconti applicati da Oracle (Sconto GMA, Sconto Cliente,
+   Sconto 3/4/5, in cascata) diventano il suo cartellino. Prima di salvare si vedono il cartellino attuale e il nuovo.
+   La riga PITATT.TEC dà la tariffa dell'attività tecnica. Si aggiornano solo i GMA presenti nel file.
+
+Il cliente ricorda la data del censimento. Nell'offerta il cliente è **verde** se il cartellino è stato censito,
+**rosso** se no. Gli sconti di cartellino si possono scrivere anche a mano in cascata (es. 45+10).
+
 ## Come sono organizzati i dati (Firestore)
 
 | Collezione | Contenuto |

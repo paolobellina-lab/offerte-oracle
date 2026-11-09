@@ -474,7 +474,8 @@ function disegnaTestata() {
   $("#o-nome").value = o.nome || "";
   $("#o-note").value = o.note || "";
   $("#o-cliente").innerHTML = `<option value="">— nessun cliente (niente controllo cartellino) —</option>` +
-    S.clienti.map((c) => `<option value="${esc(c.id)}" ${c.id === o.cliente ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
+    S.clienti.map((c) => `<option value="${esc(c.id)}" class="${c.censito ? "cli-ok" : "cli-no"}" ${c.id === o.cliente ? "selected" : ""}>${c.censito ? "● " : "○ "}${esc(c.nome)}</option>`).join("");
+  statoCensimento();
   seg($("#o-imp"), Object.keys(IMPOSTAZIONI), impOfferta(o), (v) => IMPOSTAZIONI[v]);
   $("#o-imp-nota").textContent = impOfferta(o) === "listino"
     ? "Listino: per ogni capitolo si definisce uno sconto di listino e si ricalcola il prezzo di listino di ogni articolo (riparametrizzato) in modo che, scontato, dia il prezzo di acquisto."
@@ -490,7 +491,15 @@ $("#o-imp").addEventListener("click", (e) => {
 });
 $("#o-nome").addEventListener("input", (e) => { S.off.nome = e.target.value; modificata(); });
 $("#o-note").addEventListener("input", (e) => { S.off.note = e.target.value; modificata(); });
-$("#o-cliente").addEventListener("change", (e) => { S.off.cliente = e.target.value; modificata(); disegnaOfferta(); });
+$("#o-cliente").addEventListener("change", (e) => { S.off.cliente = e.target.value; statoCensimento(); modificata(); disegnaOfferta(); });
+/* Cliente dell'offerta: verde se il cartellino è stato censito da Oracle, rosso se no. */
+function statoCensimento() {
+  const sel = $("#o-cliente"), cli = clienteOff(), nota = $("#o-cli-stato");
+  sel.classList.toggle("cli-ok", !!cli?.censito);
+  sel.classList.toggle("cli-no", !!cli && !cli.censito);
+  nota.className = "small " + (!cli ? "muted" : cli.censito ? "cli-ok-txt" : "cli-no-txt");
+  nota.textContent = !cli ? "" : cli.censito ? `✓ Cartellino censito da Oracle il ${dataIt(cli.censito)}` : "✗ Cartellino non censito da Oracle";
+}
 
 /* --- Barra dei capitoli --- */
 function disegnaBarraCapitoli() {
@@ -2030,8 +2039,9 @@ function disegnaClienti() {
   $("#righe-clienti").innerHTML = lista.map((c) => `<tr class="cliccabile" data-id="${esc(c.id)}">
     <td><b>${esc(c.nome)}</b></td><td class="mono">${esc(c.codice)}</td>
     <td class="num">${c.att === "" || c.att === undefined ? '<span class="muted">—</span>' : euro(c.att)}</td>
-    <td class="small">${Object.entries(c.sconti || {}).map(([g, v]) => `<span class="badge info">${esc(g)} ${pctTxt(v)}</span>`).join(" ") || '<span class="muted">nessuno</span>'}</td></tr>`).join("")
-    || `<tr><td colspan="4" class="vuoto">Nessun cliente. Importa il file Excel o aggiungine uno.</td></tr>`;
+    <td class="small">${Object.entries(c.sconti || {}).map(([g, v]) => `<span class="badge info">${esc(g)} ${c.scontiTesto?.[g] ? esc(c.scontiTesto[g]) + "%" : pctTxt(v)}</span>`).join(" ") || '<span class="muted">nessuno</span>'}</td>
+    <td class="small nowrap">${c.censito ? dataIt(c.censito) : '<span class="muted">—</span>'}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="vuoto">Nessun cliente. Importa il file Excel, aggiungine uno o carica un censimento da Oracle.</td></tr>`;
 }
 $("#righe-clienti").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-id]");
@@ -2051,22 +2061,173 @@ function modificaCliente(c) {
     </div>
     <h3 style="margin:14px 0 8px">Sconti di cartellino per GMV</h3>
     <div class="lista-gmv">${gmvs.map((g) => `<label><span><b class="mono">${esc(g)}</b> <span class="muted">${esc(fornitore(g))}</span></span>
-      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(pctVal(c.sconti?.[g]))}"></span></label>`).join("")}</div>`,
+      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" placeholder="es. 45+10"></span></label>`).join("")}</div>`,
     pulsanti: [...(nuovo ? [] : [{ label: "Elimina cliente", value: "del", cls: "danger" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {
       if (v === "del") { await db.elimina(COLL.cli, c.id); toast("Cliente eliminato"); return; }
       const nome = $("#k-nome", b).value.trim();
       if (!nome) { toast("Scrivi la ragione sociale."); return false; }
-      const sconti = {};
-      $$("[data-g]", b).forEach((i) => { const x = daPct(i.value); if (x) sconti[i.dataset.g] = x; });
+      const sconti = {}, scontiTesto = {};
+      $$("[data-g]", b).forEach((i) => { const x = cascata(i.value); if (x.f) { sconti[i.dataset.g] = x.f; if (x.testo.includes("+")) scontiTesto[i.dataset.g] = x.testo; } });
       const attTxt = $("#k-att", b).value.trim();
       const id = c.id || slug(nome) + "-" + db.nuovoId().slice(-4);
-      await db.salva(COLL.cli, id, { nome, codice: $("#k-cod", b).value.trim(), att: attTxt === "" ? "" : num(attTxt), sconti });
+      await db.salva(COLL.cli, id, { ...(c.censito ? { censito: c.censito } : {}), nome, codice: $("#k-cod", b).value.trim(), att: attTxt === "" ? "" : num(attTxt), sconti, scontiTesto });
       toast("Cliente salvato");
     },
   });
 }
+
+/* ================= Censimento dei cartellini da Oracle =================
+   1. "Offerta per il censimento": un file da importare in Oracle con un articolo per GMA a quantità 1, senza prezzi
+      né sconti, così Oracle applica le condizioni del cliente dell'offerta.
+   2. Si scaricano da Oracle le linee di quell'offerta e si caricano qui: per ogni GMA si leggono gli sconti che Oracle
+      ha applicato (Sconto GMA, Sconto Cliente, Sconto 3/4/5) e diventano il cartellino del cliente (anche in cascata). */
+const cascata = (t) => { const tt = BIB.terminiSconto(t); return { f: tt.length ? 1 - BIB.fattoreDi(tt) : 0, testo: tt.map((x) => String(Math.round(x * 1e4) / 100).replace(".", ",")).join("+") }; };
+const scontoCliTxt = (c, g) => c.scontiTesto?.[g] || pctVal(c.sconti?.[g]);
+function articoliCensimento() {
+  const gmas = [...new Set([...S.gmv.map((g) => g.codice), ...S.catalogo.map((a) => a.gmv)].filter(Boolean))].sort();
+  const scelti = [], senza = [];
+  for (const g of gmas) {
+    let a;
+    if (g === "ATT") a = S.catalogo.find((x) => isAttivita(x));
+    else {
+      const cand = S.catalogo.filter((x) => x.gmv === g && !isGenerico(x) && !isAttivita(x) && codiceArticolo(x));
+      cand.sort((x, y) => String(y.dataAgg || "").localeCompare(String(x.dataAgg || "")));
+      a = cand[0];
+    }
+    if (a) scelti.push({ g, a }); else senza.push(g);
+  }
+  return { scelti, senza };
+}
+$("#cl-cens-scarica").addEventListener("click", () => {
+  const { scelti, senza } = articoliCensimento();
+  if (!scelti.length) return toast("Nel database non ci sono articoli con un GMA: importa prima il file Excel.");
+  dialogo({
+    titolo: "Offerta per il censimento dei cartellini", largo: true,
+    html: `<p style="margin-top:0">Un articolo per ogni GMA, a quantità 1, <b>senza prezzi né sconti</b>: importato in un'offerta Oracle intestata al cliente,
+        Oracle applica le sue condizioni. Poi scarichi le linee dell'offerta da Oracle e le carichi qui con <b>Carica censimento</b>.</p>
+      <div class="tbl-wrap" style="max-height:46vh"><table><thead><tr><th class="num">Linea</th><th>GMA</th><th>Fornitore</th><th>Articolo</th><th>Descrizione</th></tr></thead><tbody>
+      ${scelti.map((x, i) => `<tr><td class="num">${(i + 1) * 10}</td><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td><td class="mono">${esc(codiceOracle(x.a))}</td><td class="small">${esc(String(x.a.descrizione || "").slice(0, 80))}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${senza.length ? `<div class="avviso" style="margin-top:10px"><b>${senza.length} GMA senza articoli nel database</b> (non si possono censire): ${senza.map(esc).join(", ")}</div>` : ""}`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: `Scarica il file per Oracle (${scelti.length} righe)`, value: "ok", cls: "primary" }],
+    onConferma() {
+      const righe = scelti.map((x, i) => {
+        const r = new Array(COLONNE_ORACLE.length).fill("");
+        r[0] = (i + 1) * 10; r[1] = codiceOracle(x.a); r[2] = "BG"; r[3] = 1; r[16] = "GMA " + x.g;
+        return r;
+      });
+      scarica(scriviExcel([COLONNE_ORACLE, ...righe], "Sheet1"), `CENSIMENTO_CARTELLINI_${oggiIso()}.xlsx`);
+    },
+  });
+});
+
+/* Linee di un'offerta Oracle → sconti per GMA. */
+function scontiDaLineeOracle(righe) {
+  const norm = (s) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  const hi = righe.findIndex((r) => r && r.some((c) => norm(c).includes("codice articolo")));
+  if (hi < 0) throw new Error('Non trovo la colonna "Codice Articolo Fornitore": scarica da Oracle le linee dell\'offerta con le intestazioni.');
+  const h = righe[hi].map(norm);
+  const col = (re) => h.findIndex((x) => re.test(x));
+  const iCod = col(/codice articolo/), iGma = col(/^(gma|gmv)$/), iUnit = col(/^prezzo unitario/), iNetto = col(/^prezzo netto/);
+  const iSc = [["Sconto GMA", col(/^sconto gma/)], ["Sconto Cliente", col(/^sconto cliente/)], ["Sconto 3", col(/^sconto 3( \[%\])?$/)], ["Sconto 4", col(/^sconto 4( \[%\])?$/)], ["Sconto 5", col(/^sconto 5( \[%\])?$/)]].filter(([, i]) => i >= 0);
+  const iAum = [col(/^aumento 1( \[%\])?$/), col(/^aumento 2( \[%\])?$/)].filter((i) => i >= 0);
+  if (!iSc.length) throw new Error("Nel file non ci sono colonne di sconto (Sconto GMA, Sconto Cliente, Sconto 3…).");
+  const pct = (v) => {
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return v > 1 ? v / 100 : v;
+    const m = String(v).match(/-?\d+(?:[.,]\d+)?/); if (!m) return 0;
+    const n = num(m[0]); return String(v).includes("%") || Math.abs(n) > 1 ? n / 100 : n;
+  };
+  // GMA dell'articolo: dalla colonna del file o dal database
+  const gmaDi = new Map(S.catalogo.map((a) => [codiceOracle(a), a.gmv]));
+  const out = new Map();
+  for (const r of righe.slice(hi + 1)) {
+    if (!r) continue;
+    const cod = String(r[iCod] ?? "").trim(); if (!cod) continue;
+    let g = iGma >= 0 ? String(r[iGma] ?? "").trim().toUpperCase() : "";
+    if (!g) g = gmaDi.get(cod) || "";
+    if (cod.toUpperCase() === "PITATT.TEC") g = "ATT";
+    if (!g || out.has(g)) continue;
+    const termini = iSc.map(([n, i]) => ({ n, v: pct(r[i]) })).filter((x) => x.v);
+    const aum = iAum.map((i) => pct(r[i])).filter(Boolean);
+    const testo = termini.map((x) => String(Math.round(x.v * 1e4) / 100).replace(".", ",")).join("+");
+    const f = 1 - termini.reduce((a, x) => a * (1 - x.v), 1) * aum.reduce((a, x) => a * (1 + x), 1);
+    const unit = num(iNetto >= 0 && num(r[iNetto]) ? r[iNetto] : iUnit >= 0 ? r[iUnit] : 0);
+    out.set(g, { g, cod, testo: aum.length ? "" : testo, f, termini, aum, unit, forzata: iNetto >= 0 && !!num(r[iNetto]) });
+  }
+  return out;
+}
+async function righeFileOracle(f) {
+  if (/\.pdf$/i.test(f.name)) { const fogli = BIB.righeDaPdf(await testoPdf(f)); if (!fogli.length) throw new Error("Nel PDF non trovo righe."); return fogli[0].righe; }
+  if (/\.csv$|\.txt$/i.test(f.name)) return BIB.righeDaTesto(await f.text());
+  const wb = await leggiExcel(await f.arrayBuffer());
+  return wb.foglio(wb.nomi[0]);
+}
+$("#cl-cens-carica").addEventListener("click", () => $("#cl-cens-file").click());
+$("#cl-cens-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let trovati;
+  try { trovati = scontiDaLineeOracle(await righeFileOracle(f)); } catch (x) { return errore(x, "File non leggibile"); }
+  if (!trovati.size) return toast("Nel file non trovo righe con un GMA.", 6000);
+  const etich = (c) => `${c.nome}${c.codice ? " · " + c.codice : ""}`;
+  // il cliente si può riconoscere dal nome del file (es. "Linee_ROSSI SPA.xlsx")
+  const nomeF = f.name.toLowerCase();
+  const ipotesi = S.clienti.find((c) => (c.codice && nomeF.includes(String(c.codice).toLowerCase())) || (c.nome && c.nome.length > 3 && nomeF.includes(c.nome.toLowerCase())));
+  const lista = [...trovati.values()].sort((a, b) => a.g.localeCompare(b.g));
+  const tabella = (cli) => lista.map((x) => {
+    const att = x.g === "ATT";
+    const prima = cli ? (att ? (cli.att === "" || cli.att === undefined ? "" : euro(cli.att)) : scontoCliTxt(cli, x.g) ? scontoCliTxt(cli, x.g) + "%" : "") : "";
+    const dopo = att ? (x.unit ? euro(x.unit * (1 - x.f)) : "") : x.f ? (x.testo || pctVal(x.f)) + "%" : "0%";
+    const cambia = cli && prima !== dopo;
+    return `<tr><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td><td class="mono small">${esc(x.cod)}</td>
+      <td class="small">${x.termini.map((t) => `${esc(t.n)} ${pctTxt(t.v)}`).join(" · ") || '<span class="muted">nessuno sconto</span>'}${x.aum.length ? ` · aumento ${x.aum.map(pctTxt).join("+")}` : ""}${x.forzata ? ' <span class="badge warn" title="Nella riga c\'è un prezzo netto forzato">netto forzato</span>' : ""}</td>
+      <td class="num">${prima ? esc(prima) : '<span class="muted">—</span>'}</td><td class="num"><b>${esc(dopo)}</b>${cambia ? ' <span class="badge warn">cambia</span>' : ""}</td></tr>`;
+  }).join("");
+  dialogo({
+    titolo: `Censimento cartellino · ${f.name}`, largo: true,
+    html: `<div class="row" style="flex-wrap:wrap;gap:8px 14px">
+        <label class="f grow" style="min-width:280px">Cliente (scegli dall'elenco o scrivi un nuovo cliente)<input id="cs-cli" list="cs-clis" value="${esc(ipotesi ? etich(ipotesi) : "")}" placeholder="Ragione sociale"></label>
+        <label class="f">Codice cliente (nuovo cliente)<input id="cs-cod" style="width:140px"></label>
+      </div><datalist id="cs-clis">${S.clienti.map((c) => `<option value="${esc(etich(c))}">`).join("")}</datalist>
+      <p class="muted small" id="cs-stato" style="margin:6px 0 10px"></p>
+      <div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th>Articolo</th><th>Sconti applicati da Oracle</th><th class="num">Cartellino attuale</th><th class="num">Nuovo</th></tr></thead>
+        <tbody id="cs-righe"></tbody></table></div>
+      <p class="muted small" style="margin:8px 0 0">Si aggiornano solo i GMA presenti nel file; gli altri sconti del cliente restano com'erano.
+        Per l'attività tecnica (ATT) si salva la tariffa = prezzo che Oracle ha messo sulla riga PITATT.TEC.</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva il cartellino", value: "ok", cls: "primary" }],
+    onApri(d) {
+      const agg = () => {
+        const v = $("#cs-cli", d).value.trim();
+        const cli = S.clienti.find((c) => etich(c) === v || c.nome === v) || null;
+        $("#cs-cod", d).closest("label").hidden = !!cli;
+        $("#cs-stato", d).innerHTML = !v ? "Scegli il cliente." : cli ? `Cliente esistente: si aggiorna il suo cartellino.${cli.censito ? ` Ultimo censimento: ${dataIt(cli.censito)}.` : ""}` : "<b>Nuovo cliente</b>: verrà creato.";
+        $("#cs-righe", d).innerHTML = tabella(cli);
+      };
+      $("#cs-cli", d).addEventListener("input", agg);
+      agg();
+      setTimeout(() => $("#cs-cli", d).focus(), 50);
+    },
+    async onConferma(v, d) {
+      const val = $("#cs-cli", d).value.trim();
+      if (!val) { toast("Scegli o scrivi il cliente."); return false; }
+      const cli = S.clienti.find((c) => etich(c) === val || c.nome === val);
+      const base = cli ? structuredClone(cli) : { nome: val, codice: $("#cs-cod", d).value.trim(), att: "", sconti: {} };
+      const { id: _id, ...dati } = base;
+      dati.sconti ||= {}; dati.scontiTesto ||= {};
+      for (const x of lista) {
+        if (x.g === "ATT") { if (x.unit) dati.att = Math.round(x.unit * (1 - x.f) * 100) / 100; continue; }
+        if (x.f) { dati.sconti[x.g] = x.f; if (x.testo && x.testo.includes("+")) dati.scontiTesto[x.g] = x.testo; else delete dati.scontiTesto[x.g]; }
+        else { delete dati.sconti[x.g]; delete dati.scontiTesto[x.g]; }
+      }
+      dati.censito = oggiIso();
+      const id = cli?.id || slug(val) + "-" + db.nuovoId().slice(-4);
+      try { await db.salva(COLL.cli, id, dati); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
+      toast(`Cartellino di ${dati.nome} salvato (${lista.length} GMA).`, 5000);
+    },
+  });
+});
 
 /* ================= Importazione dal file Excel ================= */
 const drop = $("#drop-xlsx");

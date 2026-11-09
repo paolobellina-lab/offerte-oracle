@@ -866,3 +866,15 @@ tr.riga-att.sel > td { background: var(--riga-sel) !important; }
 table.of-righe td { vertical-align: top; }
 tr.of-ko > td { box-shadow: inset 0 0 0 1px #dc2626; }
 tr.of-ko > td:last-child { color: #b91c1c; font-weight: 600; }
+
+/* ===== Cliente dell'offerta: cartellino censito (verde) o no (rosso) ===== */
+:root, :root[data-theme="chiaro"] { --cli-ok: #15803d; --cli-ok-fondo: #dcfce7; --cli-no: #b91c1c; --cli-no-fondo: #fee2e2; }
+:root[data-theme="scuro"] { --cli-ok: #86efac; --cli-ok-fondo: #14391f; --cli-no: #fca5a5; --cli-no-fondo: #451414; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="chiaro"]) { --cli-ok: #86efac; --cli-ok-fondo: #14391f; --cli-no: #fca5a5; --cli-no-fondo: #451414; } }
+select#o-cliente.cli-ok { background-color: var(--cli-ok-fondo); border-color: var(--cli-ok); color: var(--cli-ok); font-weight: 600; }
+select#o-cliente.cli-no { background-color: var(--cli-no-fondo); border-color: var(--cli-no); color: var(--cli-no); font-weight: 600; }
+#o-cliente option { color: var(--text, #111); background: var(--panel, #fff); font-weight: 400; }
+#o-cliente option.cli-ok { color: var(--cli-ok); }
+#o-cliente option.cli-no { color: var(--cli-no); }
+.cli-ok-txt { color: var(--cli-ok); font-weight: 600; }
+.cli-no-txt { color: var(--cli-no); font-weight: 600; }
