@@ -1181,7 +1181,7 @@ function cambioRiga(e) {
     const art = S.perK.get(r.k);
     if (art) {
       nuovoPrezzoArticolo(art, p);
-      salvaCapitolo(art.capitolo).then(() => toast(`Prezzo aggiornato anche nel database (${art.capitolo}) con la data di oggi.`))
+      salvaCapitoli([art.capitolo, ...propagaClone(art)]).then(() => toast(`Prezzo aggiornato anche nel database (${art.capitolo}) con la data di oggi.`))
         .catch((x) => errore(x, "Aggiornamento del database non riuscito"));
     }
     modificata(); return ridisegnaOfferta();
@@ -2188,8 +2188,12 @@ const chiaveCod = (a) => { const c = String(a.codice || "").trim().toUpperCase()
 const chiaveOrd = (a) => String(a.nOrdine || "").replace(/\s+/g, "").toUpperCase();
 function contaDoppioni() {
   if (S.dopCache?.cat === S.catalogo) return S.dopCache;
-  const cod = new Map(), ord = new Map();
-  for (const a of S.catalogo) { const c = chiaveCod(a), o = chiaveOrd(a); if (c) cod.set(c, (cod.get(c) || 0) + 1); if (o) ord.set(o, (ord.get(o) || 0) + 1); }
+  // i cloni sono voluti: un gruppo di cloni conta come un articolo solo
+  const cod = new Map(), ord = new Map(), visti = new Set();
+  for (const a of S.catalogo) {
+    if (a.clone) { if (visti.has(a.clone)) continue; visti.add(a.clone); }
+    const c = chiaveCod(a), o = chiaveOrd(a); if (c) cod.set(c, (cod.get(c) || 0) + 1); if (o) ord.set(o, (ord.get(o) || 0) + 1);
+  }
   return (S.dopCache = { cat: S.catalogo, cod, ord });
 }
 const doppioCod = (a) => { const c = chiaveCod(a); return !!c && contaDoppioni().cod.get(c) > 1; };
@@ -2241,7 +2245,7 @@ function disegnaCatalogo() {
     if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="10">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
-      <td class="desc"><b>${esc(a.nOrdine)}</b>${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
+      <td class="desc"><b>${esc(a.nOrdine)}</b>${a.clone && cloniDi(a).length > 1 ? ` <span class="badge info" title="Riga clonata: è collegata ad altre ${cloniDi(a).length - 1} copie nel database">🔗 ${cloniDi(a).length}</span>` : ""}${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       ${(() => { const e = scontiEffettivi(a), c = e.daGma ? ' class="num std-gma" title="Acquisto standard del GMA"' : ' class="num"';
         return `<td${c}>${pctTxt(e.sc3)}</td><td${c}>${pctTxt(e.sc4)}</td><td${c}>${pctTxt(e.sc5)}</td><td${c}>${pctTxt(e.aum1)}</td>`; })()}<td class="mono">${esc(a.gmv)}</td>
@@ -2307,6 +2311,70 @@ async function aggiungiGma(codice, forn, sconto = "") {
   S.gmv = lista; impostaStandardGma(S.gmv);
   return codice;
 }
+/* ================= Cloni =================
+   Un clone è la stessa riga del database messa in più punti (es. una base sotto ogni rivelatore compatibile).
+   I cloni hanno lo stesso "clone" (id del gruppo): tutto è in comune tranne la posizione. */
+const CAMPI_POSTO = ["capitolo", "sottocapitolo", "rifCap", "ordine", "k", "_chunk", "clone"];
+const cloniDi = (a) => (a?.clone ? S.catalogo.filter((x) => x.clone === a.clone) : []);
+/* Copia i dati di "src" su tutti i suoi cloni. Restituisce i capitoli da salvare. */
+function propagaClone(src) {
+  const caps = new Set();
+  for (const x of cloniDi(src)) {
+    if (x === src) continue;
+    for (const key of Object.keys(x)) if (!CAMPI_POSTO.includes(key) && !(key in src)) delete x[key];
+    for (const [key, v] of Object.entries(src)) if (!CAMPI_POSTO.includes(key)) x[key] = structuredClone(v);
+    caps.add(x.capitolo);
+  }
+  return caps;
+}
+const salvaCapitoli = (caps) => db.scrivi([...new Set(caps)].filter(Boolean).flatMap((c) => opsCapitolo(c, S.catalogo.filter((a) => a.capitolo === c))));
+function creaClone(a) {
+  const opzDopo = (cap) => {
+    const arts = ordinaRighe(S.catalogo.filter((x) => x.capitolo === cap), [cap]);
+    let html = "", g = null;
+    for (const x of arts) {
+      const sg = x.sottocapitolo || "—";
+      if (sg !== g) { if (g !== null) html += "</optgroup>"; html += `<optgroup label="${esc(sg)}">`; g = sg; }
+      html += `<option value="${esc(x.k)}" ${x.k === a.k ? "disabled" : ""}>${esc(codiceArticolo(x))} · ${esc(x.nOrdine || "")} — ${esc(String(x.descrizione || "").slice(0, 60))}</option>`;
+    }
+    return html + (g !== null ? "</optgroup>" : "") + `<option value="">— in fondo al capitolo —</option>`;
+  };
+  dialogo({
+    titolo: `Clona ${codiceArticolo(a)} · ${a.nOrdine || ""}`,
+    html: `<p class="muted small" style="margin-top:0">Il clone è <b>la stessa riga collegata</b>: compare anche nel punto che scegli, e quando modifichi una copia
+        (prezzo, sconti, descrizione, GMA…) cambiano tutte. Ogni copia ha solo la sua posizione.</p>
+      <label class="f">Capitolo<select id="cl-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
+      <label class="f" style="margin-top:8px">Mettilo subito sotto a<select id="cl-dopo">${opzDopo(a.capitolo)}</select></label>
+      <p class="muted small">Il clone prende il sottocapitolo dell'articolo che scegli.</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Crea clone", value: "ok", cls: "primary" }],
+    onApri(d) {
+      $("#cl-cap", d).addEventListener("change", (e) => { $("#cl-dopo", d).innerHTML = opzDopo(e.target.value); });
+      $("#cl-dopo", d).value = "";
+    },
+    async onConferma(v, d) {
+      const cap = $("#cl-cap", d).value, dopo = S.perK.get($("#cl-dopo", d).value);
+      const arts = ordinaRighe(S.catalogo.filter((x) => x.capitolo === cap), [cap]);
+      let ordine, sotto;
+      if (dopo) {
+        const i = arts.indexOf(dopo), succ = arts[i + 1];
+        ordine = succ ? (num(dopo.ordine) + num(succ.ordine)) / 2 : num(dopo.ordine) + 0.01;
+        if (succ && !(ordine > num(dopo.ordine) && ordine < num(succ.ordine))) { arts.forEach((x, j) => (x.ordine = j + 1)); ordine = num(dopo.ordine) + 0.5; }
+        sotto = dopo.sottocapitolo || "";
+      } else {
+        ordine = (arts.length ? Math.max(...arts.map((x) => num(x.ordine))) : 0) + 1;
+        sotto = arts[arts.length - 1]?.sottocapitolo || "";
+      }
+      if (!a.clone) a.clone = db.nuovoId();
+      const { _chunk, ...dati } = structuredClone(a);
+      const n = { ...dati, capitolo: cap, sottocapitolo: sotto, rifCap: (dopo || arts[0])?.rifCap || "", ordine };
+      n.k = `${cap}|${n.rifCap}|${codiceArticolo(n)}|${n.nOrdine}|${db.nuovoId()}`;
+      S.catalogo.push(n); S.perK.set(n.k, n);
+      try { await salvaCapitoli([a.capitolo, cap]); } catch (x) { errore(x, "Clone non salvato"); return false; }
+      toast(`Clone creato in ${cap} · ${sotto || "—"}. Ora ci sono ${cloniDi(a).length} copie collegate.`, 5000);
+    },
+  });
+}
+
 function modificaArticolo(a) {
   const nuovo = !a;
   const capDef = $("#c-capitolo").value || S.capitoli[0]?.nome || "";
@@ -2315,7 +2383,9 @@ function modificaArticolo(a) {
   const sotti = [...new Set(S.catalogo.filter((x) => x.capitolo === a.capitolo).map((x) => x.sottocapitolo).filter(Boolean))];
   dialogo({
     titolo: nuovo ? "Nuovo articolo" : `${codiceArticolo(a)} · ${a.nOrdine}`,
-    html: `<div class="grid-set">
+    html: `${cloniDi(a).length > 1 ? `<div class="avviso info small" style="margin-top:0">🔗 <b>Articolo clonato: ${cloniDi(a).length} copie collegate</b>
+        (${cloniDi(a).map((x) => `${esc(x.capitolo)} · ${esc(x.sottocapitolo || "—")}${x === a ? " <i>(questa)</i>" : ""}`).join("; ")}).
+        Le modifiche valgono per tutte; capitolo e sottocapitolo sono solo di questa copia.</div>` : ""}<div class="grid-set">
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
       <label class="f wide" title="Scegline uno dall'elenco o scrivine uno nuovo">Sottocapitolo<input id="m-sotto" placeholder="scegli o scrivi un sottocapitolo nuovo" list="m-sotti" value="${esc(a.sottocapitolo || "")}"><datalist id="m-sotti">${sotti.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></label>
       <label class="f">Precodice<input id="m-pre" value="${esc(a.precodice)}"></label>
@@ -2346,7 +2416,9 @@ function modificaArticolo(a) {
       <label class="f wide">Note post-linea<textarea id="m-npost" rows="2">${esc(a.notePost)}</textarea></label>
     </div>
     <p class="muted small" id="m-note-gen">Articolo generico (P000 ARTICOLO_GEN): in Oracle la nota pre-linea è il n° di ordinazione e la nota post-linea è la descrizione.</p>`,
-    pulsanti: [...(nuovo ? [] : [{ label: "Elimina articolo", value: "del", cls: "danger" }]),
+    pulsanti: [...(nuovo ? [] : [{ label: cloniDi(a).length > 1 ? "Elimina questa copia" : "Elimina articolo", value: "del", cls: "danger" },
+        ...(cloniDi(a).length > 1 ? [{ label: "Scollega questa copia", value: "scollega" }] : []),
+        { label: "🔗 Crea clone…", value: "clone" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(b) {
       // il fornitore riduce l'elenco dei GMA; scegliendo un GMA il fornitore si allinea
@@ -2398,10 +2470,15 @@ function modificaArticolo(a) {
     },
     async onConferma(v, b) {
       const vecchioCap = a.capitolo;
-      if (v === "del") {
-        S.catalogo = S.catalogo.filter((x) => x.k !== a.k);
-        await salvaCapitolo(vecchioCap);
-        toast("Articolo eliminato. Le offerte che lo contengono non cambiano.");
+      if (v === "clone") { setTimeout(() => creaClone(S.perK.get(a.k) || a), 50); return; }
+      if (v === "scollega" || v === "del") {
+        const caps = [vecchioCap];
+        const resto = cloniDi(a).filter((x) => x.k !== a.k);
+        if (resto.length === 1) { delete resto[0].clone; caps.push(resto[0].capitolo); }
+        if (v === "del") S.catalogo = S.catalogo.filter((x) => x.k !== a.k);
+        else delete S.perK.get(a.k).clone;
+        await salvaCapitoli(caps);
+        toast(v === "del" ? (resto.length ? "Copia eliminata: le altre copie restano." : "Articolo eliminato. Le offerte che lo contengono non cambiano.") : "Copia scollegata: ora è un articolo a sé.");
         return;
       }
       const n = leggi(b);
@@ -2421,9 +2498,9 @@ function modificaArticolo(a) {
       } else {
         Object.assign(S.perK.get(a.k), n);
       }
-      await salvaCapitolo(n.capitolo);
-      if (vecchioCap !== n.capitolo) await salvaCapitolo(vecchioCap);
-      toast(nuovo ? "Articolo aggiunto" : "Articolo salvato");
+      const altri = nuovo ? new Set() : propagaClone(S.perK.get(a.k));
+      await salvaCapitoli([n.capitolo, vecchioCap, ...altri]);
+      toast(nuovo ? "Articolo aggiunto" : altri.size || cloniDi(a).length > 1 ? `Articolo salvato in tutte le ${cloniDi(a).length} copie collegate.` : "Articolo salvato");
     },
   });
   function leggi(b) {
@@ -2930,6 +3007,7 @@ async function applicaOracle() {
     if (auto) art.listino = listinoCalcolato(art);
     art.dataAgg = oggi;
     caps.add(art.capitolo);
+    for (const c of propagaClone(art)) caps.add(c);
   }
   try {
     await db.scrivi([

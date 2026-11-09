@@ -240,3 +240,10 @@ Il repository può essere pubblico: `firebase-config.js` non è un segreto. I da
 | `js/firebase.js` | Firestore, login Google, modalità prova |
 | `firebase-config.js` | La configurazione del tuo progetto Firebase |
 | `firestore.rules` | Le regole di sicurezza da incollare in Firestore |
+
+## Cloni nel database
+Dalla scheda di un articolo del catalogo, **🔗 Crea clone…** mette la stessa riga anche in un altro punto del database
+(es. la stessa base sotto ogni rivelatore compatibile): scegli il capitolo e l'articolo sotto cui metterla.
+I cloni sono collegati: modificando una copia (prezzo, sconti, descrizione, GMA…) cambiano tutte; solo capitolo e
+sottocapitolo sono propri di ogni copia. Nel catalogo hanno il badge 🔗 con il numero di copie e non contano come doppioni.
+"Elimina questa copia" toglie solo quella; "Scollega questa copia" la rende un articolo a sé.
