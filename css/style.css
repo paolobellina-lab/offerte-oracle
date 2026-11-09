@@ -848,3 +848,7 @@ tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !importa
 .btn.verde.forte:hover { background: #69c587 !important; }
 .scarica-card { border-top: 5px solid #2f9a55 !important; }
 .scarica-card .titolo-sez { border-left-color: #2f9a55 !important; }
+/* celle condizioni tutte della stessa misura (anche vuote) */
+.cond-box input.cond.std, .cond-box input.cond.std:placeholder-shown { width: 76px !important; text-align: right !important; }
+.cond-box input.cond.cella, .cond-box input.cond.cella:first-child:placeholder-shown { width: 64px !important; text-align: right !important; }
+.cond-box input.cond::placeholder { font-size: .78em; }

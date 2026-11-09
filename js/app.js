@@ -611,7 +611,7 @@ function htmlCondizione({ dove, gma = "", val, tipo, std = "", eredita = false, 
   const valStd = mod ? over : eredita ? "" : std;
   const celle = [...extra.map((x) => cellaDaTermine(x, tipo)), ""];
   return `<span class="cond-box" data-dove="${dove}" data-gma="${esc(gma)}" data-tipo="${tipo}" data-std="${esc(std)}" data-eredita="${eredita ? 1 : ""}">
-    <span class="std-wrap"><input class="cond std${mod ? " mod" : ""}" value="${esc(valStd)}" placeholder="${esc(eredita ? "come Generale" : phStd)}" inputmode="decimal"
+    <span class="std-wrap"><input class="cond std${mod ? " mod" : ""}" value="${esc(valStd)}" placeholder="${esc(eredita ? "= Generale" : phStd)}" inputmode="decimal"
       title="${mod ? `Modificato: lo standard era ${std || "—"}%` : "Standard: cambialo per sostituirlo (0 = niente standard)"}">${mod && std ? `<s class="std-barrato">${esc(std)}%</s>` : ""}</span>
     <span class="celle" title="Extra in cascata: compilata una cella ne compare un'altra">${celle.map((v, i) => htmlCella(v, i === 0 && !extra.length ? (mod || extra.length ? "extra" : phExtra) : "")).join("")}</span></span>`;
 }
