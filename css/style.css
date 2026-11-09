@@ -902,3 +902,9 @@ tbody tr.sel:hover > td, #righe-picker tr.sel:hover > td { background: var(--rig
 /* righe delle tabelle: niente selezione del testo trascinando il mouse (le caselle restano scrivibili) */
 #righe-offerta tr, #righe-picker tr, #righe-catalogo tr, #riepilogo-righe tr { -webkit-user-select: none; user-select: none; }
 #righe-offerta input, #righe-offerta textarea, #righe-picker input, #righe-catalogo input { -webkit-user-select: text; user-select: text; }
+
+/* pagina Impostazioni */
+.impost-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.impost-card { display: flex; flex-direction: column; gap: 8px; }
+.impost-card h3 { margin: 0; }
+.impost-card .btn { align-self: flex-start; margin-top: auto; }

@@ -251,7 +251,7 @@ function vai(vista) {
   if (S.vista === "offerta" && vista !== "offerta") salvaOraSeServe();
   S.vista = vista;
   $("#sb-offerta").hidden = vista !== "offerta";
-  for (const v of ["offerte", "offerta", "catalogo", "biblioteca", "clienti", "importa"]) $("#v-" + v).hidden = v !== vista;
+  for (const v of ["offerte", "offerta", "catalogo", "biblioteca", "clienti", "impostazioni", "importa"]) $("#v-" + v).hidden = v !== vista;
   if (vista === "biblioteca") caricaBib();
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.vista === (vista === "offerta" ? "offerte" : vista)));
   if (vista !== "offerta" && location.hash) history.replaceState(null, "", location.pathname);
@@ -2197,7 +2197,7 @@ $("#righe-catalogo").addEventListener("click", (e) => {
   if (tr) modificaArticolo(S.perK.get(tr.dataset.k));
 });
 $("#c-nuovo").addEventListener("click", () => {
-  if (!S.capitoli.length) return toast("Prima crea un capitolo (Impostazioni capitolo) o importa il file Excel.");
+  if (!S.capitoli.length) return toast("Prima crea un capitolo (Impostazioni › Capitoli del database) o importa il file Excel.");
   modificaArticolo(null);
 });
 
