@@ -7,7 +7,7 @@ import {
   fattoreStandard, pctTesto,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
-import { scriviExcel } from "./xlsx-lite.js";
+import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
 import * as BIB from "./biblioteca.js";
 import * as OFF from "./offforn.js";
 
@@ -1970,22 +1970,24 @@ function controllaCapitolati(c, procedi) {
 function impostaEScarica(c) {
   if (!c) return;
   aggiornaCondizioni(c);
-  const st = { prezzo: c.out.prezzo, formato: c.out.formato, sotto: !!c.sottocapitoli, escl: new Set(c.esclusiExport || []) };
+  const st = { prezzo: c.out.prezzo, formato: c.out.formato, sotto: !!c.sottocapitoli, escl: new Set(c.esclusiExport || []), file: c.out.file || "computo" };
   const gruppi = new Map();
   for (const r of c.righe) { if (!num(r.qta)) continue; const g = r.capitolato || ""; gruppi.set(g, (gruppi.get(g) || 0) + 1); }
   const lis = c.imp === "listino";
   const segHtml = (id, valori, att, et) => `<div class="seg" id="${id}">${valori.map((v) => `<button type="button" data-v="${v}" class="${v === att ? "on" : ""}">${esc(et(v))}</button>`).join("")}</div>`;
   const campo = (titolo, html) => `<div style="display:flex;flex-direction:column;gap:3px"><span class="muted small" style="font-weight:600">${titolo}</span>${html}</div>`;
   dialogo({
-    titolo: `Scarica il foglio Oracle di ${c.nome}`,
+    titolo: lis ? `Scarica ${c.nome}` : `Scarica il foglio Oracle di ${c.nome}`,
     html: `<div class="row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
+        ${lis ? campo("File", segHtml("ie-file", ["computo", "oracle"], st.file, (v) => (v === "computo" ? "Computo a listino" : "Foglio Oracle"))) : ""}
+        ${lis ? `<label class="f ie-computo">Titolo del computo<input id="ie-titolo" style="width:260px" value="${esc(c.titoloComputo || c.nome)}"></label>` : ""}
         ${campo("Prezzi da esportare", segHtml("ie-prezzo", ["vendita", "acquisto"], st.prezzo, (v) => (v === "vendita" && lis ? "Listino" : OUT_PREZZO[v])))}
         ${campo("Come", segHtml("ie-formato", ["sconti", "netti"], st.formato, (v) => OUT_FORMATO[v]))}
         ${campo("Capitolati in Oracle", segHtml("ie-sotto", ["SI", "NO"], st.sotto ? "SI" : "NO", (v) => v))}
         <label class="f">N° partenza righe<input id="ie-linea" type="number" min="0" step="10" style="width:100px" value="${esc(c.lineaPartenza ?? 10)}"></label>
         <label class="f">Magazzino<input id="ie-mag" maxlength="10" style="width:80px" value="${esc(c.magazzino ?? "BG")}"></label>
       </div>
-      ${gruppi.size > 1 || st.escl.size ? `<div style="margin-top:14px"><span class="muted small" style="font-weight:600">Capitolati da caricare in questa offerta Oracle</span>
+      ${gruppi.size > 1 || st.escl.size ? `<div style="margin-top:14px"><span class="muted small" style="font-weight:600">${lis ? "Sottocapitoli da includere" : "Capitolati da caricare in questa offerta Oracle"}</span>
         <div class="capitolati" style="margin-top:4px">${[...gruppi.entries()].map(([g, n]) => `<label class="chip-check"><input type="checkbox" data-ie-cap="${esc(g)}" ${st.escl.has(g) ? "" : "checked"}> <b>${g ? esc(g) : "senza capitolato"}</b> <span class="muted">${n} righe</span></label>`).join("")}</div></div>` : ""}
       <p class="muted small" style="margin:12px 0 0">Le impostazioni restano salvate nel capitolo (sono le stesse della pagina Oracle).</p>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "⤓ Scarica Excel", value: "ok", cls: "primary" }],
@@ -1997,10 +1999,18 @@ function impostaEScarica(c) {
         if (sg.id === "ie-prezzo") st.prezzo = b.dataset.v;
         if (sg.id === "ie-formato") st.formato = b.dataset.v;
         if (sg.id === "ie-sotto") st.sotto = b.dataset.v === "SI";
+        if (sg.id === "ie-file") { st.file = b.dataset.v; vedi(); }
       });
+      // con il computo contano solo il titolo e i capitolati da includere
+      const vedi = () => { if (!lis) return; const comp = st.file === "computo";
+        for (const id of ["#ie-prezzo", "#ie-formato", "#ie-sotto"]) $(id, d).parentElement.hidden = comp;
+        for (const id of ["#ie-linea", "#ie-mag"]) $(id, d).closest("label").hidden = comp;
+        $(".ie-computo", d).hidden = !comp; };
+      vedi();
     },
     onConferma(v, d) {
       c.out.prezzo = st.prezzo; c.out.formato = st.formato; c.sottocapitoli = st.sotto;
+      if (lis) { c.out.file = st.file; c.titoloComputo = $("#ie-titolo", d).value.trim(); }
       c.lineaPartenza = num($("#ie-linea", d).value) || 10;
       c.magazzino = $("#ie-mag", d).value.trim() || "BG";
       const escl = $$("[data-ie-cap]", d).filter((x) => !x.checked).map((x) => x.dataset.ieCap);
@@ -2011,8 +2021,69 @@ function impostaEScarica(c) {
     },
   });
 }
+/* ================= Computo a listino (offerte con prezzi "Listino") =================
+   Foglio come PB…_COMPUTO_FIRE: Pos. · RIF CAP · Numero di ordinazione · Descrizione · U.M. · Q.tà · Prezzo di listino
+   unitario e totale; titolo del capitolo, una riga per ogni sottocapitolo, totale dell'offerta. */
+const STILI_COMPUTO = [
+  {},
+  { font: { b: true }, fondo: "6969FF", alH: "center", alV: "center", a_capo: true },            // 1 intestazione
+  { font: { b: true }, fondo: "6969FF", alH: "left", alV: "center" },                            // 2 intestazione a sinistra
+  { font: { b: true }, fondo: "9191FF", alH: "left", alV: "center", a_capo: true },              // 3 sottocapitolo
+  { font: { b: true }, fondo: "9191FF", alH: "center", alV: "center" },                          // 4 sottocapitolo centrato
+  { fondo: "F8F8F8", alH: "left", alV: "top", a_capo: true },                                     // 5 testo
+  { fondo: "F8F8F8", alH: "center", alV: "top" },                                                 // 6 centrato
+  { fondo: "F8F8F8", alH: "center", alV: "top", fmt: "#,##0.##" },                                // 7 quantità
+  { fondo: "F8F8F8", alH: "right", alV: "top", fmt: '#,##0.00\\ "€"' },                         // 8 prezzo
+  { font: { b: true, sz: 12 }, fondo: "9191FF", alH: "right", alV: "center", bordo: "medium" },   // 9 totale (scritta)
+  { font: { b: true, sz: 12 }, fondo: "9191FF", alH: "right", alV: "center", bordo: "medium", fmt: '#,##0.00\\ "€"' }, // 10 totale (importo)
+  { fondo: "9191FF", bordo: "medium" },                                                           // 11 totale (vuote)
+  { font: { b: true }, fondo: "6969FF", alH: "center", alV: "center", fmt: '#,##0.00\\ "€"' },  // 12 intestazione prezzi
+];
+/* altezza della riga per una descrizione su più righe (colonna D larga ~67 caratteri) */
+const altezzaTesto = (t, larg = 72) => { const n = String(t || "").split("\n").reduce((a, x) => a + Math.max(1, Math.ceil(x.length / larg)), 0); return Math.min(409, Math.max(15, Math.round(n * 12.9 + 3))); };
+function computoListino(c) {
+  aggiornaCondizioni(c);
+  const opz = opzCap(c), k = condizioni(c);
+  const righe = c.righe.filter((r) => num(r.qta) && !esclusoDaExport(r, c));
+  const R = [], unioni = [];
+  const vuote = (s, n = 8) => Array.from({ length: n }, () => ({ s }));
+  R.push({ h: 15, celle: [{ v: "Pos.", s: 2 }, { v: "RIF CAP", s: 1 }, { v: "Numero di ordinazione", s: 2 }, { v: "Descrizione", s: 2 }, { v: "U.M.", s: 1 }, { v: "Q.tà", s: 1 }, { v: "Prezzo di Listino in Euro", s: 1 }, { s: 1 }] });
+  R.push({ h: 15, celle: [{ s: 2 }, { s: 1 }, { s: 2 }, { s: 2 }, { s: 1 }, { s: 1 }, { v: "Unitario", s: 12 }, { v: "Totale", s: 12 }] });
+  unioni.push("G1:H1");
+  R.push({ h: 15, celle: [{ v: (c.titoloComputo || c.nome).toUpperCase(), s: 1 }, ...vuote(1, 7)] });
+  unioni.push("A3:H3");
+  const primaRiga = R.length + 1;
+  let gruppo = null;
+  for (const r of righe) {
+    const g = r.capitolato || "";
+    if (g !== gruppo) {
+      gruppo = g;
+      if (g || c.capitolati.length) {
+        const rif = [...new Set(righe.filter((x) => (x.capitolato || "") === g).map((x) => x.rifCap || ""))];
+        R.push({ h: 15, celle: [{ s: 3 }, { v: rif.length === 1 ? rif[0] : "", s: 4 }, { s: 3 }, { v: g || "Altro", s: 3 }, { s: 4 }, { s: 4 }, { s: 4 }, { s: 4 }] });
+      }
+    }
+    const x = calcolaRiga(r, c, opz.ricarichi, k), att = isAttivita(r);
+    const nota = (t) => t && R.push({ h: altezzaTesto(t), celle: [{ s: 6 }, { s: 6 }, { s: 5 }, { v: t, s: 5 }, { s: 6 }, { s: 7 }, { s: 8 }, { s: 8 }] });
+    if (!isGenerico(r) && !r.daOfferta) nota(r.notePre);
+    const cod = att ? "ATTIVITA'" : r.nOrdine || codiceArticolo(r);
+    const des = att ? (r.daOfferta ? r.notePost || r.descrizione : r.descrizione) : r.descrizione;
+    const rifRiga = c.capitolati.length ? "" : r.rifCap || "";
+    const n = R.length + 1;
+    R.push({ h: altezzaTesto(des), celle: [{ s: 6 }, { v: rifRiga, s: 6 }, { v: cod, s: 5 }, { v: des || "", s: 5 }, { v: r.um || "n.", s: 6 }, { v: x.qta, s: 7 }, { v: Math.round(x.unitario * 100) / 100, s: 8 }, { f: `F${n}*G${n}`, s: 8 }] });
+    if (!isGenerico(r) && !r.daOfferta) nota(r.notePost);
+  }
+  const ultima = R.length;
+  R.push({ h: 18, celle: [{ s: 11 }, { s: 11 }, { s: 11 }, { v: "Totale Offerta", s: 9 }, { s: 11 }, { s: 11 }, { s: 11 }, { f: `SUM(H${primaRiga}:H${ultima})`, s: 10 }] });
+  return { nome: c.nome, colonne: [8.7, 8.7, 22.9, 67.1, 5, 8, 15.7, 15.7], righe: R, unioni, stili: STILI_COMPUTO };
+}
+function scaricaComputo(c) {
+  scarica(scriviExcelStile(computoListino(c)), `COMPUTO_${String(c.nome).replace(/[^A-Za-z0-9_-]+/g, "_")}${S.off?.rif ? "_" + String(S.off.rif).replace(/[^A-Za-z0-9_-]+/g, "_") : ""}.xlsx`);
+}
+
 function scaricaXlsx(c) {
   if (!c) return;
+  if (c.imp === "listino" && (c.out?.file || "computo") === "computo") return scaricaComputo(c);
   const { righe } = datiOracle(c);
   scarica(scriviExcel([COLONNE_ORACLE, ...righe], "Sheet1"), nomeFile(c, "xlsx"));
 }
