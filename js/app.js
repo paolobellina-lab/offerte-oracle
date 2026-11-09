@@ -4,7 +4,7 @@ import {
   listinoCalcolato, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
-  fattoreStandard, pctTesto,
+  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
@@ -215,6 +215,7 @@ function collega() {
     S.precodici = docs.find((d) => d.id === "precodici")?.lista || [];
     S.capitoli = (cap?.lista || []).slice().sort((a, b) => num(a.ordine) - num(b.ordine));
     S.gmv = gmv?.lista || [];
+    impostaStandardGma(S.gmv);
     S.fornitori = docs.find((d) => d.id === "fornitori")?.lista || [];
     S.censCfg = docs.find((d) => d.id === "censimento") || {};
     ridisegna();
@@ -1857,7 +1858,8 @@ function aggiornaSoloTotali() {
 /* Sconti standard del database per un gruppo di righe: "75" se uguali per tutte, altrimenti "vari". */
 function standardDi(righe) {
   const testi = new Set(righe.filter((r) => !isAttivita(r)).map((r) => {
-    const p = CAMPI_SCONTO.filter((k) => num(r[k])).map((k) => pctTesto(k === "aum1" ? -num(r[k]) : num(r[k])));
+    const e = scontiEffettivi(r);
+    const p = CAMPI_SCONTO.filter((k) => num(e[k])).map((k) => pctTesto(k === "aum1" ? -num(e[k]) : num(e[k])));
     return p.length ? p.join("+") : "0";
   }));
   if (!testi.size) return "—";
@@ -1867,7 +1869,8 @@ function standardDi(righe) {
 function stdTesto(righe) {
   const testi = new Set(righe.map((r) => {
     if (isAttivita(r)) return "0";
-    const p = CAMPI_SCONTO.filter((k) => num(r[k])).map((k) => pctTesto(k === "aum1" ? -num(r[k]) : num(r[k])));
+    const e = scontiEffettivi(r);
+    const p = CAMPI_SCONTO.filter((k) => num(e[k])).map((k) => pctTesto(k === "aum1" ? -num(e[k]) : num(e[k])));
     return p.length ? p.join("+") : "0";
   }));
   return testi.size === 1 ? [...testi][0] : "";
@@ -2192,9 +2195,9 @@ $("#cf-esporta").addEventListener("click", () => {
   const lista = ordinaRighe(S.catListaFiltrata || [], ordineCap());
   if (!lista.length) return toast("Nessun articolo da esportare.");
   const pc = (x) => (num(x) ? num(x) : "");
-  const righe = [["Capitolo", "Sottocapitolo", "Precodice", "Codice", "Codice Oracle", "N° ordinazione", "Descrizione", "U.M.", "Listino acquisto", "Sconto 3", "Sconto 4", "Sconto 5", "Aumento 1", "Giorni", "GMA", "Fornitore", "Generico", "Data aggiornamento", "Stato prezzo"],
+  const righe = [["Capitolo", "Sottocapitolo", "Precodice", "Codice", "Codice Oracle", "N° ordinazione", "Descrizione", "U.M.", "Listino acquisto", "Sconto 1", "Sconto 2", "Sconto 3", "Aumento 1", "Sconti da", "Giorni", "GMA", "Fornitore", "Generico", "Data aggiornamento", "Stato prezzo"],
     ...lista.map((a) => [a.capitolo, a.sottocapitolo || "", a.precodice || "", a.codice || "", codiceOracle(a), a.nOrdine || "", a.descrizione || "", a.um || "", num(a.listinoAcquisto) || "",
-      pc(a.sc3), pc(a.sc4), pc(a.sc5), pc(a.aum1), num(a.giorni) || "", a.gmv || "", fornitore(a.gmv) || "", isGenerico(a) ? "SI" : "", a.dataAgg || "", stato(a).testo || ""])];
+      ...(() => { const e = scontiEffettivi(a); return [pc(e.sc3), pc(e.sc4), pc(e.sc5), pc(e.aum1), e.daGma ? "GMA" : haScontiPropri(a) ? "articolo" : ""]; })(), num(a.giorni) || "", a.gmv || "", fornitore(a.gmv) || "", isGenerico(a) ? "SI" : "", a.dataAgg || "", stato(a).testo || ""])];
   const parti = [$("#c-capitolo").value, $("#cf-pre").value, $("#cf-forn").value, $("#cf-gma").value].filter(Boolean).join("_") || "tutto";
   scarica(scriviExcel(righe, "Database"), `DATABASE_${parti.replace(/[^A-Za-z0-9_-]+/g, "_")}_${oggiIso()}.xlsx`);
   toast(`Esportati ${lista.length} articoli.`);
@@ -2226,8 +2229,8 @@ function disegnaCatalogo() {
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
-      <td class="num">${pctTxt(a.sc3)}</td><td class="num">${pctTxt(a.sc4)}</td><td class="num">${pctTxt(a.sc5)}</td>
-      <td class="num">${pctTxt(a.aum1)}</td><td class="mono">${esc(a.gmv)}</td>
+      ${(() => { const e = scontiEffettivi(a), c = e.daGma ? ' class="num std-gma" title="Acquisto standard del GMA"' : ' class="num"';
+        return `<td${c}>${pctTxt(e.sc3)}</td><td${c}>${pctTxt(e.sc4)}</td><td${c}>${pctTxt(e.sc5)}</td><td${c}>${pctTxt(e.aum1)}</td>`; })()}<td class="mono">${esc(a.gmv)}</td>
       <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
   $("#righe-catalogo").innerHTML = html || `<tr><td colspan="10" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
@@ -2283,7 +2286,7 @@ async function aggiungiGma(codice, forn, sconto = "") {
   if (!codice || S.gmv.some((g) => g.codice === codice)) return codice;
   const lista = [...S.gmv.map((g) => ({ ...g })), { codice, fornitore: forn.trim(), ...(sconto ? { sconto } : {}) }];
   await db.salva(COLL.cfg, "gmv", { lista });
-  S.gmv = lista;
+  S.gmv = lista; impostaStandardGma(S.gmv);
   return codice;
 }
 function modificaArticolo(a) {
@@ -2308,8 +2311,9 @@ function modificaArticolo(a) {
         <datalist id="m-ng-forns">${fornitoriGma().map((f) => `<option value="${esc(f)}">`).join("")}</datalist></div></div>
       ${campoNum("m-la", "Listino acquisto €", a.listinoAcquisto)}
       ${campoNum("m-gg", "Giorni (attività)", a.giorni)}
-      ${campoNum("m-sc3", "Sconto 3", a.sc3, true)}${campoNum("m-sc4", "Sconto 4", a.sc4, true)}
-      ${campoNum("m-sc5", "Sconto 5", a.sc5, true)}${campoNum("m-aum1", "Aumento 1", a.aum1, true)}
+      ${campoNum("m-sc3", "Sconto 1", a.sc3, true)}${campoNum("m-sc4", "Sconto 2", a.sc4, true)}
+      ${campoNum("m-sc5", "Sconto 3", a.sc5, true)}${campoNum("m-aum1", "Aumento 1", a.aum1, true)}
+      <p class="muted small wide" id="m-std-nota" style="margin:-4px 0 0"></p>
       <div hidden>${campoNum("m-li", "Prezzo di listino €", a.listino)}</div>
       <label class="f">Data aggiornamento<input id="m-data" type="date" value="${esc(a.dataAgg || "")}"></label>
     </div>
@@ -2346,6 +2350,19 @@ function modificaArticolo(a) {
         if (li.disabled) li.value = String(Math.round(listinoCalcolato(leggi(b)) * 10000) / 10000).replace(".", ",");
       };
       const gen = () => { const g = isGenerico({ codice: $("#m-cod", b).value, generico: $("#m-gen", b).checked }); $("#m-note-box", b).hidden = g; $("#m-note-gen", b).hidden = !g; };
+      // sconti vuoti = acquisto standard del GMA: si mostrano come suggerimento grigio
+      const stdUpd = () => {
+        const g = $("#m-gmv", b).value, st = standardGma(g);
+        const vals = st ? [st.sc1, st.sc2, st.sc3, st.aum] : [];
+        ["#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"].forEach((id, i) => { $(id, b).placeholder = st && num(vals[i]) ? pctVal(vals[i]) : ""; });
+        const propri = ["#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"].some((id) => num($(id, b).value));
+        $("#m-std-nota", b).innerHTML = !g ? "" : !st ? `Il GMA ${esc(g)} non ha acquisti standard (Impostazioni › Acquisti standard).`
+          : propri ? `<b>Sconti propri dell'articolo</b> (eccezione): lo standard di ${esc(g)} è ${esc(testoStd(st))}. Svuota i campi per usare lo standard.`
+          : `Vale l'acquisto standard di ${esc(g)}: <b>${esc(testoStd(st))}</b> (in grigio). Scrivi un valore solo se questo articolo fa eccezione.`;
+      };
+      $("#m-gmv", b).addEventListener("change", stdUpd);
+      b.addEventListener("input", (e) => { if (e.target.matches("#m-sc3, #m-sc4, #m-sc5, #m-aum1")) stdUpd(); });
+      stdUpd();
       // data automatica: quando cambia un prezzo o uno sconto, la data di aggiornamento diventa oggi
       const prezzi = ["#m-la", "#m-li", "#m-sc3", "#m-sc4", "#m-sc5", "#m-aum1"];
       const iniziali = prezzi.map((id) => $(id, b).value);
@@ -2927,7 +2944,8 @@ function caricaBib() {
   ascoltatori.push(S.bibAscolto);
 }
 const profiloDi = (nome) => S.fornitori.find((f) => f.nome === nome) || { nome, famiglie: {} };
-const scontoGmaTxt = (g) => S.gmv.find((x) => x.codice === g)?.sconto || "";
+const testoStd = (x) => [x.sc1, x.sc2, x.sc3].filter((v) => num(v)).map((v) => pctTesto(v)).concat(num(x.aum) ? [pctTesto(-num(x.aum))] : []).join("+");
+const scontoGmaTxt = (g) => { const x = S.gmv.find((y) => y.codice === g); return x ? testoStd(x) || x.sconto || "" : ""; };
 /* Condizioni di un articolo della biblioteca: GMA e sconto standard, confronto con quanto dice il listino. */
 function condBib(a) {
   const p = profiloDi(a.fornitore);
@@ -3070,7 +3088,8 @@ function articoloDaBib(a, capitolo, sottocapitolo) {
     capitolo, sottocapitolo: sottocapitolo || "", rifCap: "", pos: "",
     precodice: a.precodice ?? p.precodice ?? "", codice: a.codice, nOrdine: a.nOrdine || "", descrizione: a.descrizione || "", um: a.um || "n.",
     listinoAcquisto: num(a.listino), giorni: 0, riparam: 0,
-    sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0,
+    // sconti uguali all'acquisto standard del GMA: l'articolo non li salva e segue lo standard
+    ...(k.fonte === "gma" && standardGma(k.gma) ? { sc3: 0, sc4: 0, sc5: 0, aum1: 0 } : { sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0 }),
     gmv: k.gma, notePre: "", notePost: "", dataAgg: a.dataAgg || oggiIso(), daBiblioteca: a.fornitore,
   };
   art.listino = listinoCalcolato(art);
@@ -3582,7 +3601,7 @@ async function rinominaGma(vecchio, nuovo) {
     ops.push({ tipo: "set", coll: COLL.cfg, id: "censimento", data: { righe } });
   }
   await db.scrivi(ops);
-  S.gmv = lista;
+  S.gmv = lista; impostaStandardGma(S.gmv);
   return conta;
 }
 function chiediRinominaGma(vecchio) {
@@ -3609,20 +3628,61 @@ function chiediRinominaGma(vecchio) {
   });
 }
 
+/* ================= Impostazioni › Acquisti standard =================
+   Sconti di acquisto standard per GMA (Sconto 1, 2, 3 in cascata e Aumento), divisi per fornitore.
+   Gli articoli senza sconti propri usano questi; quelli con sconti propri restano un'eccezione. */
+function apriAcquistiStandard() {
+  const lista = S.gmv.map((g) => ({ ...g }));
+  // vecchio sconto standard in testo ("50+10") → campi
+  for (const g of lista) if (!(num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)) && g.sconto) {
+    const t = BIB.terminiSconto(g.sconto); const pos = t.filter((x) => x > 0), neg = t.filter((x) => x < 0);
+    [g.sc1, g.sc2, g.sc3] = [pos[0] || 0, pos[1] || 0, pos[2] || 0]; g.aum = neg.length ? BIB.fattoreDi(neg) - 1 : 0;
+  }
+  const conta = new Map();
+  for (const a of S.catalogo) { if (isAttivita(a) || !a.gmv) continue; const x = conta.get(a.gmv) || { n: 0, propri: 0 }; x.n++; if (haScontiPropri(a)) x.propri++; conta.set(a.gmv, x); }
+  const cella = (g, k) => `<td><span class="pct-wrap"><input class="pct" data-as="${esc(g.codice)}" data-k="${k}" value="${esc(pctVal(g[k]))}" style="width:80px"></span></td>`;
+  dialogo({
+    titolo: "Acquisti standard per fornitore e GMA", largo: true,
+    html: `<p class="muted small" style="margin-top:0">Sconti di acquisto standard di ogni GMA, in cascata (Sconto 1, poi 2, poi 3) più un eventuale aumento.
+        Gli articoli del database <b>senza sconti propri</b> usano questi valori (in grigio nella scheda articolo e in corsivo nel database);
+        quelli con sconti propri restano un'eccezione. Vale anche per gli articoli presi dalla biblioteca.</p>
+      <div class="row" style="margin-bottom:6px"><input id="as-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
+      <div class="tbl-wrap" style="max-height:56vh"><table><thead><tr><th>GMA</th><th class="num">Articoli</th><th class="num">Con sconti propri</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead>
+      <tbody id="as-righe">${perFornitore(lista.map((g) => g.codice)).map(([forn, gs]) => `<tr class="sotto as-forn"><td colspan="7">${esc(forn)}</td></tr>` +
+        gs.map((c) => { const g = lista.find((x) => x.codice === c), x = conta.get(c) || { n: 0, propri: 0 };
+          return `<tr data-as-riga="${esc(c)}" data-forn="${esc(forn)}"><td class="mono"><b>${esc(c)}</b></td><td class="num">${x.n || ""}</td><td class="num">${x.propri ? `<span title="Articoli con sconti propri: non seguono lo standard">${x.propri}</span>` : ""}</td>
+            ${cella(g, "sc1")}${cella(g, "sc2")}${cella(g, "sc3")}${cella(g, "aum")}</tr>`; }).join("")).join("")}</tbody></table></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    onApri(d) {
+      $("#as-cerca", d).addEventListener("input", (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        $$("#as-righe tr[data-as-riga]", d).forEach((tr) => { tr.hidden = !!q && !(tr.dataset.asRiga + " " + tr.dataset.forn).toLowerCase().includes(q); });
+        $$("#as-righe tr.as-forn", d).forEach((tr) => { let n = tr.nextElementSibling, vis = false; while (n && !n.classList.contains("as-forn")) { if (!n.hidden) vis = true; n = n.nextElementSibling; } tr.hidden = !vis; });
+      });
+    },
+    async onConferma(v, d) {
+      for (const i of $$("[data-as]", d)) { const g = lista.find((x) => x.codice === i.dataset.as); const x = daPct(i.value); if (x) g[i.dataset.k] = x; else delete g[i.dataset.k]; }
+      for (const g of lista) if (num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)) delete g.sconto;
+      try { await db.salva(COLL.cfg, "gmv", { lista }); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
+      S.gmv = lista; impostaStandardGma(S.gmv); ridisegna(true);
+      toast("Acquisti standard salvati.");
+    },
+  });
+}
+$("#c-acqstd").addEventListener("click", () => apriAcquistiStandard());
+
 function apriElencoGma() {
   const righe = S.gmv.slice().sort((a, b) => (a.fornitore || "").localeCompare(b.fornitore || "") || a.codice.localeCompare(b.codice));
   dialogo({
     titolo: "Elenco GMA", largo: true,
-    html: `<p class="muted small" style="margin-top:0">Tutti i GMA con il loro fornitore. Lo sconto standard è lo sconto di acquisto usato per gli articoli che vengono dalla biblioteca:
-        più sconti in cascata con il + (es. <code>50+10</code>); un numero negativo è un ricarico.</p>
+    html: `<p class="muted small" style="margin-top:0">Tutti i GMA con il loro fornitore. Gli sconti di acquisto standard si impostano in <b>Impostazioni › Acquisti standard</b>.</p>
       <div class="row" style="margin-bottom:6px"><input id="sg-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
-      <div class="tbl-wrap" style="max-height:420px"><table><thead><tr><th>GMA</th><th>Fornitore</th><th>Sconto standard %</th></tr></thead><tbody id="sg-righe">
-      ${righe.map((g) => `<tr data-sg="${esc(g.codice)}"><td class="mono nowrap"><b>${esc(g.codice)}</b> <button type="button" class="tg-ed" data-sg-rin="${esc(g.codice)}" title="Rinomina il GMA (ovunque: database, biblioteca, clienti, offerte)">✎</button></td><td><input data-sg-f="${esc(g.codice)}" list="sg-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore"></td>
-        <td><input class="cond" data-sg-sc="${esc(g.codice)}" value="${esc(g.sconto || "")}" placeholder="—" style="width:120px"></td></tr>`).join("")}</tbody></table></div>
+      <div class="tbl-wrap" style="max-height:420px"><table><thead><tr><th>GMA</th><th>Fornitore</th></tr></thead><tbody id="sg-righe">
+      ${righe.map((g) => `<tr data-sg="${esc(g.codice)}"><td class="mono nowrap"><b>${esc(g.codice)}</b> <button type="button" class="tg-ed" data-sg-rin="${esc(g.codice)}" title="Rinomina il GMA (ovunque: database, biblioteca, clienti, offerte)">✎</button></td><td><input data-sg-f="${esc(g.codice)}" list="sg-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore"></td></tr>`).join("")}</tbody></table></div>
       <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap"><b style="align-self:center">+ Nuovo GMA</b>
         <label class="f">Codice<input id="sg-nuovo" placeholder="es. SN07" style="width:130px"></label>
         <label class="f grow">Fornitore<input id="sg-nuovo-f" list="sg-forns" placeholder="scegli o scrivi"></label>
-        <label class="f">Sconto standard %<input id="sg-nuovo-s" placeholder="es. 50+10" style="width:110px"></label></div>
+</div>
       <datalist id="sg-forns">${fornitoriGma().map((f) => `<option value="${esc(f)}">`).join("")}</datalist>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(d) {
@@ -3631,19 +3691,12 @@ function apriElencoGma() {
     },
     async onConferma(v, d) {
       const lista = S.gmv.map((g) => ({ ...g }));
-      for (const x of $$("[data-sg-sc]", d)) {
-        const t = x.value.trim().replace(/\s+/g, "");
-        if (t && !testoValido(t)) { toast(`Sconto non valido per ${x.dataset.sgSc}.`); x.focus(); return false; }
-        const g = lista.find((y) => y.codice === x.dataset.sgSc);
-        if (t) g.sconto = t; else delete g.sconto;
-      }
       for (const x of $$("[data-sg-f]", d)) lista.find((y) => y.codice === x.dataset.sgF).fornitore = x.value.trim();
       const n = $("#sg-nuovo", d).value.trim().toUpperCase();
-      const ns = $("#sg-nuovo-s", d).value.trim().replace(/\s+/g, "");
-      if (ns && !testoValido(ns)) { toast("Sconto del nuovo GMA non valido."); return false; }
       if (n && lista.some((g) => g.codice === n)) { toast(`Il GMA ${n} c'è già.`); return false; }
-      if (n) lista.push({ codice: n, fornitore: $("#sg-nuovo-f", d).value.trim(), ...(ns ? { sconto: ns } : {}) });
+      if (n) lista.push({ codice: n, fornitore: $("#sg-nuovo-f", d).value.trim() });
       await db.salva(COLL.cfg, "gmv", { lista });
+      S.gmv = lista; impostaStandardGma(S.gmv);
       toast(n ? `GMA ${n} aggiunto.` : "Elenco GMA salvato.");
     },
   });

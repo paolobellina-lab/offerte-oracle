@@ -53,7 +53,8 @@ export const notePostRiga = (r) => (isGenerico(r) ? (r.descrizione || "") : (r.n
 export function riparametrizzato(r) {
   const P = num(r.riparam);
   if (!P || P === 1) return null;
-  return num(r.listinoAcquisto) * (1 - num(r.sc3)) * (1 - num(r.sc4)) * (1 - num(r.sc5)) * (1 - num(r.aum1)) / (1 - P);
+  const e = scontiEffettivi(r);
+  return num(r.listinoAcquisto) * (1 - e.sc3) * (1 - e.sc4) * (1 - e.sc5) * (1 - e.aum1) / (1 - P);
 }
 
 /* Colonna K del catalogo: prezzo di listino, calcolato con le formule dell'Excel.
@@ -114,8 +115,23 @@ export function leggiRicarico(t, auto = 0) {
   return (sp.aggiunta ? (1 + num(auto)) * sp.fattore : sp.fattore) - 1;
 }
 export const testoValido = (t, ric = false) => !String(t ?? "").trim() || (ric ? leggiRicarico(t) !== null : !leggiSconti(t)?.errore);
-/* Sconti standard dell'articolo (database): Sconto 3, 4, 5 e Aumento 1. L'attività tecnica non ne ha. */
-export const fattoreStandard = (r) => (isAttivita(r) ? 1 : (1 - num(r.sc3)) * (1 - num(r.sc4)) * (1 - num(r.sc5)) * (1 + num(r.aum1)));
+/* Acquisti standard per GMA (Impostazioni › Acquisti standard): Sconto 1, 2, 3 e Aumento.
+   Un articolo senza sconti propri usa quelli del suo GMA; se ne ha anche uno solo, valgono i suoi (eccezione).
+   Nei dati gli sconti dell'articolo restano nei campi sc3, sc4, sc5, aum1 (Sconto 1, 2, 3, Aumento 1). */
+let STD_GMA = new Map();
+export function impostaStandardGma(lista) {
+  STD_GMA = new Map((lista || []).filter((g) => num(g.sc1) || num(g.sc2) || num(g.sc3) || num(g.aum)).map((g) => [g.codice, g]));
+}
+export const standardGma = (g) => STD_GMA.get(g) || null;
+export const haScontiPropri = (r) => !!(num(r.sc3) || num(r.sc4) || num(r.sc5) || num(r.aum1));
+export function scontiEffettivi(r) {
+  // le righe prese dall'offerta di un fornitore hanno già il prezzo netto del fornitore
+  if (haScontiPropri(r) || isAttivita(r) || r.daOfferta) return { sc3: num(r.sc3), sc4: num(r.sc4), sc5: num(r.sc5), aum1: num(r.aum1), daGma: false };
+  const s = STD_GMA.get(r.gmv);
+  return s ? { sc3: num(s.sc1), sc4: num(s.sc2), sc5: num(s.sc3), aum1: num(s.aum), daGma: true } : { sc3: 0, sc4: 0, sc5: 0, aum1: 0, daGma: false };
+}
+/* Sconti standard dell'articolo: i suoi o quelli del GMA. L'attività tecnica non ne ha. */
+export const fattoreStandard = (r) => { if (isAttivita(r)) return 1; const e = scontiEffettivi(r); return (1 - e.sc3) * (1 - e.sc4) * (1 - e.sc5) * (1 + e.aum1); };
 const applica = (sp, f0) => (sp.aggiunta ? f0 * sp.fattore : sp.fattore);
 const valido = (sp) => (sp && !sp.errore ? sp : null);
 /* Il valore generale vale anche per l'attività tecnica solo se è "in aggiunta" (+3):

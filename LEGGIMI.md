@@ -121,6 +121,17 @@ Nella pagina **Clienti**:
 Il cliente ricorda la data del censimento. Nell'offerta il cliente è **verde** se il cartellino è stato censito,
 **rosso** se no. Gli sconti di cartellino si possono scrivere anche a mano in cascata (es. 45+10).
 
+## Impostazioni
+
+Pagina del menu con: **Elenco GMA** (fornitore, nuovo GMA, rinomina/unisci), **Acquisti standard**, **Scadenze prezzi**,
+**Capitoli del database** (ricarico automatico).
+
+**Acquisti standard**: per ogni GMA, divisi per fornitore, Sconto 1, 2, 3 (in cascata) e Aumento. Un articolo del database
+**senza sconti propri** usa questi (nella scheda articolo in grigio, nel database in corsivo); se ne ha anche uno solo, valgono i
+suoi (eccezione). Le righe prese da un'offerta fornitore e l'attività tecnica non li usano. Nella scheda articolo i campi si
+chiamano Sconto 1, 2, 3 e Aumento 1 (nei dati restano sc3, sc4, sc5, aum1). La riparametrizzazione non è più nella scheda:
+si gestisce nella pagina prezzi delle offerte a listino.
+
 ## Come sono organizzati i dati (Firestore)
 
 | Collezione | Contenuto |

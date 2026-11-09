@@ -338,7 +338,7 @@
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th>
-          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th>GMA</th><th>Aggiornato</th></tr></thead>
+          <th class="num">Sc.1</th><th class="num">Sc.2</th><th class="num">Sc.3</th><th class="num">Aum.1</th><th>GMA</th><th>Aggiornato</th></tr></thead>
         <tbody id="righe-catalogo"></tbody>
       </table></div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="c-altri" hidden>Mostra altri</button></div>
@@ -378,8 +378,13 @@
       <div class="impost-grid">
         <div class="card impost-card">
           <h3>Elenco GMA</h3>
-          <p class="muted small">Tutti i GMA con il fornitore e lo sconto standard. Qui aggiungi un nuovo GMA, lo rinomini o unisci due GMA.</p>
+          <p class="muted small">Tutti i GMA con il loro fornitore. Qui aggiungi un nuovo GMA, lo rinomini o unisci due GMA.</p>
           <button class="btn verde forte" id="c-gma">Apri l'elenco GMA</button>
+        </div>
+        <div class="card impost-card">
+          <h3>Acquisti standard</h3>
+          <p class="muted small">Sconti di acquisto standard (Sconto 1, 2, 3 e Aumento) per ogni GMA, divisi per fornitore. Valgono per gli articoli senza sconti propri.</p>
+          <button class="btn verde forte" id="c-acqstd">Apri gli acquisti standard</button>
         </div>
         <div class="card impost-card">
           <h3>Scadenze prezzi</h3>
