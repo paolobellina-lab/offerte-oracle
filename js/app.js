@@ -216,6 +216,7 @@ function collega() {
     S.capitoli = (cap?.lista || []).slice().sort((a, b) => num(a.ordine) - num(b.ordine));
     S.gmv = gmv?.lista || [];
     S.fornitori = docs.find((d) => d.id === "fornitori")?.lista || [];
+    S.censCfg = docs.find((d) => d.id === "censimento") || {};
     ridisegna();
   }, onErr));
   ascoltatori.push(db.ascolta(COLL.cat, (docs) => {
@@ -2309,40 +2310,78 @@ function modificaCliente(c) {
       ha applicato (Sconto GMA, Sconto Cliente, Sconto 3/4/5) e diventano il cartellino del cliente (anche in cascata). */
 const cascata = (t) => { const tt = BIB.terminiSconto(t); return { f: tt.length ? 1 - BIB.fattoreDi(tt) : 0, testo: tt.map((x) => String(Math.round(x * 1e4) / 100).replace(".", ",")).join("+") }; };
 const scontoCliTxt = (c, g) => c.scontiTesto?.[g] || pctVal(c.sconti?.[g]);
-function articoliCensimento() {
-  const gmas = [...new Set([...S.gmv.map((g) => g.codice), ...S.catalogo.map((a) => a.gmv)].filter(Boolean))].sort();
-  const scelti = [], senza = [];
-  for (const g of gmas) {
-    let a;
-    if (g === "ATT") a = S.catalogo.find((x) => isAttivita(x));
-    else {
-      const cand = S.catalogo.filter((x) => x.gmv === g && !isGenerico(x) && !isAttivita(x) && codiceArticolo(x));
-      cand.sort((x, y) => String(y.dataAgg || "").localeCompare(String(x.dataAgg || "")));
-      a = cand[0];
-    }
-    if (a) scelti.push({ g, a }); else senza.push(g);
-  }
-  return { scelti, senza };
+/* Righe dell'offerta di censimento: un GMA per riga, con l'articolo proposto (o quello scelto l'ultima volta).
+   Si può cambiare articolo, scrivere a mano un codice Oracle, escludere un GMA o aggiungerne. */
+function righeCensimento() {
+  const salvate = S.censCfg?.righe;
+  const gmas = [...new Set([...S.gmv.map((g) => g.codice), ...S.catalogo.map((a) => a.gmv)].filter(Boolean).map((g) => (String(g).toUpperCase() === "ATT" ? "ATT" : g)))].sort();
+  const candidati = (g) => g === "ATT" ? S.catalogo.filter((x) => isAttivita(x))
+    : S.catalogo.filter((x) => x.gmv === g && !isGenerico(x) && !isAttivita(x) && codiceArticolo(x)).sort((x, y) => String(y.dataAgg || "").localeCompare(String(x.dataAgg || "")));
+  const out = gmas.map((g) => {
+    const c = candidati(g), prima = salvate?.find((x) => x.g === g);
+    const cod = prima ? prima.cod : c[0] ? codiceOracle(c[0]) : "";
+    return { g, cod, on: prima ? prima.on !== false : !!cod, cand: [...new Set(c.map((x) => codiceOracle(x)))].slice(0, 40) };
+  });
+  for (const x of salvate || []) if (!out.some((y) => y.g === x.g)) out.push({ g: x.g, cod: x.cod, on: x.on !== false, cand: [] });
+  return out;
 }
 $("#cl-cens-scarica").addEventListener("click", () => {
-  const { scelti, senza } = articoliCensimento();
-  if (!scelti.length) return toast("Nel database non ci sono articoli con un GMA: importa prima il file Excel.");
+  const righe = righeCensimento();
+  if (!righe.length) return toast("Non ci sono GMA: importa prima il file Excel.");
+  const descr = (cod) => { if (!cod) return ""; const a = S.catalogo.find((x) => codiceOracle(x) === cod); return a ? String(a.descrizione || a.nOrdine || "").slice(0, 70) : cod ? "codice scritto a mano" : ""; };
+  const disegna = (d) => {
+    const n = righe.filter((x) => x.on && x.cod).length;
+    $("#ce-righe", d).innerHTML = righe.map((x, i) => `<tr class="${x.on && x.cod ? "" : "qta-zero"}">
+      <td><input type="checkbox" data-ce-on="${i}" ${x.on ? "checked" : ""} title="Includi questo GMA"></td>
+      <td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td>
+      <td><input class="mono" data-ce-cod="${i}" list="ce-l${i}" value="${esc(x.cod)}" placeholder="codice articolo Oracle" style="width:220px">
+        <datalist id="ce-l${i}">${x.cand.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></td>
+      <td class="small" data-ce-des="${i}">${esc(descr(x.cod))}${x.on && !x.cod ? '<span class="badge warn">scrivi un codice</span>' : ""}</td></tr>`).join("");
+    if ($("#ce-n")) $("#ce-n").textContent = n;
+  };
   dialogo({
     titolo: "Offerta per il censimento dei cartellini", largo: true,
     html: `<p style="margin-top:0">Un articolo per ogni GMA, a quantità 1, <b>senza prezzi né sconti</b>: importato in un'offerta Oracle intestata al cliente,
         Oracle applica le sue condizioni. Poi scarichi le linee dell'offerta da Oracle e le carichi qui con <b>Carica censimento</b>.</p>
-      <div class="tbl-wrap" style="max-height:46vh"><table><thead><tr><th class="num">Linea</th><th>GMA</th><th>Fornitore</th><th>Articolo</th><th>Descrizione</th></tr></thead><tbody>
-      ${scelti.map((x, i) => `<tr><td class="num">${(i + 1) * 10}</td><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitore(x.g))}</td><td class="mono">${esc(codiceOracle(x.a))}</td><td class="small">${esc(String(x.a.descrizione || "").slice(0, 80))}</td></tr>`).join("")}
-      </tbody></table></div>
-      ${senza.length ? `<div class="avviso" style="margin-top:10px"><b>${senza.length} GMA senza articoli nel database</b> (non si possono censire): ${senza.map(esc).join(", ")}</div>` : ""}`,
-    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: `Scarica il file per Oracle (${scelti.length} righe)`, value: "ok", cls: "primary" }],
-    onConferma() {
-      const righe = scelti.map((x, i) => {
+      <p class="muted small" style="margin:-4px 0 8px">Puoi cambiare l'articolo di ogni GMA (scegli dall'elenco o scrivi qualunque codice Oracle), togliere la spunta ai GMA da non censire
+        e aggiungere GMA. Le scelte restano salvate per i prossimi clienti.</p>
+      <div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th></th><th>GMA</th><th>Fornitore</th><th>Articolo (codice Oracle)</th><th>Descrizione</th></tr></thead>
+        <tbody id="ce-righe"></tbody></table></div>
+      <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap"><b style="align-self:center">+ GMA</b>
+        <label class="f">GMA<input id="ce-ng" placeholder="es. HESA" style="width:120px"></label>
+        <label class="f grow">Codice articolo Oracle<input id="ce-nc" class="mono" placeholder="es. HESXXXX"></label>
+        <button type="button" class="btn" id="ce-add">Aggiungi</button></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva le scelte", value: "salva" }, { label: "Scarica il file per Oracle", value: "ok", cls: "primary" }],
+    onApri(d) {
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.dataset.ceOn !== undefined) { righe[+t.dataset.ceOn].on = t.checked; disegna(d); }
+        else if (t.dataset.ceCod !== undefined) { const x = righe[+t.dataset.ceCod]; x.cod = t.value.trim().toUpperCase(); if (x.cod) x.on = true; disegna(d); }
+      });
+      d.addEventListener("click", (e) => {
+        if (e.target.id !== "ce-add") return;
+        const g = $("#ce-ng", d).value.trim().toUpperCase(), cod = $("#ce-nc", d).value.trim().toUpperCase();
+        if (!g || !cod) return toast("Scrivi GMA e codice.");
+        const x = righe.find((y) => y.g === g);
+        if (x) { x.cod = cod; x.on = true; } else righe.push({ g, cod, on: true, cand: [] });
+        $("#ce-ng", d).value = ""; $("#ce-nc", d).value = ""; disegna(d);
+      });
+      for (const id of ["#ce-ng", "#ce-nc"]) $(id, d).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); $("#ce-add", d).click(); } });
+      $("#dlg-foot").insertAdjacentHTML("afterbegin", `<span class="muted small grow" style="align-self:center"><b id="ce-n"></b> righe nel file</span>`);
+      disegna(d);
+    },
+    async onConferma(v) {
+      const salva = righe.map((x) => ({ g: x.g, cod: x.cod, on: x.on }));
+      try { await db.salva(COLL.cfg, "censimento", { righe: salva }); S.censCfg = { righe: salva }; } catch (x) { errore(x, "Scelte non salvate"); }
+      if (v === "salva") { toast("Scelte salvate."); return; }
+      const scelte = righe.filter((x) => x.on && x.cod);
+      if (!scelte.length) { toast("Nessuna riga da scaricare."); return false; }
+      const out = scelte.map((x, i) => {
         const r = new Array(COLONNE_ORACLE.length).fill("");
-        r[0] = (i + 1) * 10; r[1] = codiceOracle(x.a); r[2] = "BG"; r[3] = 1; r[16] = "GMA " + x.g;
+        r[0] = (i + 1) * 10; r[1] = x.cod; r[2] = "BG"; r[3] = 1; r[16] = "GMA " + x.g;
         return r;
       });
-      scarica(scriviExcel([COLONNE_ORACLE, ...righe], "Sheet1"), `CENSIMENTO_CARTELLINI_${oggiIso()}.xlsx`);
+      scarica(scriviExcel([COLONNE_ORACLE, ...out], "Sheet1"), `CENSIMENTO_CARTELLINI_${oggiIso()}.xlsx`);
     },
   });
 });
@@ -2366,6 +2405,7 @@ function scontiDaLineeOracle(righe) {
   };
   // GMA dell'articolo: dalla colonna del file o dal database
   const gmaDi = new Map(S.catalogo.map((a) => [codiceOracle(a), a.gmv]));
+  for (const x of S.censCfg?.righe || []) if (x.cod) gmaDi.set(x.cod, x.g);
   const out = new Map();
   for (const r of righe.slice(hi + 1)) {
     if (!r) continue;
