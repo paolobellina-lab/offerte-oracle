@@ -247,3 +247,9 @@ Dalla scheda di un articolo del catalogo, **🔗 Crea clone…** mette la stessa
 I cloni sono collegati: modificando una copia (prezzo, sconti, descrizione, GMA…) cambiano tutte; solo capitolo e
 sottocapitolo sono propri di ogni copia. Nel catalogo hanno il badge 🔗 con il numero di copie e non contano come doppioni.
 "Elimina questa copia" toglie solo quella; "Scollega questa copia" la rende un articolo a sé.
+
+## Modifica database (tasto destro)
+Nel Catalogo il pulsante **🔒 Modifica database** (in alto a destra) sblocca la modifica: clic per selezionare
+(Ctrl/⌘ aggiunge, Maiusc intervallo, clicca e trascina), doppio clic per la scheda, tasto destro per
+Taglia, Copia, Incolla sotto, Incolla collegato sotto (cloni) ed Elimina (con conferma). Funzionano anche Ctrl/⌘+X, C, V.
+Si riblocca da solo cambiando pagina o premendo di nuovo il pulsante.

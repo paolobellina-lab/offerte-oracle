@@ -911,3 +911,9 @@ tbody tr.sel:hover > td, #righe-picker tr.sel:hover > td { background: var(--rig
 .filtri-cat select { min-width: 120px; }
 .filtri-cat.attivi { box-shadow: inset 4px 0 0 #15803d; }
 td.std-gma { color: var(--muted, #6b7280); font-style: italic; }
+
+/* Catalogo: modalità "Modifica database" */
+#c-modifica.on { background: #f6c9c3 !important; border: 1px solid #b33a2b !important; color: #4a0d06 !important; font-weight: 700; }
+.cat-mod-avviso { margin-bottom: 10px; }
+#v-catalogo.modifica .tbl-wrap { outline: 2px solid #b33a2b; outline-offset: 2px; border-radius: 10px; }
+#righe-catalogo tr.taglio td { opacity: .5; }

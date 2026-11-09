@@ -314,7 +314,10 @@
         <select id="c-sotto" title="Sottocapitolo del database"></select>
         <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMA">
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
+        <button class="btn" id="c-modifica" title="Abilita selezione, taglia, copia, incolla, incolla collegato ed elimina con il tasto destro">🔒 Modifica database</button>
       </div>
+      <div class="avviso warn small cat-mod-avviso" id="c-mod-avviso" hidden><b>Modifica database attiva.</b> Clic per selezionare (Ctrl/⌘ aggiunge, Maiusc intervallo, oppure clicca e trascina),
+        tasto destro per tagliare, copiare, incollare, incollare collegato ed eliminare; doppio clic apre la scheda. Si riblocca quando cambi pagina.</div>
       <div class="card row filtri-cat" style="margin-bottom:10px;gap:8px 12px;flex-wrap:wrap;align-items:flex-end">
         <b style="align-self:center">Filtri</b>
         <label class="f">Precodice<select id="cf-pre"></select></label>

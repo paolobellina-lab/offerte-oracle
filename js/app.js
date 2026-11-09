@@ -254,6 +254,7 @@ function collega() {
 /* ================= Navigazione ================= */
 function vai(vista) {
   if (S.vista === "offerta" && vista !== "offerta") salvaOraSeServe();
+  if (vista !== S.vista) bloccaModificaCat();
   S.vista = vista;
   $("#sb-offerta").hidden = vista !== "offerta";
   for (const v of ["offerte", "offerta", "catalogo", "biblioteca", "clienti", "impostazioni", "importa"]) $("#v-" + v).hidden = v !== vista;
@@ -1548,24 +1549,25 @@ const trascina = { attivo: false, mosso: false };
 function avviaTrascina(e, tabella) {
   if (e.button !== 0 || e.shiftKey || e.target.closest("input, select, textarea, button, label, a")) return;
   const tr = e.target.closest(tabella === "off" ? "tr[data-id]" : "tr[data-k]"); if (!tr) return;
-  const sel = tabella === "off" ? S.sel : S.pickSel;
+  const sel = tabella === "off" ? S.sel : tabella === "cat" ? S.catSel : S.pickSel;
   Object.assign(trascina, { attivo: true, mosso: false, tabella, da: tr.dataset[tabella === "off" ? "id" : "k"], base: e.ctrlKey || e.metaKey ? new Set(sel) : new Set() });
 }
 function seguiTrascina(e) {
   if (!trascina.attivo) return;
-  const off = trascina.tabella === "off";
-  const tr = e.target.closest(off ? "#righe-offerta tr[data-id]" : "#righe-picker tr[data-k]"); if (!tr) return;
+  const off = trascina.tabella === "off", cat = trascina.tabella === "cat";
+  const tr = e.target.closest(off ? "#righe-offerta tr[data-id]" : cat ? "#righe-catalogo tr[data-k]" : "#righe-picker tr[data-k]"); if (!tr) return;
   const a = tr.dataset[off ? "id" : "k"];
   if (a === trascina.da && !trascina.mosso) return;
   trascina.mosso = true;
-  const ordine = off ? (capAtt()?.righe || []).map((r) => r.id) : S.pickVis || [];
+  const ordine = off ? (capAtt()?.righe || []).map((r) => r.id) : cat ? S.catVisK || [] : S.pickVis || [];
   const i = ordine.indexOf(trascina.da), j = ordine.indexOf(a); if (i < 0 || j < 0) return;
   const nuova = new Set(trascina.base);
   for (let k = Math.min(i, j); k <= Math.max(i, j); k++) nuova.add(ordine[k]);
   if (off) {
     S.sel = nuova; S.ultimoSel = a;
     for (const r of $$("#righe-offerta tr[data-id]")) { const on = nuova.has(r.dataset.id); r.classList.toggle("sel", on); const cb = r.querySelector("[data-sel]"); if (cb) cb.checked = on; }
-  } else { S.pickSel = nuova; S.pickUltimo = a; aggiornaPickSel(); }
+  } else if (cat) { S.catSel = nuova; S.catUltimo = a; aggiornaSelCat(); }
+  else { S.pickSel = nuova; S.pickUltimo = a; aggiornaPickSel(); }
 }
 $("#righe-offerta").addEventListener("mousedown", (e) => avviaTrascina(e, "off"));
 $("#righe-picker").addEventListener("mousedown", (e) => avviaTrascina(e, "pick"));
@@ -2239,11 +2241,12 @@ function disegnaCatalogo() {
   const ord = dp ? lista.slice().sort((x, y) => chiaveDop(x).localeCompare(chiaveDop(y)) || String(x.capitolo).localeCompare(String(y.capitolo))) : ordinaRighe(lista, ordineCap());
   S.catOrdinata = ord;
   const vis = ord.slice(0, S.limiteCat);
+  S.catVisK = vis.map((a) => a.k);
   let gruppo = null, html = "";
   for (const a of vis) {
     const g = dp ? "Doppione · " + chiaveDop(a) : (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
     if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="10">${esc(g)}</td></tr>`; }
-    html += `<tr class="cliccabile" data-k="${esc(a.k)}">
+    html += `<tr class="cliccabile${S.catEdit && S.catSel.has(a.k) ? " sel" : ""}${S.catApp?.taglio && S.catApp.ks.includes(a.k) ? " taglio" : ""}" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b>${a.clone && cloniDi(a).length > 1 ? ` <span class="badge info" title="Riga clonata: è collegata ad altre ${cloniDi(a).length - 1} copie nel database">🔗 ${cloniDi(a).length}</span>` : ""}${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
@@ -2253,13 +2256,171 @@ function disegnaCatalogo() {
   }
   $("#righe-catalogo").innerHTML = html || `<tr><td colspan="10" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
   applicaGruppi($("#righe-catalogo"));
-  $("#c-info").textContent = `${vis.length} di ${lista.length} articoli`;
+  $("#c-info").textContent = `${vis.length} di ${lista.length} articoli` + (S.catEdit && S.catSel.size ? ` · ${S.catSel.size} selezionati` : "");
   $("#c-altri").hidden = vis.length >= lista.length;
 }
 $("#righe-catalogo").addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-k]");
-  if (tr) modificaArticolo(S.perK.get(tr.dataset.k));
+  const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+  if (!S.catEdit) return modificaArticolo(S.perK.get(tr.dataset.k));
+  if (appenaTrascinato()) return;
+  // modalità modifica: clic = seleziona (Ctrl/⌘ aggiunge o toglie, Maiusc intervallo)
+  const k = tr.dataset.k, vis = S.catVisK || [], ctrl = e.ctrlKey || e.metaKey;
+  if (e.shiftKey && S.catUltimo && S.catUltimo !== k && vis.includes(S.catUltimo)) {
+    const a = vis.indexOf(S.catUltimo), b = vis.indexOf(k);
+    if (!ctrl) S.catSel.clear();
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) S.catSel.add(vis[i]);
+    window.getSelection?.().removeAllRanges();
+  } else if (ctrl) S.catSel.has(k) ? S.catSel.delete(k) : S.catSel.add(k);
+  else { const solo = S.catSel.size === 1 && S.catSel.has(k); S.catSel.clear(); if (!solo) S.catSel.add(k); }
+  S.catUltimo = k;
+  aggiornaSelCat();
 });
+$("#righe-catalogo").addEventListener("dblclick", (e) => {
+  const tr = e.target.closest("tr[data-k]");
+  if (tr && S.catEdit) modificaArticolo(S.perK.get(tr.dataset.k));
+});
+
+/* ================= Modifica database (tasto destro sul catalogo) =================
+   Bloccata finché non si preme "Modifica database"; si riblocca cambiando pagina. */
+S.catSel = new Set(); S.catEdit = false; S.catApp = null;
+function aggiornaSelCat() {
+  for (const tr of $$("#righe-catalogo tr[data-k]")) tr.classList.toggle("sel", S.catEdit && S.catSel.has(tr.dataset.k));
+  $("#c-info").textContent = `${(S.catVisK || []).length} di ${(S.catListaFiltrata || []).length} articoli` + (S.catEdit && S.catSel.size ? ` · ${S.catSel.size} selezionati` : "");
+}
+function impostaModificaCat(on) {
+  S.catEdit = on;
+  if (!on) { S.catSel.clear(); if (S.catApp?.taglio) S.catApp = null; }
+  $("#c-modifica").classList.toggle("on", on);
+  $("#c-modifica").textContent = on ? "🔓 Modifica attiva · Blocca" : "🔒 Modifica database";
+  $("#c-mod-avviso").hidden = !on;
+  $("#v-catalogo").classList.toggle("modifica", on);
+}
+function bloccaModificaCat() { if (S.catEdit) { impostaModificaCat(false); chiudiMenuDx(); } }
+$("#c-modifica").addEventListener("click", () => { impostaModificaCat(!S.catEdit); disegnaCatalogo(); });
+
+$("#righe-catalogo").addEventListener("mousedown", (e) => {
+  if (!S.catEdit) return;
+  if ((e.shiftKey || e.ctrlKey || e.metaKey) && e.target.closest("tr[data-k]")) e.preventDefault();
+  avviaTrascina(e, "cat");
+});
+$("#righe-catalogo").addEventListener("contextmenu", (e) => {
+  if (!S.catEdit) return;
+  const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+  e.preventDefault();
+  if (!S.catSel.has(tr.dataset.k)) { S.catSel = new Set([tr.dataset.k]); S.catUltimo = tr.dataset.k; aggiornaSelCat(); }
+  S.catDx = tr.dataset.k;
+  const n = S.catSel.size, m = $("#menu-dx"), app = S.catApp, na = app?.ks.length || 0;
+  m.innerHTML = `<div class="dx-titolo">${n === 1 ? "1 articolo selezionato" : `${n} articoli selezionati`}</div>
+    <button type="button" data-dxc="taglia">✂ Taglia <kbd>${TASTO}X</kbd></button>
+    <button type="button" data-dxc="copia">⎘ Copia <kbd>${TASTO}C</kbd></button>
+    <button type="button" data-dxc="incolla" ${na ? "" : "disabled"}>⇩ Incolla sotto${na ? ` (${na})` : ""} <kbd>${TASTO}V</kbd></button>
+    <button type="button" data-dxc="incollaLink" ${na && !app.taglio ? "" : "disabled"} title="Incolla dei cloni: modificando una copia cambiano tutte">🔗 Incolla collegato sotto${na && !app.taglio ? ` (${na})` : ""}</button>
+    <hr>
+    ${n === 1 ? `<button type="button" data-dxc="scheda">✎ Apri la scheda articolo</button>` : ""}
+    <button type="button" data-dxc="tutti">Seleziona tutti quelli visibili</button>
+    <button type="button" data-dxc="nessuno">Deseleziona</button>
+    <hr>
+    <button type="button" data-dxc="elimina" class="dx-danger">✕ Elimina${n > 1 ? ` ${n} articoli` : ""}…</button>`;
+  m.hidden = false; menuDxAperto = Date.now();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
+  m.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
+});
+$("#menu-dx").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dxc]"); if (!b) return;
+  chiudiMenuDx();
+  azioneCat(b.dataset.dxc, S.catDx);
+});
+document.addEventListener("keydown", (e) => {
+  if (!S.catEdit || S.vista !== "catalogo" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  if (e.target.closest?.("input:not([type=checkbox]), textarea, select, [contenteditable], dialog")) return;
+  const az = { KeyX: "taglia", KeyC: "copia", KeyV: "incolla" }[e.code]; if (!az) return;
+  if (az !== "incolla" && !S.catSel.size) return;
+  e.preventDefault(); chiudiMenuDx();
+  azioneCat(az, S.catUltimo && S.catSel.has(S.catUltimo) ? S.catUltimo : [...S.catSel].pop());
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !S.catEdit || S.vista !== "catalogo" || document.querySelector("dialog[open]") || !$("#menu-dx").hidden) return;
+  if (S.catApp?.taglio) S.catApp = null;
+  S.catSel.clear(); disegnaCatalogo();
+});
+
+/* Articoli selezionati nell'ordine del database */
+const selCatOrdinati = () => ordinaRighe(S.catalogo.filter((a) => S.catSel.has(a.k)), ordineCap());
+async function azioneCat(az, kDx) {
+  if (!S.catEdit) return;
+  if (az === "tutti") { (S.catVisK || []).forEach((k) => S.catSel.add(k)); return aggiornaSelCat(); }
+  if (az === "nessuno") { S.catSel.clear(); return aggiornaSelCat(); }
+  if (az === "scheda") return modificaArticolo(S.perK.get(kDx));
+  if (az === "taglia" || az === "copia") {
+    const arts = selCatOrdinati(); if (!arts.length) return;
+    S.catApp = { taglio: az === "taglia", ks: arts.map((a) => a.k) };
+    disegnaCatalogo();
+    return toast(`${arts.length} ${arts.length === 1 ? "articolo" : "articoli"} ${az === "taglia" ? "tagliati" : "copiati"}: tasto destro su una riga › Incolla sotto${az === "copia" ? " (o Incolla collegato)" : ""}.`, 4000);
+  }
+  if (az === "incolla" || az === "incollaLink") return incollaCat(kDx, az === "incollaLink");
+  if (az === "elimina") return eliminaCat();
+}
+async function incollaCat(kDx, link) {
+  const app = S.catApp, dove = S.perK.get(kDx);
+  if (!app?.ks.length) return toast("Prima taglia o copia degli articoli.");
+  if (!dove) return toast("Clicca col destro sulla riga sotto cui incollare.");
+  const sorgenti = app.ks.map((k) => S.perK.get(k)).filter(Boolean);
+  if (!sorgenti.length) { S.catApp = null; return toast("Gli articoli copiati non ci sono più nel database."); }
+  if (app.taglio && sorgenti.includes(dove)) return toast("Non puoi incollare sotto un articolo che stai spostando.");
+  const caps = new Set([dove.capitolo]);
+  let nuovi;
+  if (app.taglio) {
+    nuovi = sorgenti;
+    for (const a of nuovi) caps.add(a.capitolo);
+  } else {
+    nuovi = sorgenti.map((a) => {
+      if (link && !a.clone) { a.clone = db.nuovoId(); caps.add(a.capitolo); }
+      const { _chunk, ...d } = structuredClone(a);
+      if (!link) delete d.clone;
+      return d;
+    });
+  }
+  // il blocco va subito sotto la riga scelta, nel suo capitolo e sottocapitolo; il capitolo viene rinumerato
+  const fuori = new Set(nuovi);
+  const lista = ordinaRighe(S.catalogo.filter((a) => a.capitolo === dove.capitolo && !fuori.has(a)), [dove.capitolo]);
+  lista.splice(lista.indexOf(dove) + 1, 0, ...nuovi);
+  for (const a of nuovi) {
+    a.capitolo = dove.capitolo; a.sottocapitolo = dove.sottocapitolo || ""; a.rifCap = dove.rifCap || "";
+    if (!app.taglio) a.k = `${a.capitolo}|${a.rifCap}|${codiceArticolo(a)}|${a.nOrdine}|${db.nuovoId()}`;
+  }
+  lista.forEach((a, i) => (a.ordine = i + 1));
+  if (!app.taglio) for (const a of nuovi) { S.catalogo.push(a); S.perK.set(a.k, a); }
+  try { await salvaCapitoli(caps); } catch (x) { return errore(x, "Incolla non riuscito"); }
+  if (app.taglio) S.catApp = null;
+  S.catSel = new Set(nuovi.map((a) => a.k)); S.catUltimo = nuovi[nuovi.length - 1].k;
+  disegnaCatalogo();
+  toast(`${nuovi.length} ${nuovi.length === 1 ? "articolo" : "articoli"} ${app.taglio ? "spostati" : link ? "incollati collegati (cloni)" : "incollati"} in ${dove.capitolo} · ${dove.sottocapitolo || "—"}.`, 4500);
+}
+function eliminaCat() {
+  const arts = selCatOrdinati(); if (!arts.length) return;
+  const conCloni = arts.filter((a) => cloniDi(a).length > 1).length;
+  dialogo({
+    titolo: arts.length === 1 ? "Eliminare l'articolo?" : `Eliminare ${arts.length} articoli?`,
+    html: `<p>${arts.slice(0, 8).map((a) => `<b>${esc(codiceArticolo(a))}</b> · ${esc(a.nOrdine || "")}`).join("<br>")}${arts.length > 8 ? `<br>… e altri ${arts.length - 8}` : ""}</p>
+      ${conCloni ? `<p class="muted small">${conCloni} sono cloni: si elimina solo la copia selezionata, le altre copie restano.</p>` : ""}
+      <p class="muted small">Le offerte che li contengono non cambiano.</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Elimina", value: "ok", cls: "danger" }],
+    async onConferma() {
+      const via = new Set(arts.map((a) => a.k)), caps = new Set(arts.map((a) => a.capitolo));
+      S.catalogo = S.catalogo.filter((a) => !via.has(a.k));
+      for (const k of via) S.perK.delete(k);
+      // cloni rimasti da soli: tornano articoli normali
+      const gruppi = new Map();
+      for (const a of S.catalogo) if (a.clone) gruppi.set(a.clone, [...(gruppi.get(a.clone) || []), a]);
+      for (const l of gruppi.values()) if (l.length === 1 && arts.some((x) => x.clone === l[0].clone)) { delete l[0].clone; caps.add(l[0].capitolo); }
+      try { await salvaCapitoli(caps); } catch (x) { errore(x, "Eliminazione non riuscita"); return false; }
+      S.catSel.clear(); if (S.catApp) S.catApp.ks = S.catApp.ks.filter((k) => !via.has(k));
+      disegnaCatalogo();
+      toast(`${arts.length} ${arts.length === 1 ? "articolo eliminato" : "articoli eliminati"} dal database.`);
+    },
+  });
+}
 $("#c-nuovo").addEventListener("click", () => {
   if (!S.capitoli.length) return toast("Prima crea un capitolo (Impostazioni › Ricarico standard) o importa il file Excel.");
   modificaArticolo(null);
