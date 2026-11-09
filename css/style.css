@@ -835,3 +835,9 @@ tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !importa
 :root[data-theme="chiaro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
 :root[data-theme="scuro"] { --th-fondo: #6f97c8; --th-testo: #061a33; }
 :root[data-theme="chiaro"], :root[data-theme="scuro"] { --th-fondo: #5a83b8; --th-testo: #000a18; }
+/* riquadri condizioni: titoli alla stessa altezza, tabelle allineate, intestazioni più scure */
+.cond-testa { min-height: 44px; align-items: center; margin-bottom: 4px; }
+.cond-card .cond-tab { margin-top: 8px; }
+.blocco-acq thead th { background: color-mix(in srgb, var(--c-acq) 55%, #ffffff) !important; color: #03221f !important; }
+.blocco-ven thead th { background: color-mix(in srgb, var(--c-ven) 50%, #ffffff) !important; color: #04112e !important; }
+.blocco-ven.blocco-lis thead th { background: color-mix(in srgb, var(--c-lis) 50%, #ffffff) !important; color: #1b0838 !important; }
