@@ -2359,7 +2359,7 @@ $("#righe-catalogo").addEventListener("click", (e) => {
   if (tr) modificaArticolo(S.perK.get(tr.dataset.k));
 });
 $("#c-nuovo").addEventListener("click", () => {
-  if (!S.capitoli.length) return toast("Prima crea un capitolo (Impostazioni › Capitoli del database) o importa il file Excel.");
+  if (!S.capitoli.length) return toast("Prima crea un capitolo (Impostazioni › Ricarico standard) o importa il file Excel.");
   modificaArticolo(null);
 });
 
@@ -2582,7 +2582,7 @@ $("#c-scadenze").addEventListener("click", () => {
 
 $("#c-impost").addEventListener("click", () => {
   dialogo({
-    titolo: "Capitoli e ricarico automatico",
+    titolo: "Ricarico standard per capitolo",
     html: `<p class="muted small" style="margin-top:0">Il ricarico automatico si applica alle offerte “VENDITA CLIENTE” quando non è indicato un ricarico nell'offerta o nel GMA.</p>
       <table><thead><tr><th>Capitolo</th><th class="num">Articoli</th><th>Ricarico automatico</th></tr></thead><tbody>
       ${S.capitoli.map((c, i) => `<tr><td>${esc(c.nome)}</td><td class="num">${S.catalogo.filter((a) => a.capitolo === c.nome).length}</td>
