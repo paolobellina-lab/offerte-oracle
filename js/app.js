@@ -934,9 +934,11 @@ function gestisciSottocapitoli(c) {
       <td class="nowrap"><button type="button" class="tg-ed" data-gs-su="${i}" title="Sposta su" ${i ? "" : "disabled"}>▲</button><button type="button" class="tg-ed" data-gs-giu="${i}" title="Sposta giù" ${i < voci.length - 1 ? "" : "disabled"}>▼</button></td>
       <td><select data-gs-del="${i}"><option value="">tieni</option><option value="cap" ${v.del === "cap" ? "selected" : ""}>elimina (le righe restano senza sottocapitolo)</option><option value="tutto" ${v.del === "tutto" ? "selected" : ""}>elimina con le sue righe</option></select></td></tr>`; }).join("")
       || `<tr><td colspan="6" class="vuoto">Nessun sottocapitolo.</td></tr>`;
-    const nSel = voci.filter((v) => v.sel).length;
+    const sel = voci.filter((v) => v.sel), nSel = sel.length;
+    const tSel = infoDi(sel.flatMap((v) => v.orig));
     $("#gs-unisci", d).disabled = nSel < 2;
-    $("#gs-nsel", d).textContent = nSel < 2 ? "spunta almeno due sottocapitoli" : `${nSel} sottocapitoli selezionati`;
+    $("#gs-nsel", d).innerHTML = !nSel ? "spunta almeno due sottocapitoli"
+      : `${nSel === 1 ? "1 sottocapitolo selezionato" : `${nSel} sottocapitoli selezionati`} · ${tSel.n} righe · totale <b>${euro(tSel.t)}</b>`;
   };
   dialogo({
     titolo: `Sottocapitoli di ${c.nome}`, largo: true,
