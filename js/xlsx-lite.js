@@ -86,6 +86,14 @@ export async function leggiExcel(buf) {
   if (zip.has("xl/sharedStrings.xml")) {
     condivise = figli(xml(await zip.testo("xl/sharedStrings.xml")), "si").map(testoSi);
   }
+  // colori di riempimento delle celle (per riconoscere le righe colorate, es. in rosso da cancellare)
+  let fondoXf = [];
+  if (zip.has("xl/styles.xml")) {
+    const st = xml(await zip.testo("xl/styles.xml"));
+    const fills = figli(st, "fill").map((f) => { const p = f.getElementsByTagName("patternFill")[0]; if (!p || (p.getAttribute("patternType") || "none") === "none") return ""; const fg = p.getElementsByTagName("fgColor")[0]; return fg?.getAttribute("rgb") || (fg?.getAttribute("theme") ? "tema" + fg.getAttribute("theme") : fg?.getAttribute("indexed") ? "idx" + fg.getAttribute("indexed") : "pieno"); });
+    const xfs = st.getElementsByTagName("cellXfs")[0];
+    if (xfs) fondoXf = figli(xfs, "xf").map((x) => fills[Number(x.getAttribute("fillId") || 0)] || "");
+  }
   const cache = {};
   return {
     nomi: fogli.map((f) => f.nome),
@@ -94,12 +102,14 @@ export async function leggiExcel(buf) {
       const f = fogli.find((x) => x.nome === nome);
       if (!f) return null;
       const doc = xml(await zip.testo(f.percorso));
-      const righe = [];
+      const righe = [], fondi = [];
       for (const row of figli(doc, "row")) {
         const ri = Number(row.getAttribute("r")) - 1;
         const arr = [];
         for (const c of figli(row, "c")) {
           const ci = colIndex(c.getAttribute("r") || "");
+          const fondo = fondoXf[Number(c.getAttribute("s") || 0)];
+          if (fondo && !(fondi[ri] || "").includes(fondo)) fondi[ri] = (fondi[ri] ? fondi[ri] + "|" : "") + fondo;
           const t = c.getAttribute("t");
           const vEl = c.getElementsByTagName("v")[0];
           let v = vEl ? vEl.textContent : null;
@@ -114,6 +124,7 @@ export async function leggiExcel(buf) {
         righe[ri] = arr;
       }
       for (let i = 0; i < righe.length; i++) if (!righe[i]) righe[i] = [];
+      righe.fondi = fondi;
       cache[nome] = righe;
       return righe;
     },

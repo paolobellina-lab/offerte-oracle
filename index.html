@@ -321,10 +321,13 @@
         <label class="f">Fornitore<select id="cf-forn"></select></label>
         <label class="f">GMA<select id="cf-gma"></select></label>
         <label class="f">Tipo<select id="cf-tipo"><option value="">Tutti</option><option value="gen">Solo generici</option><option value="att">Solo attività</option><option value="art">Solo articoli normali</option></select></label>
+        <label class="f">Doppioni<select id="cf-dop"><option value="">—</option><option value="cod">Codice doppio</option><option value="nord">N° ordinazione doppio</option><option value="tutti">Codice o n° ordinazione doppio</option></select></label>
         <label class="f">Prezzo<select id="cf-prezzo"><option value="">Tutti</option><option value="fresco">Valido</option><option value="medio">In scadenza</option><option value="vecchio">Da aggiornare</option><option value="nd">Data non indicata</option></select></label>
         <button type="button" class="btn small" id="cf-azzera">Azzera filtri</button>
         <span class="spacer"></span>
         <button type="button" class="btn verde forte" id="cf-esporta">⤓ Esporta in Excel</button>
+        <button type="button" class="btn verde" id="cf-correggi" title="Ricarica un database esportato e corretto in Excel: righe rosse cancellate, le altre aggiornate">⤒ Applica correzioni da Excel</button>
+        <input type="file" id="cf-file" accept=".xlsx,.xlsm" hidden>
       </div>
       <div class="row" style="margin-bottom:8px">
         <div class="legenda">
