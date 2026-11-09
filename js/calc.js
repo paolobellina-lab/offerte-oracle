@@ -308,7 +308,7 @@ export function righeOracle(off, opz = {}) {
 }
 
 /* Controllo cartellino cliente (foglio SC_CLIENTI e colonna K di TIPO OFFERTA).
-   Per ogni GMV dell'offerta confronta lo sconto complessivo con quello del cartellino del cliente;
+   Per ogni GMA dell'offerta confronta lo sconto complessivo con quello del cartellino del cliente;
    per l'attività tecnica confronta il prezzo a giornata con la tariffa del cliente
    (l'Excel confrontava il prezzo di tutti i giorni con la tariffa giornaliera). */
 export function controlloCartellino(off, cliente, opz = {}) {
@@ -317,7 +317,7 @@ export function controlloCartellino(off, cliente, opz = {}) {
   const visti = new Map();
   for (const x of righe) {
     const g = x.riga.gmv || "";
-    if (!g || visti.has(g)) continue; // come CERCA.VERT: vale la prima riga del GMV
+    if (!g || visti.has(g)) continue; // come CERCA.VERT: vale la prima riga del GMA
     visti.set(g, x);
   }
   const esiti = [];

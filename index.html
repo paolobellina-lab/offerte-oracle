@@ -169,7 +169,7 @@
               <button type="button" class="btn small" id="pick-nessuno">Deseleziona</button>
               <span class="muted small">Seleziona con le caselle, cliccando su codice o descrizione, Maiusc+clic per un intervallo; poi tasto destro › Aggiungi. La selezione resta anche se cambi ricerca.</span></div>
             <div class="tbl-wrap picker-wrap"><table>
-              <thead><tr><th class="sel-col"><input type="checkbox" id="pick-tutti" title="Seleziona tutti gli articoli visibili"></th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th>GMV</th><th>Agg.</th><th class="num">Aggiungi</th></tr></thead>
+              <thead><tr><th class="sel-col"><input type="checkbox" id="pick-tutti" title="Seleziona tutti gli articoli visibili"></th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th><th>GMA</th><th>Agg.</th><th class="num">Aggiungi</th></tr></thead>
               <tbody id="righe-picker"></tbody>
             </table></div>
             <div class="row" style="margin-top:8px"><span class="muted small" id="picker-info"></span></div>
@@ -310,7 +310,8 @@
         <h2>Catalogo</h2>
         <select id="c-capitolo"></select>
         <select id="c-sotto" title="Sottocapitolo del database"></select>
-        <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMV">
+        <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMA">
+        <button class="btn" id="c-gma">Elenco GMA</button>
         <button class="btn" id="c-scadenze">Scadenze prezzi</button>
         <button class="btn" id="c-impost">Impostazioni capitolo</button>
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
@@ -327,7 +328,7 @@
       </div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino acq.</th>
-          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th class="num">Ripar.</th><th>GMV</th><th>Aggiornato</th></tr></thead>
+          <th class="num">Sc.3</th><th class="num">Sc.4</th><th class="num">Sc.5</th><th class="num">Aum.1</th><th class="num">Ripar.</th><th>GMA</th><th>Aggiornato</th></tr></thead>
         <tbody id="righe-catalogo"></tbody>
       </table></div>
       <div class="row" style="margin-top:8px"><button class="btn small" id="c-altri" hidden>Mostra altri</button></div>
@@ -340,7 +341,7 @@
         <select id="b-fornitore"></select>
         <input id="b-cerca" type="search" class="grow" placeholder="Cerca codice, modello, descrizione o famiglia">
         <label class="row small"><input type="checkbox" id="b-decidere"> solo da decidere</label>
-        <button class="btn" id="b-sconti">Sconti GMA</button>
+        <button class="btn" id="b-sconti">Elenco GMA</button>
         <button class="btn primary" id="b-carica">+ Carica listino</button>
         <input type="file" id="b-file" accept=".xlsx,.xlsm,.csv,.txt,.pdf" hidden>
       </div>
@@ -387,7 +388,7 @@
       <div class="card stack">
         <h2>Importa dal file Excel</h2>
         <p class="muted" style="margin:0">Carica il file <b>Template_Import_Righe-OFFERTA</b> (.xlsm o .xlsx). Si leggono i fogli catalogo,
-          i capitoli con il ricarico automatico, i GMV e i cartellini clienti. Il file non viene modificato.</p>
+          i capitoli con il ricarico automatico, i GMA e i cartellini clienti. Il file non viene modificato.</p>
         <label class="drop" id="drop-xlsx">Trascina qui il file oppure fai clic per sceglierlo
           <input type="file" id="file-xlsx" accept=".xlsm,.xlsx" hidden>
         </label>
@@ -397,7 +398,7 @@
       <div class="card stack">
         <h2>Aggiorna i prezzi da Oracle</h2>
         <p class="muted" style="margin:0">Dalla griglia delle righe offerta di Oracle seleziona tutto e copia (con la riga delle intestazioni), poi incolla qui.
-          Servono le colonne <b>Codice Articolo Fornitore</b> e <b>Prezzo Unitario</b>; se c'è la colonna <b>GMA</b> si aggiorna anche il GMV.
+          Servono le colonne <b>Codice Articolo Fornitore</b> e <b>Prezzo Unitario</b>; se c'è la colonna <b>GMA</b> si aggiorna anche il GMA dell'articolo.
           Va bene anche il file delle righe offerta esportato da Oracle (Excel, CSV o PDF). Si aggiornano il database e la biblioteca.</p>
         <textarea id="incolla-oracle" rows="5" placeholder="Incolla qui le righe copiate da Oracle"></textarea>
         <div class="row">

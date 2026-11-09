@@ -1,4 +1,4 @@
-// Importazione dal file Excel "Template_Import_Righe-OFFERTA": cataloghi, GMV, capitoli e cartellini clienti.
+// Importazione dal file Excel "Template_Import_Righe-OFFERTA": cataloghi, GMA, capitoli e cartellini clienti.
 import { leggiExcel, dataDaSeriale } from "./xlsx-lite.js";
 import { num } from "./calc.js";
 
@@ -98,7 +98,7 @@ function leggiCapitoli(righe) {
   return out;
 }
 
-/* GMV e fornitori (TIPO OFFERTA righe 13–112, colonne B e C). */
+/* GMA e fornitori (TIPO OFFERTA righe 13–112, colonne B e C). */
 function leggiGmv(righe) {
   const out = [];
   if (!righe) return out;
@@ -111,7 +111,7 @@ function leggiGmv(righe) {
   return out;
 }
 
-/* Cartellini clienti (foglio SC_CLIENTI: intestazioni GMV alla riga 10, clienti dalla riga 11). */
+/* Cartellini clienti (foglio SC_CLIENTI: intestazioni GMA alla riga 10, clienti dalla riga 11). */
 function leggiClienti(righe) {
   const out = [];
   if (!righe) return out;
@@ -175,7 +175,7 @@ export async function analizzaFile(buf) {
 
 /* Aggiornamento listino da Oracle: testo incollato dalla griglia di Oracle (con intestazioni)
    oppure foglio "AGGIORNAMENTO LISTINO". Servono le colonne "Codice Articolo Fornitore" e "Prezzo Unitario";
-   "GMA" (se c'è) aggiorna anche il GMV. */
+   "GMA" (se c'è) aggiorna anche il GMA. */
 export function leggiAggiornamentoListino(righe) {
   const norm = (s) => testo(s).toLowerCase().replace(/\s+/g, " ");
   const hi = righe.findIndex((r) => r && r.some((c) => norm(c).includes("codice articolo")));
