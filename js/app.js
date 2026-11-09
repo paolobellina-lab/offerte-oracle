@@ -1635,7 +1635,7 @@ function disegnaExport(c) {
     `<button class="btn small" id="export-tutti" type="button">Tutti</button>` : "";
   const { righe, avvisi } = datiOracle(c);
   const av = [];
-  if (escl.size) av.push(`<div class="avviso info">Esportazione parziale: ${[...escl].map((n) => `“${esc(n || "senza capitolato")}”`).join(", ")} ${escl.size === 1 ? "escluso" : "esclusi"}. Le linee ripartono da ${num(c.lineaPartenza) || 10}.</div>`);
+  if (escl.size) av.push(`<div class="avviso info">Esportazione parziale: ${[...escl].map((n) => `“${esc(n || "senza capitolato")}”`).join(", ")} ${escl.size === 1 ? "escluso" : "esclusi"}.</div>`);
   if (!righe.length) av.push(`<div class="avviso">Nessuna riga da esportare.</div>`);
   if (avvisi.length) av.push(`<div class="avviso bad"><b>${avvisi.length} righe escluse:</b><ul class="riep">${avvisi.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`);
   const fuori = controlloCartellino(c, clienteOff(), opzCap(c)).filter((x) => x.stato === "fuori");
