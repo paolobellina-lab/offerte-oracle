@@ -9,12 +9,16 @@ const RE_QTA = /^\d+(?:,\d+)?$/;
 const soldi = (t) => num(String(t).replace(/€/g, "").replace(/\s/g, ""));
 const mediana = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 const moda = (a, arr = 1) => { const m = new Map(); for (const v of a) { const k = Math.round(v / arr) * arr; m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((x, y) => y[1] - x[1])[0]?.[0]; };
-const RE_TOTALE = /^\s*(sub\s*-?\s*)?totale\b/i;
+const RE_TOTALE = /^\s*(sub\s*-?\s*)?total[ei]\b/i;
 const RE_INTEST = /^(codice|cod\.?|articolo|prodotto|descrizione|u\.?\s?m\.?|q\.?\s?t[aà]['.]?|quantit[aà]|prezzo|unitario|totale|importo|vendita|in|euro|€|pos\.?|sconto|netto|listino|n\.|riga|voce|capitolato|azienda|marca|gdp|%|sc\.?)$/i;
 
 /* Prestazioni / servizi: in Oracle diventano attività tecnica (PITATT). */
-const RE_PRESTAZIONE = /^(prestazion|servizi|attivit|manodopera|giornat|ore\b|engineering|commissioning|messa in servizio|programmazione|assistenza|collaudo)/i;
-export const sembraPrestazione = (codice, descrizione) => RE_PRESTAZIONE.test(String(codice || "").trim()) || (!String(codice || "").trim() && RE_PRESTAZIONE.test(String(descrizione || "").trim()));
+const RE_PRESTAZIONE = /^(prestazion|servizi|attivit|manodopera|giornat|ore\b|engineering|commissioning|messa in servizio|programmazione|assistenza|collaudo|oneri|project management)/i;
+const RE_PRESTAZIONE_COD = /\b(prestazion\w*|servizi\w*|attivit\w*|manodopera|giornat\w*|engineering|commissioning|project\s+management|oneri)\b/i;
+export const sembraPrestazione = (codice, descrizione) => {
+  const c = String(codice || "").replace(/^[^A-Za-zÀ-ÿ]+/, "").trim(), d = String(descrizione || "").replace(/^[^A-Za-zÀ-ÿ]+/, "").trim();
+  return RE_PRESTAZIONE.test(c) || RE_PRESTAZIONE_COD.test(c) || ((!c || c.length < 3) && RE_PRESTAZIONE.test(d)) || /^(commissioning|attivit[aà] di gestione commessa|oneri di configurazione)/i.test(d);
+};
 
 /* Righe di testo di una pagina: gli elementi sulla stessa altezza; i pezzi vicini si uniscono in celle. */
 function lineeDi(items, p) {
@@ -106,9 +110,16 @@ export function leggiOffertaPdf(pagine) {
   };
   for (const l of ancore) l.k.resto = togliPos(l.k.resto).celle;
   const limDx = moda(ancore.map((l) => l.k.inizio), 2) - 1;
-  const xCod = moda(ancore.map((l) => l.k.resto[0]?.x).filter((x) => x !== undefined), 2);
-  const xDesc = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x > xCod + 8).map((c) => c.x)), 2) ?? Infinity;
-  const hb = moda(ancore.flatMap((l) => l.items.map((i) => i.h)), 0.5) || 8;
+  const xCod0 = moda(ancore.map((l) => l.k.resto[0]?.x).filter((x) => x !== undefined), 2);
+  const xDesc = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x > xCod0 + 8).map((c) => c.x)), 2) ?? Infinity;
+  // colonna del codice: a sinistra della descrizione ci possono essere più colonne (es. marca, voce di computo):
+  // il codice è la più vicina alla descrizione tra quelle presenti in almeno metà degli articoli
+  const cluster = new Map();
+  for (const l of ancore) for (const x of new Set(l.k.resto.filter((c) => c.x < xDesc - 2).map((c) => Math.round(c.x / 4) * 4))) cluster.set(x, (cluster.get(x) || 0) + 1);
+  const xCod = Math.max(...[...cluster.entries()].filter(([, n]) => n >= ancore.length * 0.5).map(([x]) => x), -Infinity);
+  const inCodice = (c) => c.x < xDesc - 2 && (xCod === -Infinity || c.x >= xCod - 4);
+  // altezza del testo delle descrizioni (i prezzi possono essere scritti più piccoli)
+  const hb = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x >= xDesc - 2).map((c) => c.h)), 0.5) || moda(ancore.flatMap((l) => l.items.map((i) => i.h)), 0.5) || 8;
   const pagAncore = new Set(ancore.map((l) => l.p));
   // 3. righe ripetute su più pagine (intestazioni e piè di pagina): si tolgono
   const firma = (l) => norm(l.testo).replace(/\d+/g, "#") + "|" + Math.round(l.y / 3);
@@ -131,11 +142,21 @@ export function leggiOffertaPdf(pagine) {
       if (/totale\s+generale/i.test(l.testo)) { fine = true; break; }
     }
   }
+  // carattere del testo delle descrizioni, pagina per pagina (i nomi dei caratteri cambiano da una pagina all'altra):
+  // una riga scritta con un altro carattere (es. grassetto) è un titolo
+  const fontDesc = (l) => { const c = (l.k ? l.k.resto : l.celle).filter((x) => x.x >= xDesc - 2 && x.x < limDx); return c.length ? c[0].f : ""; };
+  const fontCorpo = new Map();
+  for (const p of new Set(seq.map((l) => l.p))) {
+    const m = new Map();
+    for (const l of seq) if (l.p === p) for (const c of (l.k ? l.k.resto : l.celle)) if (c.f && c.x >= xDesc - 2 && c.x < limDx) m.set(c.f, (m.get(c.f) || 0) + c.t.length);
+    fontCorpo.set(p, [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "");
+  }
+  const maiuscolo = (t) => { const lettere = t.replace(/[^A-Za-zÀ-ÿ]/g, ""); return lettere.length >= 3 && lettere === lettere.toUpperCase(); };
   // tipo di ogni riga e divisione in parti codice / descrizione
   for (const l of seq) {
     let sx = l.k ? l.k.resto : l.celle.filter((c) => c.x < limDx);
     if (!l.k) { const tp = togliPos(sx); sx = tp.celle; l.pos = tp.pos; }
-    l.cod = sx.filter((c) => c.x < xDesc - 2).map((c) => c.t).join(" ").trim();
+    l.cod = sx.filter(inCodice).map((c) => c.t).join(" ").trim();
     l.desc = sx.filter((c) => c.x >= xDesc - 2).map((c) => c.t).join(" ").trim();
     const soldiTot = l.celle.filter((c) => RE_SOLDI.test(c.t) || /\d,\d{2}\s*€?$/.test(c.t));
     if (l.k) l.tipo = "articolo";
@@ -143,19 +164,21 @@ export function leggiOffertaPdf(pagine) {
     else if (RE_TOTALE.test(l.testo) && soldiTot.length) {
       // il primo importo dopo la scritta "totale" (sulla stessa riga ci può essere anche il totale IVA inclusa)
       l.tipo = "totale";
-      const m = l.testo.replace(/^.*?totale/i, "").match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/);
+      const m = l.testo.replace(/^.*?total[ei]/i, "").match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/);
       l.valore = m ? soldi(m[0]) : soldi(soldiTot[soldiTot.length - 1].t);
     }
     else if (l.h >= hb * 1.2 && !soldiTot.length && l.desc) l.tipo = "sezione";
     else if (l.pos && !soldiTot.length && (l.cod || l.desc)) l.tipo = "sezione"; // riga numerata senza prezzo: titolo di gruppo
     else l.tipo = "testo";
+    if (l.tipo === "testo" && !l.cod && l.desc && fontCorpo.get(l.p) && fontDesc(l) && fontDesc(l) !== fontCorpo.get(l.p)) {
+      l.titolo = true;
+      // titolo tutto maiuscolo in un altro carattere: è una sezione (es. "ANTINTRUSIONE", "CONTROLLO ACCESSI")
+      if (!soldiTot.length && maiuscolo(l.desc) && l.desc.length <= 80) { l.tipo = "sezione"; l.sezDaCarattere = true; }
+    }
+    if (l.tipo === "sezione" && !l.sezDaCarattere && !l.pos) l.sezDaAltezza = true;
   }
-  // carattere del testo delle descrizioni: una riga scritta con un altro carattere (es. grassetto) è un titolo
-  const fontDesc = (l) => { const c = (l.k ? l.k.resto : l.celle).filter((x) => x.x >= xDesc - 2 && x.x < limDx); return c.length ? c[0].f : ""; };
-  const conta2 = new Map();
-  for (const l of seq) if (l.tipo === "articolo" || l.tipo === "testo") { const f = fontDesc(l); if (f) conta2.set(f, (conta2.get(f) || 0) + 1); }
-  const fontCorpo = [...conta2.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-  for (const l of seq) if (l.tipo === "testo" && !l.cod && fontCorpo && fontDesc(l) && fontDesc(l) !== fontCorpo) l.titolo = true;
+  // se le sezioni sono scritte più grandi, i titoli maiuscoli dello stesso corpo del testo sono solo sottotitoli
+  if (seq.some((l) => l.sezDaAltezza)) for (const l of seq) if (l.sezDaCarattere) l.tipo = "testo";
   // passo tra le righe di una descrizione
   const passi = [];
   for (let i = 1; i < seq.length; i++) if (seq[i].p === seq[i - 1].p) { const d = seq[i - 1].y - seq[i].y; if (d > 0.5 && d < hb * 3) passi.push(d); }
@@ -177,12 +200,18 @@ export function leggiOffertaPdf(pagine) {
     const art = b.filter((l) => l.tipo === "articolo");
     if (!art.length) continue;
     // codice scritto un po' più in alto o più in basso della riga dei prezzi (riga con solo il codice)
+    for (const a of art) a.codRighe = a.cod ? [{ y: a.y, t: a.cod }] : [];
     for (const l of b) {
-      if (l.tipo !== "testo" || !l.cod || l.desc || l.usata) continue;
+      if (l.tipo !== "testo" || !l.cod || l.usata || /^note?\b/i.test(l.cod)) continue;
+      // riga con solo il codice: fino a un'altezza di testo dall'articolo; con anche la descrizione, più vicina
+      const lim = l.desc ? hb * 0.8 : hb;
       let best = null;
-      for (const a of art) if (!a.cod && Math.abs(a.y - l.y) <= hb && (!best || Math.abs(a.y - l.y) < Math.abs(best.y - l.y))) best = a;
-      if (best) { best.cod = l.cod; l.usata = true; }
+      for (const a of art) if (Math.abs(a.y - l.y) <= lim && (!best || Math.abs(a.y - l.y) < Math.abs(best.y - l.y))) best = a;
+      if (!best) continue;
+      best.codRighe.push({ y: l.y, t: l.cod });
+      if (l.desc) l.cod = ""; else l.usata = true; // la sua descrizione resta una riga di descrizione
     }
+    for (const a of art) a.cod = a.codRighe.sort((x, y) => y.y - x.y).map((x) => x.t).join(" ").trim();
     const L = [];
     for (const l of b) {
       if (l.tipo === "articolo") { if (l.desc) L.push({ y: l.y, t: l.desc, own: art.indexOf(l) }); }
@@ -242,7 +271,7 @@ export function leggiOffertaPdf(pagine) {
   // 6. sequenza finale: sezioni, articoli, totali; le righe libere (titoli, "Punti gestiti") vanno davanti
   //    alla descrizione dell'articolo che segue, le NOTE si tengono a parte
   const sezioni = [];
-  let sez = null, totaleGenerale = null;
+  let sez = null, totaleGenerale = null, sezGenerale = null;
   const note = [];
   let par = [], nota = [];
   const chiudiNota = () => { const t = nota.join(" ").trim(); if (t.length >= 25) note.push(t); nota = []; };
@@ -252,7 +281,7 @@ export function leggiOffertaPdf(pagine) {
     if (l.tipo === "sezione") { par = []; nuovaSez([l.cod, l.desc].filter(Boolean).join(" ") || l.testo); }
     else if (l.tipo === "totale") {
       par = [];
-      if (/generale/i.test(l.testo)) totaleGenerale = l.valore;
+      if (/generale/i.test(l.testo) || /^\s*total[ei]\s*$/i.test(l.desc || "")) { totaleGenerale = l.valore; sezGenerale = sezioni.length; }
       else if (sez) sez.totalePdf = l.valore;
     } else if (l.tipo === "testo" && !l.usata) {
       if (l.nota) { if (l.desc) nota.push(l.desc); continue; }
@@ -262,7 +291,8 @@ export function leggiOffertaPdf(pagine) {
       if (!sez) nuovaSez("Offerta");
       const k = l.k;
       const testa = par.join(" ").trim(); par = [];
-      const descr = [testa, l.righe.map((r) => r.t).join(" ")].filter(Boolean).join(" – ").replace(/\s+/g, " ").trim();
+      const corpo = l.righe.map((r) => r.t).join(" ");
+      const descr = (testa && corpo ? testa + (/-$/.test(testa) ? "" : " – ") + corpo : testa || corpo).replace(/\s+/g, " ").trim();
       sez.righe.push({
         codice: l.cod, descrizione: descr, um: k.um ? k.um.t : "n.", qta: num(k.qta.t),
         unitario: k.unitario, totale: k.totale, listino: k.listino, nonTorna: !!l.nonTorna,
@@ -277,6 +307,9 @@ export function leggiOffertaPdf(pagine) {
     if (totaleGenerale === null) totaleGenerale = x.totalePdf;
     x.totalePdf = null;
   }
+  // il totale generale vale per le sezioni che lo precedono (dopo possono esserci le opzioni)
+  const prima = sezGenerale === null ? sezioni : sezioni.slice(0, sezGenerale);
+  for (const x of sezioni) x.nelTotale = prima.includes(x);
   const piene = sezioni.filter((s) => s.righe.length);
   return piene.length ? { sezioni: piene, totaleGenerale, note } : null;
 }

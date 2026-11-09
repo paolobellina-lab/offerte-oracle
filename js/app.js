@@ -3046,14 +3046,15 @@ async function importaOffertaFornitore(file) {
   const capDef = S.capitoli.find((c) => /GENERIC/i.test(c.nome))?.nome || "ARTICOLI_GENERICI";
   const disegna = (d) => {
     const o = st.o, tutte = o.sezioni.flatMap((x) => x.righe), tot = sommaRighe(tutte);
+    const totCfr = sommaRighe(o.sezioni.filter((x) => x.nelTotale !== false).flatMap((x) => x.righe));
     const nAtt = [...st.att.values()].filter(Boolean).length, nNo = tutte.filter((r) => r.nonTorna).length;
-    const okGen = o.totaleGenerale === null ? null : Math.abs(tot - o.totaleGenerale) <= tolTot(o.totaleGenerale);
+    const okGen = o.totaleGenerale === null ? null : Math.abs(totCfr - o.totaleGenerale) <= tolTot(o.totaleGenerale);
     $("#of-riep", d).innerHTML = !tutte.length ? `<div class="avviso">Nessuna riga letta${fogli ? ": controlla le colonne codice, quantità e prezzo" : ""}.</div>` : `
       <div class="row" style="flex-wrap:wrap;gap:6px 14px;align-items:center">
         <span><b>${tutte.length}</b> righe in <b>${o.sezioni.length}</b> ${o.sezioni.length === 1 ? "sezione" : "sezioni"}</span>
         <span>di cui <b class="att-txt">${nAtt}</b> prestazioni → PITATT</span>
         <span>totale letto <b>${euro(tot)}</b></span>
-        ${okGen === null ? "" : okGen ? `<span class="badge ok">✓ uguale al totale del documento (${euro(o.totaleGenerale)})</span>` : `<span class="badge bad">✗ il documento dice ${euro(o.totaleGenerale)}</span>`}
+        ${okGen === null ? "" : okGen ? `<span class="badge ok">✓ uguale al totale del documento (${euro(o.totaleGenerale)})${totCfr !== tot ? " · le sezioni dopo il totale (opzioni) sono a parte" : ""}</span>` : `<span class="badge bad">✗ il documento dice ${euro(o.totaleGenerale)}</span>`}
         ${nNo ? `<span class="badge bad">${nNo} righe con q.tà × prezzo ≠ totale</span>` : ""}
       </div>`;
     $("#of-sez", d).innerHTML = o.sezioni.map((sz, i) => {
