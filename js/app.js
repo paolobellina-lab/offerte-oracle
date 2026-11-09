@@ -2776,7 +2776,8 @@ async function importaOffertaFornitore(file) {
   };
   rileggi();
   const opzCol = (v) => `<option value="">— nessuna —</option>` + celle.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
-  const nomeLibero = (n) => { let x = n, k = 2; while (S.off.capitoli.some((c) => c.nome === x)) x = `${n} (${k++})`; return x; };
+  // capitolo di destinazione: quello degli articoli generici del database, se c'è
+  const capDef = S.capitoli.find((c) => /GENERIC/i.test(c.nome))?.nome || "ARTICOLI_GENERICI";
   const disegna = (d) => {
     const o = st.o, tutte = o.sezioni.flatMap((x) => x.righe), tot = sommaRighe(tutte);
     const nAtt = [...st.att.values()].filter(Boolean).length, nNo = tutte.filter((r) => r.nonTorna).length;
@@ -2792,7 +2793,7 @@ async function importaOffertaFornitore(file) {
     $("#of-sez", d).innerHTML = o.sezioni.map((sz, i) => {
       const somma = sommaRighe(sz.righe), ok = sz.totalePdf === null ? null : Math.abs(somma - sz.totalePdf) <= tolTot(sz.totalePdf);
       const nA = sz.righe.filter((_, j) => st.att.get(`${i}|${j}`)).length, aperta = st.aperte.has(i);
-      return `<tr class="of-sez${st.escluse.has(i) ? " qta-zero" : ""}"><td><input type="checkbox" data-of-inc="${i}" ${st.escluse.has(i) ? "" : "checked"} title="Importa questa sezione"></td>
+      return `<tr class="of-sez${st.escluse.has(i) ? " qta-zero" : ""}"><td><input type="checkbox" data-of-inc="${i}" ${st.escluse.has(i) ? "" : "checked"} title="Importa questo sottocapitolo"></td>
         <td><input class="of-nome" data-of-nome="${i}" value="${esc(st.nomi.get(i))}"></td>
         <td class="num">${sz.righe.length}</td><td class="num">${nA || ""}</td><td class="num">${euro(somma)}</td>
         <td class="num">${sz.totalePdf === null ? '<span class="muted">—</span>' : euro(sz.totalePdf)}</td>
@@ -2813,15 +2814,19 @@ async function importaOffertaFornitore(file) {
   };
   dialogo({
     titolo: `Importa offerta fornitore · ${file.name}`, largo: true,
-    html: `<p class="muted small" style="margin-top:0">Ogni sezione diventa un capitolo dell'offerta. Le righe entrano come articoli generici
-        <b>P000 ARTICOLO_GEN</b> (n° di ordinazione = codice del fornitore, prezzo = listino acquisto); quelle con <b>Att.</b> spuntato come attività tecnica
-        <b>PITATT</b>. Non vanno nel database né nella biblioteca. Quali capitoli esportare lo decidi poi nel riepilogo.</p>
+    html: `<p class="muted small" style="margin-top:0">Tutto entra in <b>un capitolo</b>; ogni sezione del documento diventa un <b>sottocapitolo</b> (capitolato, “Nome Capitolato” in Oracle).
+        Le righe entrano come articoli generici <b>P000 ARTICOLO_GEN</b> (n° di ordinazione = codice del fornitore, prezzo = listino acquisto); quelle con <b>Att.</b> spuntato
+        come attività tecnica <b>PITATT</b>. Non vanno nel database né nella biblioteca. Quali sottocapitoli esportare lo scegli poi nelle impostazioni di esportazione.</p>
       ${fogli ? `<div style="margin:8px 0 10px"><span class="muted small" style="font-weight:600">Colonne del file</span>
         <div class="lg-mappa">${OFF.CAMPI_OFF.map((c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-of-campo="${c.k}">${opzCol(mappa[c.k])}</select></label>`).join("")}</div>
         <p class="muted small" style="margin:4px 0 0">Una riga con solo un testo (senza codice e senza prezzo) apre una nuova sezione.</p></div>` : ""}
-      <label class="f" style="max-width:420px">Riferimento dell'offerta del fornitore<input id="of-rif" value="${esc(rif)}"></label>
+      <div class="row" style="flex-wrap:wrap;gap:8px 14px">
+        <label class="f grow" style="min-width:260px">Capitolo dell'offerta (nuovo o esistente)<input id="of-cap" list="of-caps" value="${esc(capDef)}"></label>
+        <label class="f grow" style="min-width:260px">Riferimento dell'offerta del fornitore<input id="of-rif" value="${esc(rif)}"></label>
+      </div><datalist id="of-caps">${[...new Set([...S.off.capitoli.map((c) => c.nome), ...S.capitoli.map((c) => c.nome)])].map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+      <p class="muted small" id="of-cap-stato" style="margin:4px 0 0"></p>
       <div id="of-riep" style="margin:10px 0"></div>
-      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th></th><th>Capitolo (nome della sezione)</th><th class="num">Righe</th><th class="num">Prestaz.</th>
+      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th></th><th>Sottocapitolo (capitolato) = sezione del documento</th><th class="num">Righe</th><th class="num">Prestaz.</th>
         <th class="num">Somma righe</th><th class="num">Totale nel documento</th><th></th><th></th></tr></thead><tbody id="of-sez"></tbody></table></div>
       <details id="of-note" style="margin-top:10px" hidden><summary class="small"><b id="of-note-n"></b> note del fornitore</summary>
         <ul class="riep" id="of-note-lista"></ul>
@@ -2838,6 +2843,9 @@ async function importaOffertaFornitore(file) {
         else return;
         disegna(d);
       });
+      const statoCap = () => { const n = $("#of-cap", d).value.trim(), c = S.off.capitoli.find((x) => x.nome === n);
+        $("#of-cap-stato", d).textContent = !n ? "Scrivi il nome del capitolo." : c ? `Capitolo già nell'offerta (${c.righe.length} righe): le nuove righe si aggiungono in fondo.` : "Nuovo capitolo dell'offerta."; };
+      $("#of-cap", d).addEventListener("input", statoCap); statoCap();
       d.addEventListener("click", (e) => {
         const b = e.target.closest("[data-of-apri]"); if (!b) return;
         const i = +b.dataset.ofApri; st.aperte.has(i) ? st.aperte.delete(i) : st.aperte.add(i); disegna(d);
@@ -2845,22 +2853,26 @@ async function importaOffertaFornitore(file) {
       disegna(d);
     },
     onConferma(v, d) {
-      const o = st.o, fonte = $("#of-rif", d).value.trim() || rif;
+      const o = st.o, fonte = $("#of-rif", d).value.trim() || rif, nomeCap = $("#of-cap", d).value.trim();
+      if (!nomeCap) { toast("Scrivi il nome del capitolo."); return false; }
       const scelte = o.sezioni.map((sz, i) => ({ sz, i })).filter((x) => !st.escluse.has(x.i) && x.sz.righe.length);
-      if (!scelte.length) { toast("Nessuna sezione da importare."); return false; }
-      if (scelte.some((x) => !st.nomi.get(x.i))) { toast("Ogni capitolo deve avere un nome."); return false; }
-      const nuovi = [];
+      if (!scelte.length) { toast("Nessun sottocapitolo da importare."); return false; }
+      if (scelte.some((x) => !st.nomi.get(x.i))) { toast("Ogni sottocapitolo deve avere un nome."); return false; }
+      let c = S.off.capitoli.find((x) => x.nome === nomeCap);
+      const nuovo = !c;
+      if (nuovo) { c = nuovoCapitolo(nomeCap, { imp: impOfferta(S.off) }); S.off.capitoli.push(c); }
+      c.sottocapitoli = true; // i sottocapitoli vanno in Oracle come "Nome Capitolato"
+      c.fonte = [...new Set([...(c.fonte ? c.fonte.split(" · ") : []), fonte])].join(" · ");
+      let n = 0;
       for (const { sz, i } of scelte) {
-        const nome = nomeLibero(st.nomi.get(i));
-        const c = nuovoCapitolo(nome, { imp: impOfferta(S.off) });
-        c.fonte = fonte;
-        c.righe = sz.righe.map((r, j) => rigaDaOffertaForn(r, st.att.get(`${i}|${j}`), fonte, nome));
-        S.off.capitoli.push(c); nuovi.push(nome);
+        const cap = st.nomi.get(i);
+        aggiungiCapitolato(c, cap);
+        for (const [j, r] of sz.righe.entries()) { c.righe.push({ ...rigaDaOffertaForn(r, st.att.get(`${i}|${j}`), fonte, nomeCap), capitolato: cap }); n++; }
       }
-      if (st.note && o.note.length) S.off.note = [S.off.note, `Note dell'offerta ${fonte}:`, ...o.note.map((n) => "- " + n)].filter(Boolean).join("\n");
-      S.capAtt = nuovi[0]; S.sub = "righe"; S.sel = new Set();
+      if (st.note && o.note.length) S.off.note = [S.off.note, `Note dell'offerta ${fonte}:`, ...o.note.map((x) => "- " + x)].filter(Boolean).join("\n");
+      S.capAtt = nomeCap; S.sub = "righe"; S.sel = new Set();
       modificata(); disegnaTestata(); disegnaOfferta(true);
-      toast(`${nuovi.length === 1 ? "Creato il capitolo" : `Creati ${nuovi.length} capitoli`} con ${scelte.reduce((a, x) => a + x.sz.righe.length, 0)} righe da ${fonte}.`, 5000);
+      toast(`${n} righe in ${scelte.length} sottocapitoli ${nuovo ? "nel nuovo capitolo" : "aggiunte al capitolo"} ${nomeCap}.`, 5000);
     },
   });
 }

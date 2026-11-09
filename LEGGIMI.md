@@ -83,7 +83,9 @@ La biblioteca raccoglie i listini dei fornitori. Gli articoli restano nascosti f
 
 Nel menu dell'offerta, **Importa offerta fornitore** legge il PDF (o Excel / CSV) dell'offerta di un fornitore:
 
-- ogni **sezione** del documento diventa un **capitolo** dell'offerta (il nome si può cambiare nell'anteprima);
+- tutto entra in **un capitolo** (nuovo o già nell'offerta; proposto quello degli articoli generici) e ogni **sezione**
+  del documento diventa un **sottocapitolo** (capitolato, "Nome Capitolato" in Oracle; il nome si può cambiare nell'anteprima).
+  Quali sottocapitoli esportare si sceglie nella pagina di esportazione del capitolo;
 - ogni riga diventa un articolo generico **P000 ARTICOLO_GEN**: n° di ordinazione = codice del fornitore,
   descrizione completa, prezzo netto = listino acquisto. Se il documento ha listino e sconto, si prende il netto;
 - le **prestazioni** (codice o descrizione che inizia con "Prestazioni", "Servizi", "Attività"…) entrano come
