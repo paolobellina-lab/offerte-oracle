@@ -729,7 +729,6 @@ function disegnaOffertaIn(cambioSub) {
     ${impOfferta(o) === "listino" ? "" : `<div class="kpi k-acq"><span>Acquistato</span><span class="big">${euro(acquistato)}</span></div>
     <div class="kpi k-mar ${venduto && marginePct(venduto, acquistato) < 0 ? "k-neg" : ""}"><span>Margine</span><span class="big">${venduto ? pctTxt(marginePct(venduto, acquistato)) || "0%" : "—"}</span></div>
     <div class="kpi k-ric"><span>Ricarico</span><span class="big">${acquistato ? pctTxt(ricaricoPct(venduto, acquistato)) || "0%" : "—"}</span></div>`}
-    <div class="kpi k-info"><span>Capitoli · righe</span><span class="big">${o.capitoli.length} · ${righe}</span></div>
     ${o.cliente ? `<div class="kpi"><span>Cartellino ${esc(cli?.nome || "")}</span><span>${
       fuori ? `<span class="badge bad">${fuori} GMV fuori cartellino</span>` : `<span class="badge ok">nessun problema</span>`}</span></div>` : ""}`;
   disegnaBarraCapitoli();
