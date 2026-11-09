@@ -1192,6 +1192,7 @@ function apriMenuDx(x, y) {
   const n = S.sel.size, m = $("#menu-dx");
   const caps = c.capitolati.map((k) => `<button type="button" data-dx="cap" data-cap-dx="${esc(k)}">${esc(k)}</button>`).join("");
   const selR = c.righe.filter((r) => S.sel.has(r.id));
+  const nelDb = selR.length === 1 && !!(S.perK.get(selR[0]._kCatalogo || selR[0].k) || S.catalogo.find((x) => x.k === (selR[0]._kCatalogo || selR[0].k)));
   const convertibili = { gen: selR.filter((r) => isGenerico(r)).length, att: selR.filter((r) => isAttivita(r) && r.daOfferta).length };
   m.innerHTML = `
     <div class="dx-titolo">${n === 1 ? "1 riga selezionata" : `${n} righe selezionate`}</div>
@@ -1212,7 +1213,7 @@ function apriMenuDx(x, y) {
     <div class="dx-sub"><button type="button" class="dx-apri">▸ Assegna il capitolato</button>
       <div class="dx-lista">${caps || '<span class="dx-vuoto">nessun capitolato</span>'}<button type="button" data-dx="capnuovo">+ Nuovo capitolato…</button><button type="button" data-dx="cap" data-cap-dx="">— nessun capitolato</button></div></div>
     <button type="button" data-dx="note">✎ Note…</button>
-    ${n === 1 ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : ""}
+    ${n === 1 ? (nelDb ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : `<button type="button" data-dx="modriga">✎ Modifica articolo${selR[0]?.daOfferta ? " (da offerta fornitore)" : ""}…</button>`) : ""}
     <button type="button" data-dx="nota">Applica la nota post-linea…</button>
     ${convertibili.gen ? `<button type="button" data-dx="inatt">⇄ Trasforma in attività (PITATT)${convertibili.gen > 1 ? ` · ${convertibili.gen}` : ""}</button>` : ""}
     ${convertibili.att ? `<button type="button" data-dx="ingen">⇄ Trasforma in articolo generico (P000)${convertibili.att > 1 ? ` · ${convertibili.att}` : ""}</button>` : ""}
@@ -1253,6 +1254,7 @@ $("#menu-dx").addEventListener("click", (e) => {
     modificata(); disegnaOfferta();
     return toast(az === "inatt" ? `${n} righe trasformate in attività tecnica (PITATT).` : `${n} righe trasformate in articoli generici (P000 ARTICOLO_GEN).`);
   }
+  if (az === "modriga") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaRigaOfferta(c, r); }
   if (az === "moddb") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaNelDatabase(r._kCatalogo || r.k); }
   if (az === "capnuovo") return dialogo({
     titolo: "Nuovo capitolato", html: `<label class="f">Nome che va in Oracle (Nome Capitolato)<input id="dx-nuovo" placeholder="es. PIANO TERRA"></label>`,
@@ -1576,6 +1578,61 @@ $("#menu-dx").addEventListener("click", (e) => {
   aggiornaPickSel();
 });
 /* Dal tasto destro: apre il catalogo su quell'articolo, con il modulo di modifica; poi "Torna all'offerta" */
+/* Righe che non sono nel database (es. importate da un'offerta fornitore): si modificano nella riga stessa,
+   e volendo si salvano anche nel database come articolo nuovo. */
+function modificaRigaOfferta(c, r) {
+  const att = isAttivita(r);
+  const codF = att ? (r.notePre || r.nOrdine || "") : (r.nOrdine || "");
+  const desF = att ? (r.notePost || r.descrizione || "") : (r.descrizione || "");
+  const capDb = S.capitoli.some((x) => x.nome === dbNome(c)) ? dbNome(c) : (S.capitoli.find((x) => /GENERIC/i.test(x.nome))?.nome || S.capitoli[0]?.nome || "");
+  dialogo({
+    titolo: `${att ? "Attività" : "Articolo generico"} · ${codF || "senza codice"}`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">${r.daOfferta ? `Riga importata dall'offerta fornitore <b>${esc(r.daOfferta)}</b>: non è nel database. ` : ""}
+        Le modifiche valgono per questa riga dell'offerta; spunta “Salva anche nel database” per ritrovarlo nel catalogo.</p>
+      <div class="grid-set">
+        <label class="f">Codice fornitore (n° di ordinazione)<input id="mr-cod" value="${esc(codF)}"></label>
+        <label class="f">U.M.<input id="mr-um" value="${esc(r.um || "n.")}"></label>
+        <label class="f">Fornitore<select id="mr-forn">${opzioniFornitoriGma(fornitore(r.gmv))}</select></label>
+        <label class="f">GMA<select id="mr-gmv">${opzioniGma(fornitore(r.gmv), r.gmv)}</select></label>
+        ${campoNum("mr-la", att ? "Valore attività €" : "Listino acquisto € (prezzo del fornitore)", r.listinoAcquisto)}
+        ${att ? campoNum("mr-gg", "Giorni / quantità del fornitore", r.giorni) : ""}
+      </div>
+      <label class="f" style="margin-top:10px">Descrizione<textarea id="mr-des" rows="4">${esc(desF)}</textarea></label>
+      <div class="card" style="margin-top:10px">
+        <label class="row"><input type="checkbox" id="mr-db"> <b>Salva anche nel database</b> come ${att ? "attività tecnica PITATT.TEC" : "articolo generico P000 ARTICOLO_GEN"}</label>
+        <div class="grid-set" id="mr-db-box" hidden style="margin-top:6px">
+          <label class="f">Capitolo del database<select id="mr-cap">${S.capitoli.map((x) => `<option ${x.nome === capDb ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>
+          <label class="f wide">Sottocapitolo<input id="mr-sotto" value="${esc(r.capitolato || "")}"></label>
+        </div></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
+    onApri(d) {
+      $("#mr-forn", d).addEventListener("change", (e) => { const g = $("#mr-gmv", d).value, f = e.target.value; $("#mr-gmv", d).innerHTML = opzioniGma(f, !f || fornitore(g) === f ? g : "").replace(/<option value="__nuovo">.*?<\/option>/, ""); });
+      $("#mr-gmv", d).innerHTML = $("#mr-gmv", d).innerHTML.replace(/<option value="__nuovo">.*?<\/option>/, "");
+      $("#mr-db", d).addEventListener("change", (e) => { $("#mr-db-box", d).hidden = !e.target.checked; });
+    },
+    async onConferma(v, d) {
+      const cod = $("#mr-cod", d).value.trim(), des = $("#mr-des", d).value.trim();
+      const x = { codice: cod, descrizione: des, um: $("#mr-um", d).value.trim() || "n.", qta: att ? num($("#mr-gg", d).value) : num(r.qta), unitario: num($("#mr-la", d).value) };
+      const n = { ...rigaDaOffertaForn(x, att, r.daOfferta || "", r.capitolo), id: r.id, capitolato: r.capitolato || "", qta: att ? 1 : r.qta };
+      n.gmv = $("#mr-gmv", d).value || (att ? "ATT" : "ARTGEN");
+      if (att) { n.notePre = cod; n.notePost = des; n.aGiornate = !!r.aGiornate; }
+      if ($("#mr-db", d).checked) {
+        const art = { ...n, capitolo: $("#mr-cap", d).value, sottocapitolo: $("#mr-sotto", d).value.trim(), rifCap: "", dataAgg: oggiIso() };
+        delete art.id; delete art.qta; delete art.capitolato; delete art.daOfferta;
+        if (att) { art.nOrdine = cod; art.descrizione = des; art.notePre = ""; art.notePost = ""; }
+        const stessi = S.catalogo.filter((y) => y.capitolo === art.capitolo);
+        art.ordine = (stessi.length ? Math.max(...stessi.map((y) => num(y.ordine))) : 0) + 1;
+        art.k = `${art.capitolo}||${codiceArticolo(art)}|${art.nOrdine}|${db.nuovoId()}`;
+        try { await scriviNelDatabase(art); } catch (e) { errore(e, "Salvataggio nel database non riuscito"); return false; }
+        n.k = art.k; delete n.daOfferta;
+      }
+      Object.assign(r, n);
+      modificata(); disegnaOfferta();
+      toast($("#mr-db", d).checked ? "Riga modificata e articolo salvato nel database." : "Riga modificata.");
+    },
+  });
+}
+
 function modificaNelDatabase(k) {
   const a = S.perK.get(k) || S.catalogo.find((x) => x.k === k);
   if (!a) return toast("Questo articolo non è più nel database.");
