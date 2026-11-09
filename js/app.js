@@ -2048,20 +2048,27 @@ $("#righe-clienti").addEventListener("click", (e) => {
   if (tr) modificaCliente(S.clienti.find((c) => c.id === tr.dataset.id));
 });
 $("#cl-nuovo").addEventListener("click", () => modificaCliente(null));
+/* GMA raggruppati per fornitore (in ordine alfabetico; quelli senza fornitore in fondo). */
+function perFornitore(gmvs) {
+  const m = new Map();
+  for (const g of gmvs) { const f = (fornitore(g) || "").trim().toUpperCase() || "ALTRI"; if (!m.has(f)) m.set(f, []); m.get(f).push(g); }
+  for (const l of m.values()) l.sort();
+  return [...m.entries()].sort((a, b) => (a[0] === "ALTRI") - (b[0] === "ALTRI") || a[0].localeCompare(b[0]));
+}
 function modificaCliente(c) {
   const nuovo = !c;
   c = c || { nome: "", codice: "", att: "", sconti: {} };
-  const gmvs = [...new Set([...S.gmv.map((g) => g.codice), ...Object.keys(c.sconti || {})])].filter((g) => g !== "ATT");
+  const gmvs = [...new Set([...S.gmv.map((g) => g.codice), ...Object.keys(c.sconti || {})])].filter((g) => String(g).toUpperCase() !== "ATT");
   dialogo({
-    titolo: nuovo ? "Nuovo cliente" : c.nome,
+    largo: true, titolo: nuovo ? "Nuovo cliente" : c.nome,
     html: `<div class="grid-set">
       <label class="f wide">Ragione sociale<input id="k-nome" value="${esc(c.nome)}" required></label>
       <label class="f">Codice cliente<input id="k-cod" value="${esc(c.codice)}"></label>
       <label class="f">Tariffa attività tecnica €<input id="k-att" inputmode="decimal" value="${esc(c.att === "" ? "" : String(c.att).replace(".", ","))}"></label>
     </div>
     <h3 style="margin:14px 0 8px">Sconti di cartellino per GMV</h3>
-    <div class="lista-gmv">${gmvs.map((g) => `<label><span><b class="mono">${esc(g)}</b> <span class="muted">${esc(fornitore(g))}</span></span>
-      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" placeholder="es. 45+10"></span></label>`).join("")}</div>`,
+    <div class="gmv-colonne">${perFornitore(gmvs).map(([forn, gs]) => `<div class="gmv-forn"><div class="gmv-forn-tit">${esc(forn)}</div><div class="lista-gmv">${gs.map((g) => `<label><span><b class="mono">${esc(g)}</b></span>
+      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" placeholder="es. 45+10"></span></label>`).join("")}</div></div>`).join("")}</div>`,
     pulsanti: [...(nuovo ? [] : [{ label: "Elimina cliente", value: "del", cls: "danger" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {

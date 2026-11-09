@@ -878,3 +878,13 @@ select#o-cliente.cli-no { background-color: var(--cli-no-fondo); border-color: v
 #o-cliente option.cli-no { color: var(--cli-no); }
 .cli-ok-txt { color: var(--cli-ok); font-weight: 600; }
 .cli-no-txt { color: var(--cli-no); font-weight: 600; }
+
+/* Cartellino cliente: GMA divisi per fornitore */
+.gmv-forn { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line, #d5dbe3); }
+.gmv-forn:first-of-type { border-top: 0; padding-top: 0; }
+.gmv-forn-tit { font-weight: 700; font-size: 12px; letter-spacing: .04em; color: var(--accent, #1d4f86); margin-bottom: 4px; }
+.gmv-colonne { columns: 3 230px; column-gap: 14px; }
+.gmv-colonne .gmv-forn { break-inside: avoid; display: inline-block; width: 100%; margin: 0 0 8px; padding: 6px 10px 8px; border: 1px solid var(--line, #d5dbe3); border-radius: 8px; border-top-width: 1px; }
+.gmv-colonne .gmv-forn:first-of-type { border-top: 1px solid var(--line, #d5dbe3); padding-top: 6px; }
+.gmv-colonne .lista-gmv { display: block; }
+.gmv-colonne .lista-gmv label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
