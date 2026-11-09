@@ -898,3 +898,7 @@ tbody tr[data-id]:not(.sel):not(.totale):hover > td,
 tbody tr[data-k]:not(.sel):hover > td { background: var(--riga-hover) !important; }
 tbody tr.riga-att:not(.sel):hover > td { background: var(--riga-att-hover) !important; }
 tbody tr.sel:hover > td, #righe-picker tr.sel:hover > td { background: var(--riga-sel-hover) !important; }
+
+/* righe delle tabelle: niente selezione del testo trascinando il mouse (le caselle restano scrivibili) */
+#righe-offerta tr, #righe-picker tr, #righe-catalogo tr, #riepilogo-righe tr { -webkit-user-select: none; user-select: none; }
+#righe-offerta input, #righe-offerta textarea, #righe-picker input, #righe-catalogo input { -webkit-user-select: text; user-select: text; }
