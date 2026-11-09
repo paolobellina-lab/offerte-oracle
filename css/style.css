@@ -841,3 +841,10 @@ tr.totale td *, tbody tr.sotto:not([data-gruppo]) td * { color: #3b2300 !importa
 .blocco-acq thead th { background: color-mix(in srgb, var(--c-acq) 55%, #ffffff) !important; color: #03221f !important; }
 .blocco-ven thead th { background: color-mix(in srgb, var(--c-ven) 50%, #ffffff) !important; color: #04112e !important; }
 .blocco-ven.blocco-lis thead th { background: color-mix(in srgb, var(--c-lis) 50%, #ffffff) !important; color: #1b0838 !important; }
+/* pulsanti verdi (scarica / copia), scritte scure */
+.btn.verde { background: #c9ecd4 !important; border: 1px solid #3f9a5f !important; color: #0b3b1d !important; font-weight: 700; }
+.btn.verde:hover { background: #b2e2c1 !important; }
+.btn.verde.forte { background: #7fd09a !important; border-color: #237a43 !important; color: #052a12 !important; }
+.btn.verde.forte:hover { background: #69c587 !important; }
+.scarica-card { border-top: 5px solid #2f9a55 !important; }
+.scarica-card .titolo-sez { border-left-color: #2f9a55 !important; }
