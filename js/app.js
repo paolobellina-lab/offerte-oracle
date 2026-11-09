@@ -346,7 +346,7 @@ function normalizza(o) {
 const capitoliOff = (o) => (Array.isArray(o.capitoli) ? o.capitoli : normalizza(o).capitoli);
 /* Il ricarico automatico è quello del capitolo dell'offerta, qualunque sia il database da cui arriva la riga. */
 function opzCap(cap) {
-  const ric = num(S.capitoli.find((c) => c.nome === cap.nome)?.ricarico);
+  const ric = num(S.capitoli.find((c) => c.nome === dbNome(cap))?.ricarico);
   return { ricarichi: Object.fromEntries([...S.capitoli.map((c) => c.nome), cap.nome].map((n) => [n, ric])) };
 }
 function totaliOfferta(o) {
@@ -358,6 +358,30 @@ function totaliOfferta(o) {
   return { venduto, acquistato, righe };
 }
 const capAtt = () => S.off?.capitoli.find((c) => c.nome === S.capAtt) || null;
+/* Database di un capitolo dell'offerta: il nome con cui è nato, anche se poi è stato rinominato. */
+const dbNome = (c) => c.base || c.nome;
+function rinominaCapitolo(c) {
+  dialogo({
+    titolo: `Rinomina il capitolo ${c.nome}`,
+    html: `<label class="f">Nuovo nome<input id="rc-nome" value="${esc(c.nome)}"></label>
+      ${S.capitoli.some((x) => x.nome === dbNome(c)) ? `<p class="muted small">Il capitolo resta legato al database <b>${esc(dbNome(c))}</b> (articoli proposti e ricarico automatico).</p>` : ""}`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Rinomina", value: "ok", cls: "primary" }],
+    onApri: (d) => setTimeout(() => { const i = $("#rc-nome", d); i.focus(); i.select(); }, 50),
+    onConferma(v, d) {
+      const nome = $("#rc-nome", d).value.trim();
+      if (!nome) { toast("Scrivi il nome."); return false; }
+      if (nome === c.nome) return;
+      if (S.off.capitoli.some((x) => x !== c && x.nome === nome)) { toast("C'è già un capitolo con questo nome."); return false; }
+      const vecchio = c.nome;
+      if (!c.base) c.base = vecchio;
+      if (c.base === nome) delete c.base;
+      c.nome = nome;
+      if (S.capAtt === vecchio) S.capAtt = nome;
+      modificata(); disegnaOfferta(true);
+      toast(`Capitolo rinominato in ${nome}.`);
+    },
+  });
+}
 
 /* ================= Elenco offerte ================= */
 $("#nuova-offerta").addEventListener("click", async () => {
@@ -512,9 +536,9 @@ function disegnaBarraCapitoli() {
   const sigla = (n) => { const p = n.split(/[_\s.-]+/).filter(Boolean); return (p.length > 1 ? p.map((x) => x[0]).join("") : n).slice(0, 3).toUpperCase(); };
   $("#cap-tabs").innerHTML =
     `<button type="button" data-cap="" class="sb-voce ${S.capAtt === "" ? "on" : ""}" title="Riepilogo dell'offerta"><span class="sb-ico">${ICONA_RIEP}</span><span class="sb-testo">Riepilogo</span></button>` +
-    o.capitoli.map((c) => `<button type="button" data-cap="${esc(c.nome)}" class="sb-voce ${S.capAtt === c.nome ? "on" : ""}" title="${esc(c.nome)} · ${euro(tot(c))}">
+    o.capitoli.map((c) => `<button type="button" data-cap="${esc(c.nome)}" class="sb-voce ${S.capAtt === c.nome ? "on" : ""}" title="${esc(c.nome)} · ${euro(tot(c))} (doppio clic per rinominare)">
       <span class="sb-sigla">${esc(sigla(c.nome))}</span><span class="sb-testo sb-cap"><span>${esc(c.nome)}</span><span class="conta">${euro(tot(c))}</span></span></button>`).join("");
-  const liberi = S.capitoli.filter((c) => !o.capitoli.some((x) => x.nome === c.nome));
+  const liberi = S.capitoli.filter((c) => !o.capitoli.some((x) => dbNome(x) === c.nome || x.nome === c.nome));
   $("#add-cap").innerHTML = `<option value="">Scegli il capitolo da aggiungere…</option>` + liberi.map((c) => `<option>${esc(c.nome)}</option>`).join("");
   $("#sb-add").hidden = !liberi.length;
   $("#add-cap").hidden = !liberi.length;
@@ -538,6 +562,10 @@ const altezzaBarra = () => document.documentElement.style.setProperty("--banner-
 window.addEventListener("resize", altezzaBarra);
 setTimeout(altezzaBarra, 0);
 
+$("#cap-tabs").addEventListener("dblclick", (e) => {
+  const b = e.target.closest("button[data-cap]"); if (!b || !b.dataset.cap) return;
+  rinominaCapitolo(S.off.capitoli.find((c) => c.nome === b.dataset.cap));
+});
 $("#cap-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cap]"); if (!b) return;
   S.capAtt = b.dataset.cap; S.sel = new Set();
@@ -554,7 +582,7 @@ $("#add-cap").addEventListener("change", (e) => {
 });
 
 /* --- Condizioni del capitolo (pagina Prezzi) e impostazioni dell'output --- */
-const ricAutoCap = (c) => num(S.capitoli.find((x) => x.nome === c.nome)?.ricarico);
+const ricAutoCap = (c) => num(S.capitoli.find((x) => x.nome === dbNome(c))?.ricarico);
 function disegnaImpostCapitolo() {
   const c = capAtt(); if (!c) return;
   aggiornaCondizioni(c);
@@ -794,7 +822,7 @@ function disegnaRiepilogo() {
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
     tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
     return `<tr class="${c.esporta === false ? "qta-zero" : ""}"><td><input type="checkbox" data-esporta="${esc(c.nome)}" ${c.esporta === false ? "" : "checked"} title="Esporta questo capitolo"></td>
-      <td><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button>${c.fonte ? `<div class="muted small" title="Importato dall'offerta del fornitore">da ${esc(c.fonte)}</div>` : ""}</td>
+      <td><span class="nowrap"><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button><button type="button" class="tg-ed" data-rinomina-cap="${esc(c.nome)}" title="Rinomina il capitolo">✎</button></span>${c.base ? `<div class="muted small">database ${esc(c.base)}</div>` : ""}${c.fonte ? `<div class="muted small" title="Importato dall'offerta del fornitore">da ${esc(c.fonte)}</div>` : ""}</td>
       <td class="small nowrap">${esc(descrCondizioni(c))}</td><td class="num">${r.righe}</td>
       <td class="num"><b>${euro(r.venduto)}</b></td><td class="num solo-av">${euro(r.acquistato)}</td>
       <td class="num">${euro(r.materiale.venduto)}</td><td class="num">${euro(r.attivita.venduto)}</td>
@@ -820,6 +848,8 @@ $("#riepilogo-capitoli").addEventListener("change", (e) => {
 });
 $("#esp-tutti").addEventListener("change", (e) => { for (const c of S.off.capitoli) c.esporta = e.target.checked; modificata(); disegnaRiepilogo(); });
 $("#riepilogo-capitoli").addEventListener("click", (e) => {
+  const rn = e.target.closest("[data-rinomina-cap]");
+  if (rn) return rinominaCapitolo(S.off.capitoli.find((c) => c.nome === rn.dataset.rinominaCap));
   const v = e.target.closest("[data-vai-cap]");
   if (v) { S.capAtt = v.dataset.vaiCap; S.sub = "righe"; S.sel = new Set(); return disegnaOfferta(true); }
   const t = e.target.closest("[data-togli-cap]");
@@ -967,7 +997,7 @@ function disegnaRighe(c) {
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
-      <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
+      <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome && r.capitolo !== dbNome(c) && !r.daOfferta ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
       <td class="num"><input class="qta${num(r.qta) >= 1000 ? " qta-alta" : ""}" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"${num(r.qta) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
@@ -1335,8 +1365,8 @@ function rigaDaArticolo(a) {
 function disegnaPicker(c, reset = false) {
   const dbs = ordineCap();
   // il database proposto è quello del capitolo; se ne scegli un altro resta finché non cambi capitolo
-  if (S.pickCap !== c.nome || !dbs.includes(S.pickDb)) { S.pickCap = c.nome; S.pickDb = dbs.includes(c.nome) ? c.nome : dbs[0] || ""; reset = true; }
-  $("#a-db").innerHTML = dbs.map((d) => `<option value="${esc(d)}" ${d === S.pickDb ? "selected" : ""}>${esc(d)}${d === c.nome ? " (questo capitolo)" : ""}</option>`).join("");
+  if (S.pickCap !== c.nome || !dbs.includes(S.pickDb)) { S.pickCap = c.nome; S.pickDb = dbs.includes(dbNome(c)) ? dbNome(c) : dbs[0] || ""; reset = true; }
+  $("#a-db").innerHTML = dbs.map((d) => `<option value="${esc(d)}" ${d === S.pickDb ? "selected" : ""}>${esc(d)}${d === dbNome(c) ? " (questo capitolo)" : ""}</option>`).join("");
   $("#a-cap").innerHTML = `<option value="">— nessuno —</option>` + c.capitolati.map((n) => `<option ${n === c.capNuove ? "selected" : ""}>${esc(n)}</option>`).join("") +
     `<option value="__nuovo">+ nuovo capitolato…</option>`;
   const nelDb = S.catalogo.filter((a) => a.capitolo === S.pickDb);
@@ -2665,7 +2695,7 @@ const htmlDecisione = (k) => !k.daDecidere ? "" : `<div class="avviso" style="ma
 function aggiungiDaBib(a) {
   const c = capAtt(); if (!c) return toast("Apri prima un capitolo dell'offerta.");
   const k = condBib(a);
-  const capDef = S.capitoli.some((x) => x.nome === c.nome) ? c.nome : S.capitoli[0]?.nome || "";
+  const capDef = S.capitoli.some((x) => x.nome === dbNome(c)) ? dbNome(c) : S.capitoli[0]?.nome || "";
   dialogo({
     titolo: `Aggiungi ${a.nOrdine || a.codice}`,
     html: `<p class="muted small" style="margin-top:0">${esc(a.fornitore)} · <span class="mono">${esc(codiceBib(a))}</span> · ${esc(a.descrizione)}<br>
