@@ -1312,7 +1312,8 @@ $("#righe-offerta").addEventListener("click", (e) => {
     if (a >= 0 && b >= 0) { if (!ctrl) S.sel = new Set(); const [x, y] = a < b ? [a, b] : [b, a]; for (let k = x; k <= y; k++) S.sel.add(c.righe[k].id); }
     window.getSelection?.().removeAllRanges();
     return disegnaOfferta();
-  } else if (ctrl) {
+  } else if (ctrl || suCasella) {
+    // la casella di selezione aggiunge o toglie la riga, come Ctrl+clic
     S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);
   } else {
     S.sel = S.sel.size === 1 && S.sel.has(id) ? new Set() : new Set([id]);
@@ -1591,7 +1592,7 @@ $("#righe-picker").addEventListener("click", (e) => {
     for (let i = x; i <= y; i++) S.pickSel.add(vis[i]);
     window.getSelection?.().removeAllRanges();
     return aggiornaPickSel();
-  } else if (ctrl) S.pickSel.has(k) ? S.pickSel.delete(k) : S.pickSel.add(k);
+  } else if (ctrl || suCasella) S.pickSel.has(k) ? S.pickSel.delete(k) : S.pickSel.add(k);
   else { const solo = S.pickSel.size === 1 && S.pickSel.has(k); S.pickSel.clear(); if (!solo) S.pickSel.add(k); }
   S.pickUltimo = k;
   aggiornaPickSel();
