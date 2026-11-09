@@ -1216,6 +1216,7 @@ function apriMenuDx(x, y) {
     <div class="dx-sub"><button type="button" class="dx-apri">▸ Assegna il capitolato</button>
       <div class="dx-lista">${caps || '<span class="dx-vuoto">nessun capitolato</span>'}<button type="button" data-dx="capnuovo">+ Nuovo capitolato…</button><button type="button" data-dx="cap" data-cap-dx="">— nessun capitolato</button></div></div>
     <button type="button" data-dx="note">✎ Note…</button>
+    ${n > 1 ? `<button type="button" data-dx="modmulti">✎ Modifica le ${n} righe selezionate…</button>` : ""}
     ${n === 1 ? (nelDb ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : `<button type="button" data-dx="modriga">✎ Modifica articolo${selR[0]?.daOfferta ? " (da offerta fornitore)" : ""}…</button>`) : ""}
     <button type="button" data-dx="nota">Applica la nota post-linea…</button>
     ${convertibili.gen ? `<button type="button" data-dx="inatt">⇄ Trasforma in attività (PITATT)${convertibili.gen > 1 ? ` · ${convertibili.gen}` : ""}</button>` : ""}
@@ -1257,6 +1258,7 @@ $("#menu-dx").addEventListener("click", (e) => {
     modificata(); disegnaOfferta();
     return toast(az === "inatt" ? `${n} righe trasformate in attività tecnica (PITATT).` : `${n} righe trasformate in articoli generici (P000 ARTICOLO_GEN).`);
   }
+  if (az === "modmulti") return modificaMultipla(c);
   if (az === "modriga") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaRigaOfferta(c, r); }
   if (az === "moddb") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaNelDatabase(r._kCatalogo || r.k); }
   if (az === "capnuovo") return dialogo({
@@ -1581,6 +1583,60 @@ $("#menu-dx").addEventListener("click", (e) => {
   aggiornaPickSel();
 });
 /* Dal tasto destro: apre il catalogo su quell'articolo, con il modulo di modifica; poi "Torna all'offerta" */
+/* Modifica di un campo comune a tutte le righe selezionate (vuoto = resta com'è). Vale solo per le righe
+   dell'offerta: il database non cambia. */
+function modificaMultipla(c) {
+  const righe = c.righe.filter((r) => S.sel.has(r.id));
+  if (!righe.length) return;
+  const nAtt = righe.filter(isAttivita).length;
+  dialogo({
+    titolo: `Modifica ${righe.length} righe`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">Compila solo i campi da cambiare: quelli vuoti restano come sono su ogni riga.
+        La modifica vale per le righe dell'offerta, il database non cambia.</p>
+      <div class="grid-set">
+        <label class="f">Quantità<input id="mm-qta" inputmode="decimal" placeholder="—"></label>
+        <label class="f">U.M.<input id="mm-um" placeholder="—"></label>
+        <label class="f">Sottocapitolo<select id="mm-cap"><option value="__no">— non cambiare —</option><option value="">(nessuno)</option>${c.capitolati.map((k) => `<option>${esc(k)}</option>`).join("")}</select></label>
+        <label class="f">Fornitore<select id="mm-forn">${opzioniFornitoriGma("")}</select></label>
+        <label class="f">GMA<select id="mm-gmv"></select></label>
+        <label class="f">Listino acquisto € (stesso prezzo per tutte)<input id="mm-la" inputmode="decimal" placeholder="—"></label>
+        <label class="f">Variazione prezzo acquisto %<input id="mm-var" inputmode="decimal" placeholder="es. 5 oppure -3"></label>
+        ${nAtt ? `<label class="f">Giorni (attività)<input id="mm-gg" inputmode="decimal" placeholder="—"></label>` : ""}
+      </div>
+      <div class="grid-set" style="margin-top:10px">
+        <label class="f wide">Nota pre-linea <span class="muted small">(non per i generici)</span><input id="mm-npre" placeholder="—"></label>
+        <label class="f wide">Nota post-linea <span class="muted small">(non per i generici)</span><input id="mm-npost" placeholder="—"></label>
+      </div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: `Applica a ${righe.length} righe`, value: "ok", cls: "primary" }],
+    onApri(d) {
+      const gma = (f) => { $("#mm-gmv", d).innerHTML = `<option value="__no">— non cambiare —</option>` + opzioniGma(f, "").replace(/<option value="">.*?<\/option>/, "").replace(/<option value="__nuovo">.*?<\/option>/, ""); };
+      $("#mm-forn", d).addEventListener("change", (e) => gma(e.target.value));
+      gma("");
+    },
+    onConferma(v, d) {
+      const val = (id) => ($(id, d) ? $(id, d).value.trim() : "");
+      const q = val("#mm-qta"), um = val("#mm-um"), cap = $("#mm-cap", d).value, g = $("#mm-gmv", d).value;
+      const la = val("#mm-la"), vr = val("#mm-var"), gg = val("#mm-gg"), npre = val("#mm-npre"), npost = val("#mm-npost");
+      if (la && vr) { toast("Scegli il prezzo oppure la variazione %, non tutti e due."); return false; }
+      let n = 0;
+      for (const r of righe) {
+        if (q) r.qta = num(q);
+        if (um) r.um = um;
+        if (cap !== "__no") { r.capitolato = cap; }
+        if (g !== "__no") r.gmv = g;
+        if (la) r.listinoAcquisto = num(la);
+        if (vr) r.listinoAcquisto = Math.round(num(r.listinoAcquisto) * (1 + num(vr) / 100) * 1e4) / 1e4;
+        if (gg && isAttivita(r)) r.giorni = num(gg);
+        if (!isGenerico(r)) { if (npre) r.notePre = npre; if (npost) r.notePost = npost; }
+        if (la || vr || gg) r.listino = listinoCalcolato(r);
+        n++;
+      }
+      if (cap !== "__no") raggruppa(c);
+      modificata(); disegnaOfferta();
+      toast(`${n} righe modificate.`);
+    },
+  });
+}
 /* Righe che non sono nel database (es. importate da un'offerta fornitore): si modificano nella riga stessa,
    e volendo si salvano anche nel database come articolo nuovo. */
 function modificaRigaOfferta(c, r) {
