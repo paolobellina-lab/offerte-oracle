@@ -1301,6 +1301,7 @@ $("#righe-offerta").addEventListener("click", (e) => {
     return disegnaOfferta();
   }
   const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  if (appenaTrascinato()) return;
   const suCasella = e.target.matches("[data-sel]");
   const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono, td.num:nth-child(2)");
   if (!suCasella && !suTesto) return;
@@ -1535,6 +1536,41 @@ function kDelBloccoPick(h) {
   for (let tr = h.nextElementSibling; tr && !tr.hasAttribute("data-gruppo"); tr = tr.nextElementSibling) if (tr.dataset.k) ks.push(tr.dataset.k);
   return ks;
 }
+/* Clic e trascina sulle righe: seleziona tutte le righe tra quella di partenza e quella sotto il mouse (come in Excel).
+   Con Ctrl/⌘ tenuto all'inizio, l'intervallo si aggiunge a quello che era già selezionato. */
+const trascina = { attivo: false, mosso: false };
+function avviaTrascina(e, tabella) {
+  if (e.button !== 0 || e.shiftKey || e.target.closest("input, select, textarea, button, label, a")) return;
+  const tr = e.target.closest(tabella === "off" ? "tr[data-id]" : "tr[data-k]"); if (!tr) return;
+  const sel = tabella === "off" ? S.sel : S.pickSel;
+  Object.assign(trascina, { attivo: true, mosso: false, tabella, da: tr.dataset[tabella === "off" ? "id" : "k"], base: e.ctrlKey || e.metaKey ? new Set(sel) : new Set() });
+}
+function seguiTrascina(e) {
+  if (!trascina.attivo) return;
+  const off = trascina.tabella === "off";
+  const tr = e.target.closest(off ? "#righe-offerta tr[data-id]" : "#righe-picker tr[data-k]"); if (!tr) return;
+  const a = tr.dataset[off ? "id" : "k"];
+  if (a === trascina.da && !trascina.mosso) return;
+  trascina.mosso = true;
+  const ordine = off ? (capAtt()?.righe || []).map((r) => r.id) : S.pickVis || [];
+  const i = ordine.indexOf(trascina.da), j = ordine.indexOf(a); if (i < 0 || j < 0) return;
+  const nuova = new Set(trascina.base);
+  for (let k = Math.min(i, j); k <= Math.max(i, j); k++) nuova.add(ordine[k]);
+  if (off) {
+    S.sel = nuova; S.ultimoSel = a;
+    for (const r of $$("#righe-offerta tr[data-id]")) { const on = nuova.has(r.dataset.id); r.classList.toggle("sel", on); const cb = r.querySelector("[data-sel]"); if (cb) cb.checked = on; }
+  } else { S.pickSel = nuova; S.pickUltimo = a; aggiornaPickSel(); }
+}
+$("#righe-offerta").addEventListener("mousedown", (e) => avviaTrascina(e, "off"));
+$("#righe-picker").addEventListener("mousedown", (e) => avviaTrascina(e, "pick"));
+document.addEventListener("mouseover", seguiTrascina);
+document.addEventListener("mouseup", () => {
+  if (!trascina.attivo) return;
+  trascina.attivo = false;
+  if (trascina.mosso) { trascina.finito = Date.now(); if (trascina.tabella === "off") disegnaOfferta(); }
+});
+const appenaTrascinato = () => trascina.finito && Date.now() - trascina.finito < 300;
+
 /* Maiusc+clic o Ctrl+clic sulle righe: niente selezione del testo (il browser la mostrerebbe per un attimo). */
 for (const id of ["#righe-offerta", "#righe-picker"]) $(id).addEventListener("mousedown", (e) => {
   if ((e.shiftKey || e.ctrlKey || e.metaKey) && e.target.closest("tr[data-id], tr[data-k]") && !e.target.closest("input:not([type=checkbox]), select, textarea")) e.preventDefault();
@@ -1543,6 +1579,7 @@ $("#righe-picker").addEventListener("click", (e) => {
   const g = e.target.closest("[data-pickgruppo]");
   if (g) { kDelBloccoPick(g.closest("tr")).forEach((k) => (g.checked ? S.pickSel.add(k) : S.pickSel.delete(k))); return aggiornaPickSel(); }
   const tr = e.target.closest("tr[data-k]"); if (!tr) return;
+  if (appenaTrascinato()) return;
   const suCasella = e.target.matches("[data-pick-sel]");
   const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono");
   if (!suCasella && !suTesto) return;
