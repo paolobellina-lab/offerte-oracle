@@ -1304,15 +1304,17 @@ $("#righe-offerta").addEventListener("click", (e) => {
   const suCasella = e.target.matches("[data-sel]");
   const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono, td.num:nth-child(2)");
   if (!suCasella && !suTesto) return;
-  const id = tr.dataset.id;
+  const id = tr.dataset.id, ctrl = e.ctrlKey || e.metaKey;
+  // clic semplice: solo questa riga; Ctrl/⌘: aggiunge o toglie; Maiusc: intervallo dall'ultima riga cliccata
   if (e.shiftKey && S.ultimoSel && S.ultimoSel !== id) {
     const a = c.righe.findIndex((r) => r.id === S.ultimoSel), b = c.righe.findIndex((r) => r.id === id);
-    if (a >= 0 && b >= 0) { const [x, y] = a < b ? [a, b] : [b, a]; for (let k = x; k <= y; k++) S.sel.add(c.righe[k].id); }
+    if (a >= 0 && b >= 0) { if (!ctrl) S.sel = new Set(); const [x, y] = a < b ? [a, b] : [b, a]; for (let k = x; k <= y; k++) S.sel.add(c.righe[k].id); }
     window.getSelection?.().removeAllRanges();
-  } else if (suCasella) {
-    e.target.checked ? S.sel.add(id) : S.sel.delete(id);
-  } else {
+    return disegnaOfferta();
+  } else if (ctrl) {
     S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);
+  } else {
+    S.sel = S.sel.size === 1 && S.sel.has(id) ? new Set() : new Set([id]);
   }
   S.ultimoSel = id;
   disegnaOfferta();
@@ -1540,14 +1542,16 @@ $("#righe-picker").addEventListener("click", (e) => {
   const suCasella = e.target.matches("[data-pick-sel]");
   const suTesto = !e.target.closest("input, select, button, label") && e.target.closest("td.desc, td.mono");
   if (!suCasella && !suTesto) return;
-  const k = tr.dataset.k, vis = S.pickVis || [];
+  const k = tr.dataset.k, vis = S.pickVis || [], ctrl = e.ctrlKey || e.metaKey;
   if (e.shiftKey && S.pickUltimo && S.pickUltimo !== k && vis.includes(S.pickUltimo)) {
     const a = vis.indexOf(S.pickUltimo), b = vis.indexOf(k);
     const [x, y] = a < b ? [a, b] : [b, a];
+    if (!ctrl) S.pickSel.clear();
     for (let i = x; i <= y; i++) S.pickSel.add(vis[i]);
     window.getSelection?.().removeAllRanges();
-  } else if (suCasella) e.target.checked ? S.pickSel.add(k) : S.pickSel.delete(k);
-  else S.pickSel.has(k) ? S.pickSel.delete(k) : S.pickSel.add(k);
+    return aggiornaPickSel();
+  } else if (ctrl) S.pickSel.has(k) ? S.pickSel.delete(k) : S.pickSel.add(k);
+  else { const solo = S.pickSel.size === 1 && S.pickSel.has(k); S.pickSel.clear(); if (!solo) S.pickSel.add(k); }
   S.pickUltimo = k;
   aggiornaPickSel();
 });
