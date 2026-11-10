@@ -1095,6 +1095,8 @@ function disegnaRighe(c) {
     const x = calcolaRiga(r, c, opz.ricarichi);
     if (num(r.qta) !== 0) tot += x.totale;
     const att = isAttivita(r);
+    // "a giornate": la quantità mostrata è il numero di giorni e la colonna Giorni mostra la quantità (i campi si invertono)
+    const scambio = att && r.aGiornate, cQ = scambio ? "giorni" : "qta", cG = scambio ? "qta" : "giorni";
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
@@ -1109,8 +1111,8 @@ function disegnaRighe(c) {
       <td class="img-cel">${(() => { const im = r.img || S.perK.get(r.k)?.img; return im ? `<img class="img-mini" data-img="${esc(im)}" alt="">` : ""; })()}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome && r.capitolo !== dbNome(c) && !r.daOfferta ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
-      <td class="num"><input class="qta${num(r.qta) >= 1000 ? " qta-alta" : ""}" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"${num(r.qta) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
-      <td class="num nowrap">${att ? `<input class="qta" data-campo="giorni" inputmode="decimal" value="${esc(numIt(r.giorni))}">
+      <td class="num"><input class="qta${num(r[cQ]) >= 1000 ? " qta-alta" : ""}" data-campo="${cQ}" inputmode="decimal" value="${esc(numIt(r[cQ]))}"${num(r[cQ]) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r[cQ]) && num(r.qta) && !scambio ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
+      <td class="num nowrap">${att ? `<input class="qta" data-campo="${cG}" inputmode="decimal" value="${esc(numIt(r[cG]))}" title="${scambio ? "A giornate: qui il numero di volte (la quantità è il numero di giorni)" : "Numero di giorni"}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} > a giornate</label>` : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
