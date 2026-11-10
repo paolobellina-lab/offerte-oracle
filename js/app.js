@@ -1502,21 +1502,23 @@ function disegnaPicker(c, reset = false) {
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
       sotto = a.sottocapitolo || "";
-      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="8"><input type="checkbox" class="sel-gruppo" data-pickgruppo title="Seleziona tutti gli articoli di questo sottocapitolo"> ${esc(sotto || "—")}</td></tr>`;
+      html += `<tr class="sotto" data-gruppo="${esc(sotto)}"><td colspan="9"><input type="checkbox" class="sel-gruppo" data-pickgruppo title="Seleziona tutti gli articoli di questo sottocapitolo"> ${esc(sotto || "—")}</td></tr>`;
     }
     const att = isAttivita(a);
     const pSel = S.pickSel.has(a.k);
     html += `<tr data-k="${esc(a.k)}" class="${pSel ? "sel" : ""}">
       <td class="sel-col"><input type="checkbox" data-pick-sel ${pSel ? "checked" : ""}></td>
       <td class="mono nowrap">${codiceVis(a)}</td>
+      <td class="img-cel">${a.img ? `<img class="img-mini" data-img="${esc(a.img)}" alt="">` : ""}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b><div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       <td class="mono">${esc(a.gmv)}</td>
       <td>${pallino(a)}</td>
       <td class="num nowrap">${att ? `<input class="qta" data-pick="giorni" inputmode="decimal" title="Giorni" value="${esc(numIt(a.giorni))}"> gg ` : ""}<input class="qta" data-pick="qta" inputmode="decimal" placeholder="q.tà"></td></tr>`;
   }
-  $("#righe-picker").innerHTML = html || `<tr><td colspan="8" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
+  $("#righe-picker").innerHTML = html || `<tr><td colspan="9" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Il database è vuoto: importalo dal file Excel."}</td></tr>`;
   applicaGruppi($("#righe-picker"));
+  caricaMiniature($("#righe-picker"));
   S.pickVis = vis.map((a) => a.k);
   aggiornaPickSel();
   // articoli della biblioteca (listini fornitore) che non sono nel database
