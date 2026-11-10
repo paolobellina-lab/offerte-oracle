@@ -253,3 +253,9 @@ Nel Catalogo il pulsante **🔒 Modifica database** (in alto a destra) sblocca l
 (Ctrl/⌘ aggiunge, Maiusc intervallo, clicca e trascina), doppio clic per la scheda, tasto destro per
 Taglia, Copia, Incolla sotto, Incolla collegato sotto (cloni) ed Elimina (con conferma). Funzionano anche Ctrl/⌘+X, C, V.
 Si riblocca da solo cambiando pagina o premendo di nuovo il pulsante.
+
+## Immagini degli articoli
+Nella scheda articolo, riquadro **Immagine**: incolla (Ctrl+V), trascina un file o "Scegli file…". L'app salva una miniatura
+(~160 px) e una versione grande (~800 px) nella collezione `oracle_immagini`; nel Catalogo la miniatura compare tra codice e
+articolo e passandoci sopra si vede grande. I cloni condividono l'immagine.
+**Serve la regola** `match /oracle_immagini/{id} { allow read, write: if autorizzato(); }` nelle regole di Firestore (vedi firestore.rules).

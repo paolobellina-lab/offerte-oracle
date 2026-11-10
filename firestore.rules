@@ -19,6 +19,7 @@ service cloud.firestore {
     match /oracle_clienti/{id}  { allow read, write: if autorizzato(); }
     match /oracle_offerte/{id}  { allow read, write: if autorizzato(); }
     match /oracle_biblioteca/{id} { allow read, write: if autorizzato(); }
+    match /oracle_immagini/{id} { allow read, write: if autorizzato(); }
     match /{document=**} { allow read, write: if false; }
   }
 }

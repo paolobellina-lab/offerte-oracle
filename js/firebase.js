@@ -57,6 +57,10 @@ const prova = (() => {
       });
       for (const c of new Set(ops.map((o) => o.coll))) avvisa(c);
     },
+    async leggi(coll, id) {
+      const d = await apri();
+      return new Promise((res, rej) => { const r = d.transaction("doc", "readonly").objectStore("doc").get(coll + "/" + id); r.onsuccess = () => res(r.result ?? null); r.onerror = () => rej(r.error); });
+    },
     ascolta(coll, cb) {
       if (!ascoltatori.has(coll)) ascoltatori.set(coll, new Set());
       ascoltatori.get(coll).add(cb);
@@ -132,6 +136,13 @@ export async function scrivi(ops) {
     }
     await b.commit();
   }
+}
+
+/* Legge un solo documento (null se non c'è). */
+export async function leggi(coll, id) {
+  if (!configurato) return prova.leggi(coll, id);
+  const d = await fs.getDoc(fs.doc(db, coll, id));
+  return d.exists() ? d.data() : null;
 }
 
 export const salva = (coll, id, data) => scrivi([{ tipo: "set", coll, id, data }]);

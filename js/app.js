@@ -14,7 +14,7 @@ import { attivaTendine } from "./tendina.js";
 attivaTendine();
 
 /* ================= Stato ================= */
-const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte", bib: "oracle_biblioteca" };
+const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte", bib: "oracle_biblioteca", img: "oracle_immagini" };
 const S = {
   capitoli: [], gmv: [], clienti: [], chunks: [], catalogo: [], perK: new Map(), offerte: [],
   off: null, vista: "offerte", sub: "righe", dirty: false, salvando: false, utente: null,
@@ -2258,17 +2258,19 @@ function disegnaCatalogo() {
   let gruppo = null, html = "";
   for (const a of vis) {
     const g = dp ? "Doppione · " + chiaveDop(a) : (cap ? "" : a.capitolo + " · ") + (a.sottocapitolo || "—");
-    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="10">${esc(g)}</td></tr>`; }
+    if (g !== gruppo) { gruppo = g; html += `<tr class="sotto" data-gruppo="${esc(g)}"><td colspan="11">${esc(g)}</td></tr>`; }
     html += `<tr class="cliccabile${S.catEdit && S.catSel.has(a.k) ? " sel" : ""}${S.catApp?.taglio && S.catApp.ks.includes(a.k) ? " taglio" : ""}" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
+      <td class="img-cel">${a.img ? `<img class="img-mini" data-img="${esc(a.img)}" alt="">` : ""}</td>
       <td class="desc"><b>${esc(a.nOrdine)}</b>${a.clone && cloniDi(a).length > 1 ? ` <span class="badge info" title="Riga clonata: è collegata ad altre ${cloniDi(a).length - 1} copie nel database">🔗 ${cloniDi(a).length}</span>` : ""}${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       ${(() => { const e = scontiEffettivi(a), c = e.daGma ? ' class="num std-gma" title="Acquisto standard del GMA"' : ' class="num"';
         return `<td${c}>${pctTxt(e.sc3)}</td><td${c}>${pctTxt(e.sc4)}</td><td${c}>${pctTxt(e.sc5)}</td><td${c}>${pctTxt(e.aum1)}</td>`; })()}<td class="mono">${esc(a.gmv)}</td>
       <td class="nowrap">${pallino(a)}${esc(dataIt(a.dataAgg))}</td></tr>`;
   }
-  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="10" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
+  $("#righe-catalogo").innerHTML = html || `<tr><td colspan="11" class="vuoto">${S.catalogo.length ? "Nessun articolo trovato." : "Catalogo vuoto: importalo da “Importa e aggiorna”."}</td></tr>`;
   applicaGruppi($("#righe-catalogo"));
+  caricaMiniature($("#righe-catalogo"));
   $("#c-info").textContent = `${vis.length} di ${lista.length} articoli` + (S.catEdit && S.catSel.size ? ` · ${S.catSel.size} selezionati` : "");
   $("#c-altri").hidden = vis.length >= lista.length;
 }
@@ -2485,6 +2487,79 @@ async function aggiungiGma(codice, forn, sconto = "") {
   S.gmv = lista; impostaStandardGma(S.gmv);
   return codice;
 }
+/* ================= Immagini degli articoli =================
+   Salvate a parte (collezione oracle_immagini) per non appesantire il database:
+   "<id>_p" miniatura (~160 px) e "<id>_g" grande (~800 px). L'articolo tiene solo "img": id. */
+const IMG = new Map(); // id_p / id_g → dataURL | Promise
+function immagine(id, taglia = "p") {
+  const k = `${id}_${taglia}`;
+  if (!IMG.has(k)) IMG.set(k, db.leggi(COLL.img, k).then((d) => { const u = d?.u || ""; IMG.set(k, u); return u; }).catch(() => { IMG.delete(k); return ""; }));
+  const v = IMG.get(k);
+  return v instanceof Promise ? v : Promise.resolve(v);
+}
+function caricaMiniature(root) {
+  for (const im of root.querySelectorAll("img[data-img]:not([src])")) immagine(im.dataset.img).then((u) => { if (u) im.src = u; else im.replaceWith(); });
+}
+async function riduciImmagine(blob, lato, qualita) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("immagine non leggibile")); i.src = url; });
+    const r = Math.min(1, lato / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(im.naturalWidth * r)); c.height = Math.max(1, Math.round(im.naturalHeight * r));
+    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", qualita);
+  } finally { URL.revokeObjectURL(url); }
+}
+// anteprima grande passando sopra una miniatura
+document.addEventListener("mouseover", (e) => {
+  const im = e.target.closest?.("img.img-mini[data-img]"), box = $("#img-anteprima");
+  if (!im) { box.hidden = true; return; }
+  const r = im.getBoundingClientRect();
+  box.innerHTML = `<img src="${im.src}" alt="">`; box.hidden = false;
+  box.style.left = Math.min(r.right + 10, innerWidth - 330) + "px"; box.style.top = Math.max(8, Math.min(r.top - 40, innerHeight - 330)) + "px";
+  immagine(im.dataset.img, "g").then((u) => { if (u && !box.hidden) { const g = box.querySelector("img"); if (g) g.src = u; } });
+});
+/* Riquadro immagine nella scheda articolo: incolla (Ctrl+V), trascina o scegli un file. */
+function legaRiquadroImg(b, a) {
+  const zona = $("#m-img", b), vedi = () => {
+    const u = b._img?.p || "";
+    zona.querySelector(".img-vedi").innerHTML = u ? `<img src="${u}" alt="">` : b._img === null || !a.img ? `<span class="muted small">Nessuna immagine</span>` : `<img class="img-mini" data-img="${esc(a.img)}" alt="">`;
+    caricaMiniature(zona);
+    $("#m-img-togli", b).hidden = !(b._img?.p || (a.img && b._img !== null));
+  };
+  const usa = async (blob) => {
+    if (!blob?.type?.startsWith("image/")) return toast("Questo non è un'immagine.");
+    try { b._img = { p: await riduciImmagine(blob, 160, 0.8), g: await riduciImmagine(blob, 800, 0.82) }; vedi(); }
+    catch (x) { toast("Immagine non leggibile: " + x.message); }
+  };
+  b.addEventListener("paste", (e) => {
+    const it = [...(e.clipboardData?.items || [])].find((x) => x.type.startsWith("image/"));
+    if (!it) return; e.preventDefault(); usa(it.getAsFile());
+  });
+  zona.addEventListener("dragover", (e) => { e.preventDefault(); zona.classList.add("sopra"); });
+  zona.addEventListener("dragleave", () => zona.classList.remove("sopra"));
+  zona.addEventListener("drop", (e) => { e.preventDefault(); zona.classList.remove("sopra"); const f = [...e.dataTransfer.files].find((x) => x.type.startsWith("image/")); if (f) usa(f); else toast("Trascina un file immagine."); });
+  $("#m-img-file", b).addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) usa(f); });
+  $("#m-img-togli", b).addEventListener("click", () => { b._img = null; vedi(); });
+  vedi();
+}
+/* Salva l'immagine scelta nella scheda e aggiorna n.img */
+async function salvaImmagineScheda(b, n) {
+  if (b._img === undefined) return;
+  const vecchia = n.img;
+  if (b._img === null) delete n.img;
+  else {
+    const id = db.nuovoId();
+    await db.scrivi([{ tipo: "set", coll: COLL.img, id: id + "_p", data: { u: b._img.p } }, { tipo: "set", coll: COLL.img, id: id + "_g", data: { u: b._img.g } }]);
+    IMG.set(id + "_p", b._img.p); IMG.set(id + "_g", b._img.g);
+    n.img = id;
+  }
+  // la vecchia immagine si cancella se nessun altro articolo (fuori dai cloni di questo) la usa
+  if (vecchia && vecchia !== n.img && !S.catalogo.some((x) => x.img === vecchia && x.k !== n.k && !(n.clone && x.clone === n.clone)))
+    db.scrivi([{ tipo: "del", coll: COLL.img, id: vecchia + "_p" }, { tipo: "del", coll: COLL.img, id: vecchia + "_g" }]).catch(() => {});
+}
+
 /* Menu a tendina dei sottocapitoli (stesso aspetto degli altri menu) con la voce "+ Nuovo sottocapitolo…". */
 function opzioniSotto(sotti, sel = "") {
   const l = [...new Set(sotti)].filter(Boolean);
@@ -2598,7 +2673,16 @@ function modificaArticolo(a) {
     <p class="muted small" style="margin:4px 0 0">Se cambi un prezzo o uno sconto, la data di aggiornamento diventa quella di oggi (puoi correggerla).</p>
     <label class="row small" style="margin-top:8px" hidden><input type="checkbox" id="m-auto" ${auto ? "checked" : ""}>
       Prezzo di listino calcolato automaticamente (come la colonna K dell'Excel)</label>
-    <label class="f" style="margin-top:10px">Descrizione<textarea id="m-des" rows="4">${esc(a.descrizione)}</textarea></label>
+    <div class="m-img-riga" style="margin-top:10px">
+      <div class="f m-img-box"><span>Immagine</span>
+        <div class="img-zona" id="m-img" tabindex="0" title="Incolla un'immagine (Ctrl+V), trascinala qui o scegli un file">
+          <div class="img-vedi"></div>
+          <div class="img-az"><label class="btn small">Scegli file…<input type="file" id="m-img-file" accept="image/*" hidden></label>
+            <button type="button" class="btn small" id="m-img-togli" hidden>Togli</button></div>
+          <span class="muted small">oppure incolla (Ctrl+V) o trascina qui</span>
+        </div></div>
+      <label class="f" style="flex:1">Descrizione<textarea id="m-des" rows="5">${esc(a.descrizione)}</textarea></label>
+    </div>
     <div class="grid-set" style="margin-top:10px" id="m-note-box">
       <label class="f wide">Note pre-linea<textarea id="m-npre" rows="2">${esc(a.notePre)}</textarea></label>
       <label class="f wide">Note post-linea<textarea id="m-npost" rows="2">${esc(a.notePost)}</textarea></label>
@@ -2609,6 +2693,7 @@ function modificaArticolo(a) {
         { label: "🔗 Crea clone…", value: "clone" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(b) {
+      legaRiquadroImg(b, a || {});
       legaSotto("m-sotto", b);
       $("#m-cap", b).addEventListener("change", (e) => aggiornaSotto("m-sotto", b, sottoDelCap(e.target.value)));
       // il fornitore riduce l'elenco dei GMA; scegliendo un GMA il fornitore si allinea
@@ -2679,6 +2764,7 @@ function modificaArticolo(a) {
         n.gmv = await aggiungiGma(cod, $("#m-ng-forn", b).value);
       }
       if (!n.listino || $("#m-auto", b).checked) n.listino = listinoCalcolato(n);
+      try { await salvaImmagineScheda(b, n); } catch (x) { errore(x, "Immagine non salvata (controlla le regole di Firestore: serve oracle_immagini)"); return false; }
       if (nuovo) {
         const stessi = S.catalogo.filter((x) => x.capitolo === n.capitolo && (!n.sottocapitolo || x.sottocapitolo === n.sottocapitolo));
         n.ordine = (stessi.length ? Math.max(...stessi.map((x) => num(x.ordine))) : 0) + 0.01;
