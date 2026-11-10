@@ -10,6 +10,8 @@ import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiEx
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
 import * as BIB from "./biblioteca.js";
 import * as OFF from "./offforn.js";
+import { attivaTendine } from "./tendina.js";
+attivaTendine();
 
 /* ================= Stato ================= */
 const COLL = { cat: "oracle_catalogo", cfg: "oracle_config", cli: "oracle_clienti", off: "oracle_offerte", bib: "oracle_biblioteca" };
@@ -3963,7 +3965,7 @@ function apriAcquistiStandard() {
         idx.sort((x, y) => lista[x].codice.localeCompare(lista[y].codice)).map((i) => { const g = lista[i], x = conta.get(kv(g.fornitore, g.codice)) || { n: 0, propri: 0 };
           const doppio = lista.filter((y) => y.codice === g.codice).length > 1;
           return `<tr data-as-riga="${esc(g.codice)}" data-forn="${esc(forn)}"><td class="mono nowrap"><b>${esc(g.codice)}</b>${doppio ? ' <span class="badge info" title="Lo stesso codice esiste anche con un altro fornitore">+ altro fornitore</span>' : ""} <button type="button" class="tg-ed" data-sg-rin="${i}" title="Rinomina il GMA di questo fornitore">✎</button></td>
-            <td><input data-as-f="${i}" list="as-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore" style="width:170px"></td>
+            <td><input data-as-f="${i}" list="as-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore" style="width:210px"></td>
             <td class="num">${x.n || ""}</td><td class="num">${x.propri || ""}</td>
             ${cella(i, g, "sc1")}${cella(i, g, "sc2")}${cella(i, g, "sc3")}${cella(i, g, "aum")}</tr>`; }).join("")).join("")}</tbody></table></div>
       <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap"><b style="align-self:center">+ Nuovo GMA</b>

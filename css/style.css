@@ -923,3 +923,20 @@ td.std-gma { color: var(--muted, #6b7280); font-style: italic; }
 .cli-riga select { flex: 1; min-width: 0; }
 #o-cli-cod { width: 110px; flex: none; cursor: copy; }
 #o-cli-copia { flex: none; padding: 0 10px; }
+
+/* Tendina chiara per i campi "scegli o scrivi" (al posto dell'elenco nativo scuro) */
+input.tnd { padding-right: 28px !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 10px center !important; }
+.tnd-pop { position: fixed; z-index: 3000; overflow-y: auto; background: #fff; color: #1b1f23; border: 1px solid #8a9299;
+  border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.18); padding: 2px 0; font-size: .92rem; margin: 0; }
+.tnd-voce { padding: 3px 10px; cursor: default; white-space: nowrap; }
+.tnd-voce:hover { background: #e3eef6; }
+.tnd-voce.on { background: #1f5f8b22; outline: 1px solid #1f5f8b; outline-offset: -1px; }
+.tnd-sub { color: #5d666e; margin-left: 10px; font-size: .85em; }
+@media (prefers-color-scheme: dark) {
+  .tnd-pop { background: #1d2125; color: #e6e9ec; border-color: #3b4248; }
+  .tnd-voce:hover { background: #1d3141; }
+  .tnd-voce.on { background: #1d3141; outline-color: #5aa2d6; }
+  .tnd-sub { color: #9aa3ab; }
+  input.tnd { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23bbb'/%3E%3C/svg%3E") !important; }
+}
