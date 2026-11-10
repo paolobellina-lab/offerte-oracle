@@ -3987,7 +3987,29 @@ function apriAcquistiStandard() {
       // fornitore cambiato: gli articoli che avevano quel fornitore scritto lo seguono
       const cambi = [];
       for (const i of $$("[data-as-f]", d)) { const g = lista[+i.dataset.asF], nf = i.value.trim(); if ((g.fornitore || "") !== nf) { cambi.push({ c: g.codice, da: g.fornitore || "", a: nf }); g.fornitore = nf; } }
-      const dup = new Set(); for (const g of lista) { const k = kv(g.fornitore, g.codice); if (dup.has(k)) { toast(`Il GMA ${g.codice} c'è due volte con il fornitore ${g.fornitore || "(nessuno)"}: uniscili con ✎.`, 6000); return false; } dup.add(k); }
+      // stesso codice + stesso fornitore due volte: si chiede conferma, al secondo "Salva" i GMA vengono uniti
+      const gruppi = new Map(); for (const g of lista) { const k = kv(g.fornitore, g.codice); gruppi.set(k, [...(gruppi.get(k) || []), g]); }
+      const doppi = [...gruppi.values()].filter((l) => l.length > 1);
+      if (doppi.length) {
+        const firma = doppi.map((l) => kv(l[0].fornitore, l[0].codice)).sort().join(";");
+        if (d._forzaUnione !== firma) {
+          let box = $("#as-unisci", d);
+          if (!box) { box = document.createElement("div"); box.id = "as-unisci"; box.className = "avviso small"; d.querySelector("#dlg-body, .dlg-body")?.prepend(box) || d.prepend(box); }
+          box.innerHTML = `<b>Questi GMA ci sarebbero due volte con lo stesso fornitore:</b> ${doppi.map((l) => `${esc(l[0].codice)} · ${esc(l[0].fornitore || "nessun fornitore")}`).join(", ")}.
+            Premi di nuovo <b>Salva</b> per <b>unirli</b> in uno solo (restano gli sconti già scritti; dove mancano, si prendono dall'altro), oppure correggi il fornitore.`;
+          box.scrollIntoView({ block: "nearest" });
+          d._forzaUnione = firma;
+          for (const c of cambi) { const g = lista.find((x) => x.codice === c.c && x.fornitore === c.a && !x._rip); if (g) { g.fornitore = c.da; g._rip = 1; } }
+          lista.forEach((g) => delete g._rip);
+          toast("GMA doppi: premi di nuovo Salva per unirli.", 5000);
+          return false;
+        }
+        for (const l of doppi) {
+          const tieni = l.find((g) => !cambi.some((c) => c.c === g.codice && c.a === g.fornitore)) || l[0];
+          for (const g of l) if (g !== tieni) for (const k of ["sc1", "sc2", "sc3", "aum", "nome", "sconto"]) if (!tieni[k] && g[k]) tieni[k] = g[k];
+          for (const g of l) if (g !== tieni) lista.splice(lista.indexOf(g), 1);
+        }
+      }
       const n = $("#as-nuovo", d).value.trim().toUpperCase(), nf = $("#as-nuovo-f", d).value.trim();
       if (n) {
         if (lista.some((g) => kv(g.fornitore, g.codice) === kv(nf, n))) { toast(`Il GMA ${n} di ${nf || "nessun fornitore"} c'è già.`); return false; }
