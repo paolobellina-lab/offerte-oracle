@@ -1463,8 +1463,10 @@ $("#aggiorna-da-catalogo").addEventListener("click", () => {
     if (!a) { mancanti++; return r; }
     n++;
     const nuovo = rigaDaArticolo(a);
-    // restano quelle della riga: quantità, giorni dell'attività e note
-    return { ...nuovo, id: r.id, qta: r.qta, giorni: isAttivita(r) ? r.giorni : a.giorni, notePre: r.notePre, notePost: r.notePost };
+    // restano quelle della riga: quantità, giorni dell'attività, note, capitolato e "a giornate"
+    const out = { ...nuovo, id: r.id, qta: r.qta, giorni: isAttivita(r) ? r.giorni : a.giorni, notePre: r.notePre, notePost: r.notePost, capitolato: r.capitolato || "" };
+    if (r.aGiornate) out.aGiornate = r.aGiornate; else delete out.aGiornate;
+    return out;
   });
   modificata(); disegnaOfferta();
   toast(`Prezzi e sconti aggiornati su ${n} righe${mancanti ? `; ${mancanti} righe non sono più nel database e restano com'erano` : ""}.`, 5000);
