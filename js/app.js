@@ -532,8 +532,19 @@ function statoCensimento() {
   sel.classList.toggle("cli-ok", !!cli?.censito);
   sel.classList.toggle("cli-no", !!cli && !cli.censito);
   nota.className = "small " + (!cli ? "muted" : cli.censito ? "cli-ok-txt" : "cli-no-txt");
+  $("#o-cli-cod").value = cli?.codice || "";
+  $("#o-cli-copia").disabled = !cli?.codice;
   nota.textContent = !cli ? "" : cli.censito ? `✓ Cartellino censito da Oracle il ${dataIt(cli.censito)}` : "✗ Cartellino non censito da Oracle";
 }
+
+const copiaCodCliente = async () => {
+  const v = $("#o-cli-cod").value; if (!v) return;
+  $("#o-cli-cod").select();
+  try { await navigator.clipboard.writeText(v); } catch { document.execCommand?.("copy"); }
+  toast(`Codice cliente ${v} copiato.`, 2000);
+};
+$("#o-cli-cod").addEventListener("click", copiaCodCliente);
+$("#o-cli-copia").addEventListener("click", copiaCodCliente);
 
 /* --- Barra dei capitoli --- */
 function disegnaBarraCapitoli() {

@@ -102,7 +102,9 @@
             <input id="o-nome" placeholder="es. OF_TE25031087">
           </label>
           <label class="f wide">Cliente
-            <select id="o-cliente"></select>
+            <span class="cli-riga"><select id="o-cliente"></select>
+              <input id="o-cli-cod" class="mono" readonly placeholder="codice" title="Codice cliente: clic per selezionarlo e copiarlo">
+              <button type="button" class="btn" id="o-cli-copia" title="Copia il codice cliente">⧉</button></span>
             <span id="o-cli-stato" class="small muted"></span>
           </label>
           <div class="f wide"><span>Prezzi dell'offerta</span><div class="seg" id="o-imp"></div></div>

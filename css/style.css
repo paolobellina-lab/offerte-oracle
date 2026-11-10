@@ -917,3 +917,9 @@ td.std-gma { color: var(--muted, #6b7280); font-style: italic; }
 .cat-mod-avviso { margin-bottom: 10px; }
 #v-catalogo.modifica .tbl-wrap { outline: 2px solid #b33a2b; outline-offset: 2px; border-radius: 10px; }
 #righe-catalogo tr.taglio td { opacity: .5; }
+
+/* Cliente dell'offerta con il codice a fianco */
+.cli-riga { display: flex; gap: 6px; align-items: stretch; }
+.cli-riga select { flex: 1; min-width: 0; }
+#o-cli-cod { width: 110px; flex: none; cursor: copy; }
+#o-cli-copia { flex: none; padding: 0 10px; }
