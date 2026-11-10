@@ -1084,7 +1084,7 @@ function disegnaRighe(c) {
   $("#bulk").classList.toggle("attiva", sel.size > 0);
   $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
   if (!c.righe.length) {
-    tb.innerHTML = `<tr><td colspan="12" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="13" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
     return;
   }
   const linee = lineeOracle(c);
@@ -1098,7 +1098,7 @@ function disegnaRighe(c) {
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
-      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12"><input type="checkbox" class="sel-gruppo" data-selgruppo title="Seleziona tutte le righe di questo capitolato"> ${capPrec
+      testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="13"><input type="checkbox" class="sel-gruppo" data-selgruppo title="Seleziona tutte le righe di questo capitolato"> ${capPrec
         ? `${esc(capPrec)}<button type="button" class="tg-ed" data-rinomina="${esc(capPrec)}" title="Rinomina il capitolato">✎</button><button type="button" class="tg-ed" data-capsposta="-1" title="Sposta il capitolato prima">▲</button><button type="button" class="tg-ed" data-capsposta="1" title="Sposta il capitolato dopo">▼</button>`
         : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
@@ -1106,6 +1106,7 @@ function disegnaRighe(c) {
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
+      <td class="img-cel">${(() => { const im = r.img || S.perK.get(r.k)?.img; return im ? `<img class="img-mini" data-img="${esc(im)}" alt="">` : ""; })()}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome && r.capitolo !== dbNome(c) && !r.daOfferta ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
       <td class="num"><input class="qta${num(r.qta) >= 1000 ? " qta-alta" : ""}" data-campo="qta" inputmode="decimal" value="${esc(numIt(r.qta))}"${num(r.qta) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r.qta) && num(r.qta) ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
@@ -1119,8 +1120,9 @@ function disegnaRighe(c) {
            <td><span class="nota-auto" title="Articolo generico: nota post-linea automatica = descrizione">auto: descrizione</span></td>`
         : `<td><input class="nota" data-campo="notePre" value="${esc(r.notePre)}" placeholder="nota pre-linea"></td>
            <td><input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea"></td>`}</tr>`;
-  }).join("") + `<tr class="sotto"><td colspan="8" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
   applicaGruppi(tb);
+  caricaMiniature(tb);
   // casella del capitolato spuntata se tutte le sue righe sono selezionate
   for (const h of tb.querySelectorAll("tr[data-gruppo]")) {
     const ids = righeDelBlocco(h);
