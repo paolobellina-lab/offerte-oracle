@@ -4,7 +4,7 @@
 import { num } from "./calc.js";
 import { norm, trovaIntestazione } from "./biblioteca.js";
 
-const RE_SOLDI = /^(?:€\s*)?-?\d{1,3}(?:[.\s]\d{3})*,\d{2}(?:\s*€)?$|^(?:€\s*)?-?\d+,\d{2}(?:\s*€)?$/;
+const RE_SOLDI = /^(?:€\s*)?-?\d{1,3}(?:[.\s]\d{3})*,(?:\d{2}|\d{4,5})(?:\s*€)?$|^(?:€\s*)?-?\d+,(?:\d{2}|\d{4,5})(?:\s*€)?$/;
 const RE_QTA = /^\d+(?:,\d+)?$/;
 const soldi = (t) => num(String(t).replace(/€/g, "").replace(/\s/g, ""));
 const mediana = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
@@ -48,6 +48,41 @@ function lineeDi(items, p) {
   return linee.filter((l) => l.celle.length);
 }
 
+/* Alcuni gestionali vanno a capo dentro i numeri ("1.812,00" e sotto "000") e scrivono il prezzo
+   qualche punto più in alto della riga dell'articolo. Qui si rimettono insieme:
+   1) un pezzo di sole cifre subito sotto un numero con la virgola, nella stessa colonna, si attacca al numero;
+   2) un importo da solo su una riga vicina (meno di una riga di distanza) a una riga con quantità e importi
+      entra in quella riga, se nella sua colonna non c'è già niente. */
+function ricuciNumeri(linee) {
+  const vicino = (a, b) => a.x < b.x2 + 2 && b.x < a.x2 + 2;
+  for (let i = 0; i < linee.length; i++) for (const c of linee[i].celle) {
+    if (!/,\d+$/.test(c.t)) continue;
+    for (let j = i + 1; j < linee.length && linee[i].y - linee[j].y <= (c.h || 6) * 1.3; j++) {
+      const f = linee[j].celle.find((x) => /^\d{1,4}$/.test(x.t) && vicino(c, x) && x.x >= c.x - 1);
+      if (f) { c.t += f.t; c.x2 = Math.max(c.x2, f.x2); linee[j].celle = linee[j].celle.filter((x) => x !== f); break; }
+    }
+  }
+  for (const l of linee) l.testo = l.celle.map((c) => c.t).join(" ");
+  const conQta = (l) => { const k = codaNumerica(l); return !!(k && k.qta); };
+  for (let i = 0; i < linee.length; i++) {
+    const L = linee[i];
+    if (!conQta(L)) continue;
+    const h = L.h || 6;
+    for (const j of [i - 1, i + 1, i - 2, i + 2]) {
+      const M = linee[j];
+      if (!M || M === L || Math.abs(M.y - L.y) > h * 0.95 || conQta(M)) continue;
+      for (const c of M.celle.filter((x) => RE_SOLDI.test(x.t))) {
+        if (L.celle.some((x) => vicino(x, c))) continue;
+        if (c.x < Math.min(...L.celle.filter((x) => RE_SOLDI.test(x.t) || RE_QTA.test(x.t)).map((x) => x.x))) continue;
+        L.celle.push(c); M.celle = M.celle.filter((x) => x !== c);
+      }
+      L.celle.sort((a, b) => a.x - b.x);
+    }
+  }
+  for (const l of linee) l.testo = l.celle.map((c) => c.t).join(" ");
+  return linee.filter((l) => l.celle.length);
+}
+
 /* Parte numerica a destra di una riga: unità di misura, quantità, prezzo unitario, totale. */
 function codaNumerica(l) {
   const c = l.celle;
@@ -75,7 +110,7 @@ function codaNumerica(l) {
 /* Offerta in PDF: { sezioni: [{ nome, totalePdf, righe: [{ codice, descrizione, um, qta, unitario, totale }] }], totaleGenerale, note }
    Restituisce null se nel PDF non c'è una tabella riconoscibile. */
 export function leggiOffertaPdf(pagine) {
-  const perPagina = pagine.map((items, p) => lineeDi(items, p));
+  const perPagina = pagine.map((items, p) => ricuciNumeri(lineeDi(items, p)));
   // 1. righe articolo (ancore): a destra quantità e prezzi, con quantità × unitario = totale quando ci sono entrambi
   const ancore = [];
   for (const linee of perPagina) for (const l of linee) {
@@ -87,6 +122,8 @@ export function leggiOffertaPdf(pagine) {
     const torna = (u, t) => Math.abs(q * u - t) <= Math.max(0.05, Math.abs(t) * 0.002);
     const coppie = [];
     for (let i = 0; i + 1 < v.length; i++) if (torna(v[i], v[i + 1])) coppie.push([v[i], v[i + 1]]);
+    // tra prezzo e totale ci può essere un'altra colonna di importi (es. sconto 0,00)
+    if (!coppie.length) for (let i = 0; i < v.length; i++) for (let j = i + 2; j < v.length; j++) if (v[i] && torna(v[i], v[j])) coppie.push([v[i], v[j]]);
     if (coppie.length) {
       coppie.sort((a, b) => a[0] - b[0]);
       k.unitario = coppie[0][0]; k.totale = coppie[0][1]; k.listino = coppie[coppie.length - 1][0];
@@ -111,7 +148,16 @@ export function leggiOffertaPdf(pagine) {
   for (const l of ancore) l.k.resto = togliPos(l.k.resto).celle;
   const limDx = moda(ancore.map((l) => l.k.inizio), 2) - 1;
   const xCod0 = moda(ancore.map((l) => l.k.resto[0]?.x).filter((x) => x !== undefined), 2);
-  const xDesc = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x > xCod0 + 8).map((c) => c.x)), 2) ?? Infinity;
+  let xDesc = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x > xCod0 + 8).map((c) => c.x)), 2) ?? Infinity;
+  // descrizioni centrate nella colonna (iniziano a x diverse): la colonna comincia subito dopo il codice più lungo
+  {
+    const due = ancore.filter((l) => l.k.resto.length >= 2);
+    if (due.length >= ancore.length * 0.6) {
+      const codX2 = Math.max(...due.map((l) => Math.max(...l.k.resto.slice(0, -1).map((c) => c.x2))));
+      const descX = Math.min(...due.map((l) => l.k.resto[l.k.resto.length - 1].x));
+      if (codX2 + 2 < xDesc && descX >= codX2 + 2 && xDesc - descX > 6) xDesc = codX2 + 2;
+    }
+  }
   // colonna del codice: a sinistra della descrizione ci possono essere più colonne (es. marca, voce di computo):
   // il codice è la più vicina alla descrizione tra quelle presenti in almeno metà degli articoli
   const cluster = new Map();
