@@ -401,6 +401,7 @@ $("#nuova-offerta").addEventListener("click", async () => {
 });
 $("#cerca-offerte").addEventListener("input", disegnaElencoOfferte);
 $("#filtro-stato-off").addEventListener("change", disegnaElencoOfferte);
+$("#filtro-cli-off").addEventListener("change", disegnaElencoOfferte);
 
 /* Ricerca nelle offerte: ogni parola deve comparire da qualche parte (intestazione o righe). */
 const testoOfferta = (o, cli) => [o.nome, campiRif(o).famiglia, cli?.nome, cli?.codice, o.stato === "consegnata" ? "consegnata" : "lavorazione", o.note,
@@ -409,11 +410,19 @@ const testoRighe = (o) => capitoliOff(o).flatMap((c) => (c.righe || []).map((r) 
 function disegnaElencoOfferte() {
   const parole = $("#cerca-offerte").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const stato = $("#filtro-stato-off").value;
+  // clienti presenti nelle offerte (più "senza cliente" se serve)
+  { const sel = $("#filtro-cli-off"), v = sel.value;
+    const ids = [...new Set(S.offerte.map((o) => o.cliente || ""))];
+    const voci = ids.filter(Boolean).map((id) => [id, S.clienti.find((c) => c.id === id)?.nome || "(cliente eliminato)"]).sort((a, b) => a[1].localeCompare(b[1]));
+    sel.innerHTML = `<option value="">Tutti i clienti</option>` + voci.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("") + (ids.includes("") ? `<option value="__nessuno">— senza cliente —</option>` : "");
+    sel.value = [...sel.options].some((o) => o.value === v) ? v : ""; }
+  const cliF = $("#filtro-cli-off").value;
   const cliDi = (id) => S.clienti.find((c) => c.id === id);
   const nomeCli = (id) => cliDi(id)?.nome || "";
   const nelleRighe = new Set();
   const lista = S.offerte.filter((o) => {
     if (stato && (o.stato === "consegnata" ? "consegnata" : "lavorazione") !== stato) return false;
+    if (cliF && (cliF === "__nessuno" ? !!o.cliente : o.cliente !== cliF)) return false;
     if (!parole.length) return true;
     const t = testoOfferta(o, cliDi(o.cliente));
     if (parole.every((p) => t.includes(p))) return true;
