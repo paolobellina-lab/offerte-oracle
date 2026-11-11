@@ -46,8 +46,10 @@ export const codiceOracle = (r) => (isGenerico(r) ? CODICE_GENERICO : codiceArti
    va nelle note: nota pre-linea = numero di ordinazione, nota post-linea = descrizione. Per tutti gli altri
    articoli le note sono testo libero scritto a mano. */
 export const isGenerico = (r) => !!r.generico || String(r.codice || "").trim().toUpperCase() === "ARTICOLO_GEN";
-export const notePreRiga = (r) => (isGenerico(r) ? (r.nOrdine || "") : (r.notePre || ""));
-export const notePostRiga = (r) => (isGenerico(r) ? (r.descrizione || "") : (r.notePost || ""));
+// articoli generici: note automatiche (n° di ordinazione / descrizione) più le note aggiunte nella riga dell'offerta
+const unisci = (...t) => t.map((x) => String(x || "").trim()).filter(Boolean).join(" ");
+export const notePreRiga = (r) => (isGenerico(r) ? unisci(r.nOrdine, r.notaPreAgg) : (r.notePre || ""));
+export const notePostRiga = (r) => (isGenerico(r) ? unisci(r.descrizione, r.notaPostAgg) : (r.notePost || ""));
 
 /* Colonna M del catalogo: valore riparametrizzato (solo se c'è la riparametrizzazione P). */
 export function riparametrizzato(r) {

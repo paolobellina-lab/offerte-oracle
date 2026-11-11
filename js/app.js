@@ -1195,8 +1195,8 @@ function disegnaRighe(c) {
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       ${isGenerico(r)
-        ? `<td><span class="nota-auto" title="Articolo generico: nota pre-linea automatica = n° di ordinazione">auto: ${esc(r.nOrdine)}</span></td>
-           <td><span class="nota-auto" title="Articolo generico: nota post-linea automatica = descrizione">auto: descrizione</span></td>`
+        ? `<td><span class="nota-auto" title="Articolo generico: la nota pre-linea è ${esc(r.nOrdine)} più quello che scrivi qui">auto: ${esc(r.nOrdine)} +</span><input class="nota" data-campo="notaPreAgg" value="${esc(r.notaPreAgg || "")}" placeholder="aggiungi alla nota pre-linea"></td>
+           <td><span class="nota-auto" title="Articolo generico: la nota post-linea è la descrizione più quello che scrivi qui">auto: descrizione +</span><input class="nota" data-campo="notaPostAgg" value="${esc(r.notaPostAgg || "")}" placeholder="aggiungi alla nota post-linea"></td>`
         : `<td><input class="nota" data-campo="notePre" value="${esc(r.notePre)}" placeholder="nota pre-linea"></td>
            <td><input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea"></td>`}</tr>`;
   }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
@@ -1267,6 +1267,7 @@ function cambioRiga(e) {
   const campo = inp.dataset.campo; if (!campo) return;
   if (campo === "notePost") { r.notePost = inp.value.trim(); modificata(); return; }
   if (campo === "notePre") { r.notePre = inp.value.trim(); modificata(); return; }
+  if (campo === "notaPreAgg" || campo === "notaPostAgg") { r[campo] = inp.value.trim(); modificata(); return; }
   if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
   if (campo === "aGiornate") { r.aGiornate = inp.checked; modificata(); return ridisegnaOfferta(); }
   if (campo === "prezzoGen") {
@@ -1424,12 +1425,12 @@ $("#righe-offerta").addEventListener("click", (e) => {
 
 /* Note di più righe insieme: un campo vuoto lascia le note com'erano. */
 function noteRigheSelezionate(scelte) {
-  const modificabili = scelte.filter((r) => !isGenerico(r));
-  if (!modificabili.length) return toast("Le note degli articoli generici sono automatiche (n° di ordinazione e descrizione).");
+  const modificabili = scelte;
+  if (!modificabili.length) return;
   if (modificabili.length === 1) return modificaNoteRiga(modificabili[0]);
   dialogo({
     titolo: `Note di ${modificabili.length} righe`,
-    html: `<p class="muted small" style="margin-top:0">Quello che scrivi va su tutte le righe selezionate (gli articoli generici restano automatici).
+    html: `<p class="muted small" style="margin-top:0">Quello che scrivi va su tutte le righe selezionate (negli articoli generici si aggiunge alle note automatiche: n° di ordinazione e descrizione).
       Lascia vuoto un campo per non cambiarlo; spunta "svuota" per cancellarlo.</p>
       <label class="f">Note pre-linea<textarea id="n-pre" rows="3"></textarea></label>
       <label class="row small"><input type="checkbox" id="n-pre-x"> svuota le note pre-linea</label>
@@ -1439,21 +1440,24 @@ function noteRigheSelezionate(scelte) {
     onConferma(v, b) {
       const pre = $("#n-pre", b).value.trim(), post = $("#n-post", b).value.trim();
       for (const r of modificabili) {
-        if ($("#n-pre-x", b).checked) r.notePre = ""; else if (pre) r.notePre = pre;
-        if ($("#n-post-x", b).checked) r.notePost = ""; else if (post) r.notePost = post;
+        const fp = isGenerico(r) ? "notaPreAgg" : "notePre", fq = isGenerico(r) ? "notaPostAgg" : "notePost";
+        if ($("#n-pre-x", b).checked) r[fp] = ""; else if (pre) r[fp] = pre;
+        if ($("#n-post-x", b).checked) r[fq] = ""; else if (post) r[fq] = post;
       }
       modificata(); disegnaOfferta();
     },
   });
 }
 function modificaNoteRiga(r) {
+  const gen = isGenerico(r), fp = gen ? "notaPreAgg" : "notePre", fq = gen ? "notaPostAgg" : "notePost";
   dialogo({
     titolo: `Note · ${codiceArticolo(r)} ${r.nOrdine}`,
-    html: `<label class="f">Note pre-linea<textarea id="n-pre" rows="4">${esc(r.notePre)}</textarea></label>
-      <label class="f" style="margin-top:10px">Note post-linea<textarea id="n-post" rows="4">${esc(r.notePost)}</textarea></label>`,
+    html: `${gen ? `<p class="muted small" style="margin-top:0">Articolo generico: quello che scrivi si aggiunge alle note automatiche (pre-linea: <b>${esc(r.nOrdine)}</b>; post-linea: la descrizione).</p>` : ""}
+      <label class="f">${gen ? "Aggiunta alla nota pre-linea" : "Note pre-linea"}<textarea id="n-pre" rows="4">${esc(r[fp] || "")}</textarea></label>
+      <label class="f" style="margin-top:10px">${gen ? "Aggiunta alla nota post-linea" : "Note post-linea"}<textarea id="n-post" rows="4">${esc(r[fq] || "")}</textarea></label>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onConferma(v, b) {
-      r.notePre = $("#n-pre", b).value.trim(); r.notePost = $("#n-post", b).value.trim();
+      r[fp] = $("#n-pre", b).value.trim(); r[fq] = $("#n-post", b).value.trim();
       modificata(); disegnaOfferta();
     },
   });
@@ -1495,7 +1499,7 @@ function azioneRighe(az, opz = {}) {
   } else if (az === "dup") {
     // le copie vanno in fondo, nello stesso ordine, con il capitolato e la nota scelti (se indicati)
     const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(),
-      ...(capSc ? { capitolato: capSc } : {}), ...(nota && !isGenerico(r) ? { notePost: nota } : {}) }));
+      ...(capSc ? { capitolato: capSc } : {}), ...(nota ? (isGenerico(r) ? { notaPostAgg: nota } : { notePost: nota }) : {}) }));
     c.righe.push(...copie);
     S.sel = new Set(copie.map((r) => r.id));
     toast(`Duplicate ${copie.length} righe${capSc ? ` nel capitolato “${capSc}”` : ""}${nota ? ` con nota “${nota}”` : ""}: le trovi in fondo, già selezionate.`, 4500);
@@ -1544,6 +1548,7 @@ $("#aggiorna-da-catalogo").addEventListener("click", () => {
     const nuovo = rigaDaArticolo(a);
     // restano quelle della riga: quantità, giorni dell'attività, note, capitolato e "a giornate"
     const out = { ...nuovo, id: r.id, qta: r.qta, giorni: isAttivita(r) ? r.giorni : a.giorni, notePre: r.notePre, notePost: r.notePost, capitolato: r.capitolato || "" };
+    if (r.notaPreAgg) out.notaPreAgg = r.notaPreAgg; if (r.notaPostAgg) out.notaPostAgg = r.notaPostAgg;
     if (r.aGiornate) out.aGiornate = r.aGiornate; else delete out.aGiornate;
     return out;
   });

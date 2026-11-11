@@ -969,3 +969,6 @@ select.stato-off { font-size: .85rem; padding: 3px 6px; background: #fff; color:
 #o-testata input, #o-testata select, #o-testata textarea { font-size: 1.02rem; }
 #o-testata input.mono { font-size: 1rem; letter-spacing: .02em; }
 #o-testata .cli-riga select { font-size: 1rem; }
+
+/* Note aggiuntive degli articoli generici: la parte automatica sopra, il campo sotto */
+#righe-offerta td > .nota-auto + input.nota { display: block; margin-top: 2px; }
