@@ -374,6 +374,12 @@ export function leggiOffertaPdf(pagine) {
         // una riga vuota (o più) dopo la descrizione chiude l'articolo: il testo che segue è a parte
         if (i && r.own < 0 && cur && L[i - 1].y - r.y > riga * 2.2) cur = null;
         if (r.own >= 0) { cur = art[r.own]; cur.righe = [r]; frag = true; return; }
+        // seconda riga del codice nella colonna del codice ("Y-IT-PRD-REDPS-" e sotto "G3WR"): si attacca al codice
+        if (r.own === -2 && cur && frag && r.l?.cod && !r.l.nota && /^[A-Z0-9][A-Z0-9.\-\/]*$/.test(r.l.cod)) {
+          cur.cod = (cur.cod || "") + r.l.cod; r.t = r.l.desc || "";
+          if (r.t) cur.righe.push(r);
+          r.l.usata = true; return;
+        }
         // una riga in un altro carattere (grassetto) in mezzo alla descrizione ne fa parte; NOTE e codici no
         if (r.own === -2 && !(r.l && r.l.titolo && !r.l.cod && !r.l.nota)) { cur = null; return; }
         if (!cur) { if (r.l && r.t) { r.l.nota = true; } return; }
