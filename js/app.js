@@ -2026,7 +2026,7 @@ function disegnaGmv(c, rc) {
     const e = esiti.get(g), att = e?.tipo === "attivita";
     const gen = gmaGenerico(g, info.prima.riga.fornitore) || (isGenerico(info.prima.riga) && info.prima.riga.daOfferta);
     const badge = !e ? `<span class="muted small">${gen ? "generici: nessun cartellino" : "—"}</span>` :
-      `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
+      `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : e.stato === "nc" ? "info" : "bad"}">${esc(e.testo)}</span>`;
     const scList = gen ? null : info.prima.c.scontoListino;
     return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitoriTxt(g))}</td>
       <td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
@@ -2034,7 +2034,7 @@ function disegnaGmv(c, rc) {
       <td class="num">${info.acquistato ? pctTxt(ricaricoPct(info.venduto, info.acquistato)) || "0%" : "—"}</td>
       <td class="num">${info.venduto ? pctTxt(marginePct(info.venduto, info.acquistato)) || "0%" : "—"}</td>
       <td class="num">${att ? (e ? euro(e.offerta) + "/g" : "") : scList === null ? "" : pctTxt(scList) || "0%"}</td>
-      <td class="num">${e ? (att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
+      <td class="num">${e ? (e.stato === "nc" ? "NC" : att ? euro(e.cartellino) + "/g" : pctTxt(e.cartellino) || "0%") : ""}</td><td>${badge}</td></tr>`;
   }).join("");
   $("#righe-gmv").innerHTML = html || `<tr><td colspan="11" class="vuoto">Aggiungi articoli al capitolo per vedere i loro GMA.</td></tr>`;
 }
@@ -2976,8 +2976,9 @@ function modificaCliente(c) {
       <label class="f">Tariffa attività tecnica €<input id="k-att" inputmode="decimal" value="${esc(c.att === "" ? "" : String(c.att).replace(".", ","))}"></label>
     </div>
     <h3 style="margin:14px 0 8px">Sconti di cartellino per GMA</h3>
+    <p class="muted small" style="margin:-4px 0 8px">Scrivi <b>NC</b> per un GMA non censito: nel controllo dell'offerta comparirà "Non censito" invece di OK o fuori cartellino.</p>
     <div class="gmv-colonne">${perFornitore(gmvs).map(([forn, gs]) => `<div class="gmv-forn"><div class="gmv-forn-tit">${esc(forn)}</div><div class="lista-gmv">${gs.map((g) => `<label><span><b class="mono">${esc(g)}</b></span>
-      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" ${(() => { const o = gmaOracle(g); return o !== g ? `placeholder="= ${esc(o)} ${esc(scontoCliTxt(c, o) || "")}" title="In Oracle è ${esc(o)}: vale il suo cartellino. Scrivi un valore solo per fare eccezione."` : 'placeholder="es. 45+10"'; })()}></span></label>`).join("")}</div></div>`).join("")}</div>`,
+      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" ${(() => { const o = gmaOracle(g); return o !== g ? `placeholder="= ${esc(o)} ${esc(scontoCliTxt(c, o) || "")}" title="In Oracle è ${esc(o)}: vale il suo cartellino. Scrivi un valore solo per fare eccezione."` : 'placeholder="es. 45+10 · NC = non censito"'; })()}></span></label>`).join("")}</div></div>`).join("")}</div>`,
     pulsanti: [...(nuovo ? [] : [{ label: "Elimina cliente", value: "del", cls: "danger" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {
@@ -2985,7 +2986,10 @@ function modificaCliente(c) {
       const nome = $("#k-nome", b).value.trim();
       if (!nome) { toast("Scrivi la ragione sociale."); return false; }
       const sconti = {}, scontiTesto = {};
-      $$("[data-g]", b).forEach((i) => { const x = cascata(i.value); if (x.f) { sconti[i.dataset.g] = x.f; if (x.testo.includes("+")) scontiTesto[i.dataset.g] = x.testo; } });
+      $$("[data-g]", b).forEach((i) => {
+        // NC = non censito: il controllo cartellino dice "Non censito" invece di OK / fuori cartellino
+        if (/^\s*n\.?\s*c\.?\s*$/i.test(i.value)) { sconti[i.dataset.g] = "NC"; return; }
+        const x = cascata(i.value); if (x.f) { sconti[i.dataset.g] = x.f; if (x.testo.includes("+")) scontiTesto[i.dataset.g] = x.testo; } });
       const attTxt = $("#k-att", b).value.trim();
       const id = c.id || slug(nome) + "-" + db.nuovoId().slice(-4);
       await db.salva(COLL.cli, id, { ...(c.censito ? { censito: c.censito } : {}), nome, codice: $("#k-cod", b).value.trim(), att: attTxt === "" ? "" : num(attTxt), sconti, scontiTesto });
@@ -3000,7 +3004,7 @@ function modificaCliente(c) {
    2. Si scaricano da Oracle le linee di quell'offerta e si caricano qui: per ogni GMA si leggono gli sconti che Oracle
       ha applicato (Sconto GMA, Sconto Cliente, Sconto 3/4/5) e diventano il cartellino del cliente (anche in cascata). */
 const cascata = (t) => { const tt = BIB.terminiSconto(t); return { f: tt.length ? 1 - BIB.fattoreDi(tt) : 0, testo: tt.map((x) => String(Math.round(x * 1e4) / 100).replace(".", ",")).join("+") }; };
-const scontoCliTxt = (c, g) => c.scontiTesto?.[g] || pctVal(c.sconti?.[g]);
+const scontoCliTxt = (c, g) => (c.sconti?.[g] === "NC" ? "NC" : c.scontiTesto?.[g] || pctVal(c.sconti?.[g]));
 /* Righe dell'offerta di censimento: un GMA per riga, con l'articolo proposto (o quello scelto l'ultima volta).
    Si può cambiare articolo, scrivere a mano un codice Oracle, escludere un GMA o aggiungerne. */
 function righeCensimento() {

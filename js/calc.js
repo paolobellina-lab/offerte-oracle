@@ -379,7 +379,9 @@ export function controlloCartellino(off, cliente, opz = {}) {
     const scontoOfferta = x.c.scontoListino ?? 0;
     // il cartellino del GMA; se non c'è, quello del codice con cui lo conosce Oracle (es. SENSITRON → SIFSFI)
     const proprio = cliente.sconti?.[gmv], og = gmaOracle(gmv, x.riga.fornitore);
-    const scCart = num(proprio !== undefined && proprio !== "" && proprio !== null ? proprio : cliente.sconti?.[og]);
+    const valCart = proprio !== undefined && proprio !== "" && proprio !== null ? proprio : cliente.sconti?.[og];
+    if (valCart === "NC") { esiti.push({ gmv, tipo: "sconto", offerta: x.c.scontoListino ?? 0, cartellino: null, stato: "nc", testo: "Non censito" }); continue; }
+    const scCart = num(valCart);
     const stato = scCart < scontoOfferta - 1e-9 ? "ok" : Math.abs(scCart - scontoOfferta) < 1e-9 ? "pari" : "fuori";
     esiti.push({ gmv, tipo: "sconto", offerta: scontoOfferta, cartellino: scCart, stato,
       testo: stato === "ok" ? "OK" : stato === "pari" ? "Sconto di cartellino" : "Inferiore al valore di cartellino" });
