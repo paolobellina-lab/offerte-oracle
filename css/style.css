@@ -956,3 +956,11 @@ img.img-mini { max-width: 52px; max-height: 44px; display: block; margin: auto; 
 #lista-offerte tr > td.muted { color: #4f5961; }
 #lista-offerte .badge.info { background: #fff; }
 select.stato-off { font-size: .85rem; padding: 3px 6px; background: #fff; color: #1b1f23; border: 1px solid #9aa3ab; border-radius: 6px; }
+
+/* Riferimento offerta: famiglia, riferimento Itecnici, lavoro */
+.grid-set .rif-tripla { grid-column: 1 / -1; display: grid; grid-template-columns: 170px 190px minmax(0, 1fr); gap: 10px; align-items: end; }
+.rif-tripla #o-rif-info .bad { color: var(--bad, #b33a2b); font-weight: 600; }
+.rif-tripla #o-rif-info { grid-column: 1 / -1; min-height: 0; }
+.rif-tripla #o-rif-info:empty { display: none; }
+@media (max-width: 700px) { .rif-tripla { grid-template-columns: 1fr 1fr; } .rif-tripla .lav { grid-column: 1 / -1; } }
+.fam-cel { font-family: var(--mono, monospace); font-size: .85rem; white-space: nowrap; }

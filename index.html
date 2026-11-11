@@ -88,7 +88,7 @@
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Riferimento</th><th>Cliente</th><th>Capitoli</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Margine</th><th>Modificata</th><th>Stato</th><th></th></tr></thead>
+          <thead><tr><th>Famiglia</th><th>Riferimento · Lavoro</th><th>Cliente</th><th>Capitoli</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Margine</th><th>Modificata</th><th>Stato</th><th></th></tr></thead>
           <tbody id="lista-offerte"></tbody>
         </table>
       </div>
@@ -101,9 +101,12 @@
       <div class="off-contenuto">
       <div class="card" id="o-testata">
         <div class="grid-set">
-          <label class="f wide">Riferimento offerta
-            <input id="o-nome" placeholder="es. OF_TE25031087">
-          </label>
+          <div class="wide rif-tripla">
+            <label class="f">Famiglia<input id="o-fam" class="mono" list="o-fam-lista" placeholder="es. TE26034298" title="Lega più offerte (anche a clienti diversi) allo stesso lavoro"><datalist id="o-fam-lista"></datalist></label>
+            <label class="f">Riferimento Itecnici<input id="o-rif" class="mono" placeholder="es. TE26034298" title="Riferimento univoco di questa offerta"></label>
+            <label class="f lav">Lavoro<input id="o-lav" placeholder="es. HOTEL AQUARDENS TERME VERONA" title="Nota descrittiva"></label>
+            <span class="small" id="o-rif-info"></span>
+          </div>
           <label class="f wide">Cliente
             <span class="cli-riga"><select id="o-cliente"></select>
               <input id="o-cli-cod" class="mono" readonly placeholder="codice" title="Codice cliente: clic per selezionarlo e copiarlo">

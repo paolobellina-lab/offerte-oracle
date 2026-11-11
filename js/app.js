@@ -397,13 +397,13 @@ $("#nuova-offerta").addEventListener("click", async () => {
   const o = nuovaOffertaVuota();
   try { await db.salva(COLL.off, o.id, o); } catch (x) { return errore(x); }
   apriOfferta(o.id, false, o);
-  $("#o-nome").focus();
+  $("#o-rif").focus();
 });
 $("#cerca-offerte").addEventListener("input", disegnaElencoOfferte);
 $("#filtro-stato-off").addEventListener("change", disegnaElencoOfferte);
 
 /* Ricerca nelle offerte: ogni parola deve comparire da qualche parte (intestazione o righe). */
-const testoOfferta = (o, cli) => [o.nome, cli?.nome, cli?.codice, o.stato === "consegnata" ? "consegnata" : "lavorazione", o.note,
+const testoOfferta = (o, cli) => [o.nome, campiRif(o).famiglia, cli?.nome, cli?.codice, o.stato === "consegnata" ? "consegnata" : "lavorazione", o.note,
   ...capitoliOff(o).flatMap((c) => [c.nome, c.titoloComputo, ...(c.capitolati || [])])].filter(Boolean).join(" ").toLowerCase();
 const testoRighe = (o) => capitoliOff(o).flatMap((c) => (c.righe || []).map((r) => [codiceArticolo(r), r.precodice, r.codice, r.nOrdine, r.descrizione, r.notePre, r.notePost, r.gmv, r.fornitore].filter(Boolean).join(" "))).join(" ").toLowerCase();
 function disegnaElencoOfferte() {
@@ -425,7 +425,8 @@ function disegnaElencoOfferte() {
     const t = totaliOfferta(o);
     const cons = o.stato === "consegnata";
     return `<tr class="cliccabile ${cons ? "off-consegnata" : "off-lavorazione"}" data-id="${esc(o.id)}">
-      <td><b>${esc(o.nome || "(senza riferimento)")}</b>${nelleRighe.has(o.id) ? ` <span class="badge info" title="La ricerca è stata trovata negli articoli dell'offerta">trovato negli articoli</span>` : ""}</td><td>${esc(nomeCli(o.cliente))}</td>
+      <td class="fam-cel">${esc(campiRif(o).famiglia)}</td>
+      <td>${(() => { const r = campiRif(o); return r.rif ? `<b class="mono">${esc(r.rif)}</b>${r.lavoro ? " - " + esc(r.lavoro) : ""}` : `<b>${esc(o.nome || "(senza riferimento)")}</b>`; })()}${nelleRighe.has(o.id) ? ` <span class="badge info" title="La ricerca è stata trovata negli articoli dell'offerta">trovato negli articoli</span>` : ""}</td><td>${esc(nomeCli(o.cliente))}</td>
       <td class="small">${capitoliOff(o).map((c) => `<span class="badge info">${esc(c.nome)}</span>`).join(" ")}</td>
       <td class="num">${t.righe}</td><td class="num">${euro(t.venduto)}</td>
       <td class="num">${t.venduto ? pctTxt(marginePct(t.venduto, t.acquistato)) || "0%" : ""}</td>
@@ -433,7 +434,7 @@ function disegnaElencoOfferte() {
       <td class="nowrap"><select class="stato-off" data-stato="${esc(o.id)}" title="Stato dell'offerta">
         <option value="lavorazione" ${cons ? "" : "selected"}>In lavorazione</option><option value="consegnata" ${cons ? "selected" : ""}>Consegnata</option></select></td>
       <td class="nowrap"><button class="btn small" data-dup="${esc(o.id)}">Duplica</button></td></tr>`;
-  }).join("") : `<tr><td colspan="9" class="vuoto">${S.offerte.length ? "Nessuna offerta trovata." :
+  }).join("") : `<tr><td colspan="10" class="vuoto">${S.offerte.length ? "Nessuna offerta trovata." :
     S.catalogo.length ? "Ancora nessuna offerta: crea la prima con “+ Nuova offerta”." :
     "Il database articoli è vuoto: vai in “Importa e aggiorna” e carica il file Excel."}</td></tr>`;
 }
@@ -455,7 +456,9 @@ $("#lista-offerte").addEventListener("click", (e) => {
 
 async function duplica(o) {
   if (!o) return;
-  const n = { ...normalizza(o), id: db.nuovoId(), nome: (o.nome || "Offerta") + " (copia)", stato: "lavorazione",
+  // il riferimento Itecnici è univoco: la copia lo lascia vuoto, la famiglia resta (stesso lavoro)
+  const rr = campiRif(o), lav = (rr.lavoro || o.nome || "Offerta") + " (copia)";
+  const n = { ...normalizza(o), id: db.nuovoId(), famiglia: rr.famiglia, rif: "", lavoro: lav, nome: lav, stato: "lavorazione",
     creatoIl: Date.now(), aggiornatoIl: Date.now(), creatoDa: S.utente?.email || "" };
   try { await db.salva(COLL.off, n.id, n); toast("Offerta duplicata"); apriOfferta(n.id, false, n); } catch (x) { errore(x); }
 }
@@ -528,6 +531,35 @@ $("#elimina-offerta").addEventListener("click", () => {
   });
 });
 
+/* --- Riferimento dell'offerta: famiglia, riferimento Itecnici (univoco), lavoro (nota) ---
+   "nome" resta il testo completo "riferimento - lavoro" usato ovunque (elenco, nomi dei file…). */
+const RE_RIF = /^\s*([A-Za-z]{0,4}\d{5,}[A-Za-z0-9]*)\s*(?:[-–—:]\s*(.*))?$/;
+function campiRif(o) {
+  if (o.rif !== undefined || o.lavoro !== undefined) return { famiglia: o.famiglia || "", rif: o.rif || "", lavoro: o.lavoro || "" };
+  const m = String(o.nome || "").match(RE_RIF);
+  return m ? { famiglia: o.famiglia || "", rif: m[1].toUpperCase(), lavoro: (m[2] || "").trim() } : { famiglia: o.famiglia || "", rif: "", lavoro: o.nome || "" };
+}
+const nomeDaRif = (r) => [r.rif, r.lavoro].filter(Boolean).join(" - ");
+function infoRif() {
+  const o = S.off; if (!o) return;
+  const r = campiRif(o), msg = [];
+  const doppio = r.rif && S.offerte.filter((x) => x.id !== o.id && campiRif(x).rif === r.rif);
+  if (doppio?.length) msg.push(`<span class="bad">⚠ Il riferimento ${esc(r.rif)} è già usato da: ${doppio.map((x) => esc(x.nome || "")).join("; ")}</span>`);
+  const fam = r.famiglia && S.offerte.filter((x) => x.id !== o.id && campiRif(x).famiglia === r.famiglia);
+  if (fam?.length) msg.push(`<span class="muted">Stessa famiglia: ${fam.map((x) => `${esc(x.nome || "")}${S.clienti.find((c) => c.id === x.cliente) ? " (" + esc(S.clienti.find((c) => c.id === x.cliente).nome) + ")" : ""}`).join("; ")}</span>`);
+  $("#o-rif-info").innerHTML = msg.join("<br>");
+}
+function cambioRif() {
+  const o = S.off; if (!o) return;
+  o.famiglia = $("#o-fam").value.replace(/\s+/g, "").toUpperCase();
+  o.rif = $("#o-rif").value.replace(/\s+/g, "").toUpperCase();
+  o.lavoro = $("#o-lav").value.trim();
+  o.nome = nomeDaRif(o);
+  infoRif(); modificata();
+}
+for (const id of ["#o-fam", "#o-rif", "#o-lav"]) $(id).addEventListener("input", cambioRif);
+for (const id of ["#o-fam", "#o-rif"]) $(id).addEventListener("change", (e) => { e.target.value = e.target.value.replace(/\s+/g, "").toUpperCase(); });
+
 /* --- Testata dell'offerta --- */
 function seg(el, valori, attuale, etichetta = (v) => v) {
   el.innerHTML = valori.map((v) => `<button type="button" data-v="${esc(String(v))}" class="${String(v) === String(attuale) ? "on" : ""}">${esc(etichetta(v))}</button>`).join("");
@@ -535,7 +567,9 @@ function seg(el, valori, attuale, etichetta = (v) => v) {
 function disegnaTestata() {
   const o = S.off;
   if (!o) return;
-  $("#o-nome").value = o.nome || "";
+  { const r = campiRif(o); $("#o-fam").value = r.famiglia; $("#o-rif").value = r.rif; $("#o-lav").value = r.lavoro; }
+  $("#o-fam-lista").innerHTML = [...new Set(S.offerte.map((x) => campiRif(x).famiglia).filter(Boolean))].sort().map((f) => `<option value="${esc(f)}">`).join("");
+  infoRif();
   $("#o-note").value = o.note || "";
   $("#o-cliente").innerHTML = `<option value="">— nessun cliente (niente controllo cartellino) —</option>` +
     S.clienti.map((c) => `<option value="${esc(c.id)}" class="${c.censito ? "cli-ok" : "cli-no"}" ${c.id === o.cliente ? "selected" : ""}>${c.censito ? "● " : "○ "}${esc(c.nome)}</option>`).join("");
@@ -553,7 +587,6 @@ $("#o-imp").addEventListener("click", (e) => {
   for (const c of S.off.capitoli) { aggiornaCondizioni(c); c.imp = b.dataset.v; }
   modificata(); disegnaTestata(); disegnaOfferta();
 });
-$("#o-nome").addEventListener("input", (e) => { S.off.nome = e.target.value; modificata(); });
 $("#o-note").addEventListener("input", (e) => { S.off.note = e.target.value; modificata(); });
 $("#o-cliente").addEventListener("change", (e) => { S.off.cliente = e.target.value; statoCensimento(); modificata(); disegnaOfferta(); });
 /* Cliente dell'offerta: verde se il cartellino è stato censito da Oracle, rosso se no. */
