@@ -400,16 +400,32 @@ $("#nuova-offerta").addEventListener("click", async () => {
   $("#o-nome").focus();
 });
 $("#cerca-offerte").addEventListener("input", disegnaElencoOfferte);
+$("#filtro-stato-off").addEventListener("change", disegnaElencoOfferte);
 
+/* Ricerca nelle offerte: ogni parola deve comparire da qualche parte (intestazione o righe). */
+const testoOfferta = (o, cli) => [o.nome, cli?.nome, cli?.codice, o.stato === "consegnata" ? "consegnata" : "lavorazione", o.note,
+  ...capitoliOff(o).flatMap((c) => [c.nome, c.titoloComputo, ...(c.capitolati || [])])].filter(Boolean).join(" ").toLowerCase();
+const testoRighe = (o) => capitoliOff(o).flatMap((c) => (c.righe || []).map((r) => [codiceArticolo(r), r.precodice, r.codice, r.nOrdine, r.descrizione, r.notePre, r.notePost, r.gmv, r.fornitore].filter(Boolean).join(" "))).join(" ").toLowerCase();
 function disegnaElencoOfferte() {
-  const q = $("#cerca-offerte").value.trim().toLowerCase();
-  const nomeCli = (id) => S.clienti.find((c) => c.id === id)?.nome || "";
-  const lista = S.offerte.filter((o) => !q || (o.nome || "").toLowerCase().includes(q) || nomeCli(o.cliente).toLowerCase().includes(q));
+  const parole = $("#cerca-offerte").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const stato = $("#filtro-stato-off").value;
+  const cliDi = (id) => S.clienti.find((c) => c.id === id);
+  const nomeCli = (id) => cliDi(id)?.nome || "";
+  const nelleRighe = new Set();
+  const lista = S.offerte.filter((o) => {
+    if (stato && (o.stato === "consegnata" ? "consegnata" : "lavorazione") !== stato) return false;
+    if (!parole.length) return true;
+    const t = testoOfferta(o, cliDi(o.cliente));
+    if (parole.every((p) => t.includes(p))) return true;
+    const tr = t + " " + testoRighe(o);
+    if (parole.every((p) => tr.includes(p))) { nelleRighe.add(o.id); return true; }
+    return false;
+  });
   $("#lista-offerte").innerHTML = lista.length ? lista.map((o) => {
     const t = totaliOfferta(o);
     const cons = o.stato === "consegnata";
     return `<tr class="cliccabile ${cons ? "off-consegnata" : "off-lavorazione"}" data-id="${esc(o.id)}">
-      <td><b>${esc(o.nome || "(senza riferimento)")}</b></td><td>${esc(nomeCli(o.cliente))}</td>
+      <td><b>${esc(o.nome || "(senza riferimento)")}</b>${nelleRighe.has(o.id) ? ` <span class="badge info" title="La ricerca è stata trovata negli articoli dell'offerta">trovato negli articoli</span>` : ""}</td><td>${esc(nomeCli(o.cliente))}</td>
       <td class="small">${capitoliOff(o).map((c) => `<span class="badge info">${esc(c.nome)}</span>`).join(" ")}</td>
       <td class="num">${t.righe}</td><td class="num">${euro(t.venduto)}</td>
       <td class="num">${t.venduto ? pctTxt(marginePct(t.venduto, t.acquistato)) || "0%" : ""}</td>

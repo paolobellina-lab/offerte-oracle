@@ -80,7 +80,10 @@
     <section id="v-offerte">
       <div class="row" style="margin-bottom:12px">
         <h2 class="grow">Offerte</h2>
-        <input id="cerca-offerte" type="search" placeholder="Cerca riferimento o cliente" style="min-width:240px">
+        <select id="filtro-stato-off" title="Filtra per stato">
+          <option value="">Tutti gli stati</option><option value="lavorazione">In lavorazione</option><option value="consegnata">Consegnate</option></select>
+        <input id="cerca-offerte" type="search" placeholder="Cerca: riferimento, cliente, codice, articolo, capitolo…" style="min-width:340px"
+          title="Più parole: devono esserci tutte. Cerca in riferimento, cliente e codice cliente, capitoli e capitolati, codici, n° di ordinazione e descrizioni degli articoli">
         <button class="btn verde forte" id="nuova-offerta">+ Nuova offerta</button>
       </div>
       <div class="tbl-wrap">
