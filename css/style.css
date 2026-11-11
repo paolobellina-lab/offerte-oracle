@@ -964,3 +964,8 @@ select.stato-off { font-size: .85rem; padding: 3px 6px; background: #fff; color:
 .rif-tripla #o-rif-info:empty { display: none; }
 @media (max-width: 700px) { .rif-tripla { grid-template-columns: 1fr 1fr; } .rif-tripla .lav { grid-column: 1 / -1; } }
 .fam-cel { font-family: var(--mono, monospace); font-size: .85rem; white-space: nowrap; }
+
+/* Testata dell'offerta: caratteri delle celle più grandi */
+#o-testata input, #o-testata select, #o-testata textarea { font-size: 1.02rem; }
+#o-testata input.mono { font-size: 1rem; letter-spacing: .02em; }
+#o-testata .cli-riga select { font-size: 1rem; }
