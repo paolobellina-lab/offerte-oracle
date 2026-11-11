@@ -947,3 +947,12 @@ img.img-mini { max-width: 52px; max-height: 44px; display: block; margin: auto; 
 .img-zona:focus, .img-zona.sopra { border-color: var(--accent, #1f5f8b); background: var(--accent-soft, #e3eef6); }
 .img-vedi img { max-width: 160px; max-height: 110px; display: block; background: #fff; border-radius: 4px; }
 .img-az { display: flex; gap: 6px; }
+
+/* Stato delle offerte: in lavorazione (giallo) / consegnata (verde) */
+#lista-offerte tr.off-lavorazione > td { background: #fff4d6; color: #1b1f23; }
+#lista-offerte tr.off-consegnata > td { background: #d9f2df; color: #1b1f23; }
+#lista-offerte tr.off-lavorazione:hover > td { background: #fbe6a8 !important; }
+#lista-offerte tr.off-consegnata:hover > td { background: #b8e6c3 !important; }
+#lista-offerte tr > td.muted { color: #4f5961; }
+#lista-offerte .badge.info { background: #fff; }
+select.stato-off { font-size: .85rem; padding: 3px 6px; background: #fff; color: #1b1f23; border: 1px solid #9aa3ab; border-radius: 6px; }

@@ -407,18 +407,30 @@ function disegnaElencoOfferte() {
   const lista = S.offerte.filter((o) => !q || (o.nome || "").toLowerCase().includes(q) || nomeCli(o.cliente).toLowerCase().includes(q));
   $("#lista-offerte").innerHTML = lista.length ? lista.map((o) => {
     const t = totaliOfferta(o);
-    return `<tr class="cliccabile" data-id="${esc(o.id)}">
+    const cons = o.stato === "consegnata";
+    return `<tr class="cliccabile ${cons ? "off-consegnata" : "off-lavorazione"}" data-id="${esc(o.id)}">
       <td><b>${esc(o.nome || "(senza riferimento)")}</b></td><td>${esc(nomeCli(o.cliente))}</td>
       <td class="small">${capitoliOff(o).map((c) => `<span class="badge info">${esc(c.nome)}</span>`).join(" ")}</td>
       <td class="num">${t.righe}</td><td class="num">${euro(t.venduto)}</td>
       <td class="num">${t.venduto ? pctTxt(marginePct(t.venduto, t.acquistato)) || "0%" : ""}</td>
       <td class="nowrap muted">${dataOra(o.aggiornatoIl)}</td>
+      <td class="nowrap"><select class="stato-off" data-stato="${esc(o.id)}" title="Stato dell'offerta">
+        <option value="lavorazione" ${cons ? "" : "selected"}>In lavorazione</option><option value="consegnata" ${cons ? "selected" : ""}>Consegnata</option></select></td>
       <td class="nowrap"><button class="btn small" data-dup="${esc(o.id)}">Duplica</button></td></tr>`;
-  }).join("") : `<tr><td colspan="8" class="vuoto">${S.offerte.length ? "Nessuna offerta trovata." :
+  }).join("") : `<tr><td colspan="9" class="vuoto">${S.offerte.length ? "Nessuna offerta trovata." :
     S.catalogo.length ? "Ancora nessuna offerta: crea la prima con “+ Nuova offerta”." :
     "Il database articoli è vuoto: vai in “Importa e aggiorna” e carica il file Excel."}</td></tr>`;
 }
+$("#lista-offerte").addEventListener("change", async (e) => {
+  const sel = e.target.closest("[data-stato]"); if (!sel) return;
+  const o = S.offerte.find((x) => x.id === sel.dataset.stato); if (!o) return;
+  const stato = sel.value, prima = o.stato;
+  o.stato = stato; if (S.off?.id === o.id) S.off.stato = stato;
+  disegnaElencoOfferte();
+  try { await db.salva(COLL.off, o.id, { ...o }); } catch (x) { o.stato = prima; disegnaElencoOfferte(); errore(x, "Stato non salvato"); }
+});
 $("#lista-offerte").addEventListener("click", (e) => {
+  if (e.target.closest("[data-stato]")) return e.stopPropagation();
   const dup = e.target.closest("[data-dup]");
   if (dup) { e.stopPropagation(); return duplica(S.offerte.find((o) => o.id === dup.dataset.dup)); }
   const tr = e.target.closest("tr[data-id]");
@@ -427,7 +439,7 @@ $("#lista-offerte").addEventListener("click", (e) => {
 
 async function duplica(o) {
   if (!o) return;
-  const n = { ...normalizza(o), id: db.nuovoId(), nome: (o.nome || "Offerta") + " (copia)",
+  const n = { ...normalizza(o), id: db.nuovoId(), nome: (o.nome || "Offerta") + " (copia)", stato: "lavorazione",
     creatoIl: Date.now(), aggiornatoIl: Date.now(), creatoDa: S.utente?.email || "" };
   try { await db.salva(COLL.off, n.id, n); toast("Offerta duplicata"); apriOfferta(n.id, false, n); } catch (x) { errore(x); }
 }
