@@ -3700,6 +3700,12 @@ function rigaDaOffertaForn(x, att, fonte, capNome) {
     ? { ...base, precodice: "PIT", codice: "ATT.TEC", generico: false, qta: 1, giorni: num(x.qta) || 1, aGiornate: false, listinoAcquisto: num(x.unitario), gmv: "ATT",
         notePre: x.codice || "", notePost: x.descrizione || "" }
     : { ...base, precodice: "P000", codice: "ARTICOLO_GEN", generico: true, qta: num(x.qta), giorni: 0, listinoAcquisto: num(x.unitario), gmv: "ARTGEN" };
+  // il fornitore dà anche il prezzo di listino (es. "Prezzo unitario listino" + "Prezzo totale netto"):
+  // listino acquisto = listino del fornitore, sconto = quello che porta al netto
+  if (!att && num(x.listino) > num(x.unitario) + 0.005 && num(x.unitario) > 0) {
+    r.listinoAcquisto = num(x.listino);
+    r.sc3 = Math.round((1 - num(x.unitario) / num(x.listino)) * 1e6) / 1e6;
+  }
   r.listino = listinoCalcolato(r);
   return r;
 }

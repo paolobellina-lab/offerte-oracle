@@ -516,6 +516,8 @@ export function leggiOffertaPdf(pagine) {
   // il totale generale vale per le sezioni che lo precedono (dopo possono esserci le opzioni)
   const prima = sezGenerale === null ? sezioni : sezioni.slice(0, sezGenerale);
   for (const x of sezioni) x.nelTotale = prima.includes(x);
+  // sezioni dichiarate fuori dal totale ("OPZIONALE: prezzo non incluso nel totale", "Optional"…)
+  for (const x of sezioni) if (/opzional|optional|non\s+incluso|esclus[oi]\s+dal\s+totale/i.test(x.nome)) x.nelTotale = false;
   const piene = sezioni.filter((s) => s.righe.length);
   return piene.length ? { sezioni: piene, totaleGenerale, note } : null;
 }
