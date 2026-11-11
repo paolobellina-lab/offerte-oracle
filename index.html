@@ -80,6 +80,7 @@
     <section id="v-offerte">
       <div class="row" style="margin-bottom:12px">
         <h2 class="grow">Offerte</h2>
+        <select id="filtro-fam-off" title="Filtra per famiglia (TF)"><option value="">Tutte le famiglie</option></select>
         <select id="filtro-cli-off" title="Filtra per cliente"><option value="">Tutti i clienti</option></select>
         <select id="filtro-stato-off" title="Filtra per stato">
           <option value="">Tutti gli stati</option><option value="lavorazione">In lavorazione</option><option value="consegnata">Consegnate</option></select>
@@ -89,7 +90,7 @@
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Famiglia</th><th>Riferimento · Lavoro</th><th>Cliente</th><th>Capitoli</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Margine</th><th>Modificata</th><th>Stato</th><th></th></tr></thead>
+          <thead><tr><th>Famiglia (TF)</th><th>Riferimento · Lavoro</th><th>Cliente</th><th>Capitoli</th><th class="num">Righe</th><th class="num">Venduto</th><th class="num">Margine</th><th>Modificata</th><th>Stato</th><th></th></tr></thead>
           <tbody id="lista-offerte"></tbody>
         </table>
       </div>
@@ -103,7 +104,7 @@
       <div class="card" id="o-testata">
         <div class="grid-set">
           <div class="wide rif-tripla">
-            <label class="f">Famiglia<input id="o-fam" class="mono" list="o-fam-lista" placeholder="es. TE26034298" title="Lega più offerte (anche a clienti diversi) allo stesso lavoro"><datalist id="o-fam-lista"></datalist></label>
+            <label class="f">Famiglia (TF)<input id="o-fam" class="mono" list="o-fam-lista" placeholder="es. TE26034298" title="Lega più offerte (anche a clienti diversi) allo stesso lavoro"><datalist id="o-fam-lista"></datalist></label>
             <label class="f">Riferimento Itecnici<input id="o-rif" class="mono" placeholder="es. TE26034298" title="Riferimento univoco di questa offerta"></label>
             <label class="f lav">Lavoro<input id="o-lav" placeholder="es. HOTEL AQUARDENS TERME VERONA" title="Nota descrittiva"></label>
             <span class="small" id="o-rif-info"></span>

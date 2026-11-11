@@ -402,6 +402,7 @@ $("#nuova-offerta").addEventListener("click", async () => {
 $("#cerca-offerte").addEventListener("input", disegnaElencoOfferte);
 $("#filtro-stato-off").addEventListener("change", disegnaElencoOfferte);
 $("#filtro-cli-off").addEventListener("change", disegnaElencoOfferte);
+$("#filtro-fam-off").addEventListener("change", disegnaElencoOfferte);
 
 /* Ricerca nelle offerte: ogni parola deve comparire da qualche parte (intestazione o righe). */
 const testoOfferta = (o, cli) => [o.nome, campiRif(o).famiglia, cli?.nome, cli?.codice, o.stato === "consegnata" ? "consegnata" : "lavorazione", o.note,
@@ -417,12 +418,18 @@ function disegnaElencoOfferte() {
     sel.innerHTML = `<option value="">Tutti i clienti</option>` + voci.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("") + (ids.includes("") ? `<option value="__nessuno">— senza cliente —</option>` : "");
     sel.value = [...sel.options].some((o) => o.value === v) ? v : ""; }
   const cliF = $("#filtro-cli-off").value;
+  { const sel = $("#filtro-fam-off"), v = sel.value;
+    const fams = [...new Set(S.offerte.map((o) => campiRif(o).famiglia))];
+    sel.innerHTML = `<option value="">Tutte le famiglie</option>` + fams.filter(Boolean).sort().map((f) => `<option value="${esc(f)}">${esc(f)}</option>`).join("") + (fams.includes("") ? `<option value="__nessuna">— senza famiglia —</option>` : "");
+    sel.value = [...sel.options].some((o) => o.value === v) ? v : ""; }
+  const famF = $("#filtro-fam-off").value;
   const cliDi = (id) => S.clienti.find((c) => c.id === id);
   const nomeCli = (id) => cliDi(id)?.nome || "";
   const nelleRighe = new Set();
   const lista = S.offerte.filter((o) => {
     if (stato && (o.stato === "consegnata" ? "consegnata" : "lavorazione") !== stato) return false;
     if (cliF && (cliF === "__nessuno" ? !!o.cliente : o.cliente !== cliF)) return false;
+    if (famF && (famF === "__nessuna" ? !!campiRif(o).famiglia : campiRif(o).famiglia !== famF)) return false;
     if (!parole.length) return true;
     const t = testoOfferta(o, cliDi(o.cliente));
     if (parole.every((p) => t.includes(p))) return true;
