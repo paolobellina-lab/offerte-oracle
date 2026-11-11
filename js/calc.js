@@ -341,14 +341,20 @@ export function righeOracle(off, opz = {}) {
    Per ogni GMA dell'offerta confronta lo sconto complessivo con quello del cartellino del cliente;
    per l'attività tecnica confronta il prezzo a giornata con la tariffa del cliente
    (l'Excel confrontava il prezzo di tutti i giorni con la tariffa giornaliera). */
+export const gmaGenerico = (g, forn) => {
+  const c = String(g || "").toUpperCase().replace(/[\s_.-]/g, "");
+  const f = String(forn || voceGma(g)?.fornitore || "").toUpperCase().replace(/\s+/g, " ").trim();
+  return c === "ARTGEN" || f === "ARTICOLI GENERICI";
+};
 export function controlloCartellino(off, cliente, opz = {}) {
   if (!cliente) return [];
   const { righe } = calcolaOfferta(off, opz);
   const visti = new Map();
   for (const x of righe) {
     const g = x.riga.gmv || "";
-    // articoli generici: prezzo del fornitore, nessuno sconto di cartellino da confrontare
-    if (isGenerico(x.riga) || String(g).toUpperCase() === "ARTGEN") continue;
+    // GMA degli articoli generici (ART_GEN / fornitore ARTICOLI GENERICI) e righe prese da un'offerta fornitore:
+    // nessuno sconto di cartellino da confrontare. Un articolo generico con un GMA vero si controlla.
+    if (gmaGenerico(g, x.riga.fornitore) || (isGenerico(x.riga) && x.riga.daOfferta)) continue;
     // prestazioni prese dall'offerta di un fornitore: valore complessivo del fornitore, non una tariffa a giornata
     if (isAttivita(x.riga) && x.riga.daOfferta) continue;
     if (!g || visti.has(g)) continue; // come CERCA.VERT: vale la prima riga del GMA

@@ -4,7 +4,7 @@ import {
   listinoCalcolato, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
-  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma,
+  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma, gmaGenerico,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
@@ -1225,7 +1225,7 @@ function disegnaRiepilogoRighe(c) {
       <td class="num">${euro(x.acq.unitario)}${att ? '<span class="muted small">/g</span>' : ""}</td>
       <td class="num" title="${esc(fonte[x.fonteVen])}">${lisM ? pctTxt(x.scLis) || "0%" : ricarico ? pctTxt(x.ric) || "0%" : att ? "" : pctTxt(1 - x.fVen) || "0%"}${x.fonteVen === "gma" || x.fonteVen === "generale" ? ' <span class="fonte">●</span>' : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
-      <td class="num">${x.scontoListino === null || isGenerico(r) ? "" : pctTxt(x.scontoListino) || "0%"}</td>
+      <td class="num">${x.scontoListino === null || (isGenerico(r) && (r.daOfferta || gmaGenerico(r.gmv, r.fornitore))) ? "" : pctTxt(x.scontoListino) || "0%"}</td>
       <td class="mono">${esc(r.gmv)}</td></tr>`;
   }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)} · acquistato ${euro(totA)}</td><td class="num">${euro(tot)}</td><td colspan="2"></td></tr>`;
   applicaGruppi(tb);
@@ -2008,9 +2008,9 @@ function disegnaGmv(c, rc) {
   const html = gmaOrd.map(([g, info]) => {
     const peso = rc.venduto ? info.venduto / rc.venduto : 0;
     const e = esiti.get(g), att = e?.tipo === "attivita";
-    const badge = !e ? `<span class="muted small">${isGenerico(info.prima.riga) || String(g).toUpperCase() === "ARTGEN" ? "generici: nessun cartellino" : "—"}</span>` :
+    const gen = gmaGenerico(g, info.prima.riga.fornitore) || (isGenerico(info.prima.riga) && info.prima.riga.daOfferta);
+    const badge = !e ? `<span class="muted small">${gen ? "generici: nessun cartellino" : "—"}</span>` :
       `<span class="badge ${e.stato === "ok" ? "ok" : e.stato === "pari" ? "warn" : "bad"}">${esc(e.testo)}</span>`;
-    const gen = isGenerico(info.prima.riga) || String(g).toUpperCase() === "ARTGEN";
     const scList = gen ? null : info.prima.c.scontoListino;
     return `<tr><td class="mono"><b>${g ? esc(g) : '<span class="muted">(senza GMA)</span>'}</b></td><td>${esc(fornitoriTxt(g))}</td>
       <td class="num">${info.righe}</td><td class="num">${euro(info.acquistato)}</td><td class="num">${euro(info.venduto)}</td>
