@@ -2737,8 +2737,8 @@ function modificaArticolo(a) {
       <label class="f">Capitolo<select id="m-cap">${S.capitoli.map((c) => `<option ${c.nome === a.capitolo ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
       <label class="f wide" title="Scegline uno dall'elenco o creane uno nuovo">Sottocapitolo${campoSotto("m-sotto", a.sottocapitolo || "", sotti)}</label>
       <label class="f">Precodice<input id="m-pre" value="${esc(a.precodice)}"></label>
-      <label class="f">Codice<input id="m-cod" value="${esc(a.codice)}"></label>
-      <label class="f wide">N° di ordinazione<input id="m-ord" value="${esc(a.nOrdine)}"></label>
+      <label class="f">N° di ordinazione<input id="m-cod" value="${esc(a.codice)}"></label>
+      <label class="f wide">Codice<input id="m-ord" value="${esc(a.nOrdine)}"></label>
       <label class="f">U.M.<input id="m-um" value="${esc(a.um)}"></label>
       <label class="f">Fornitore<select id="m-forn">${opzioniFornitoriGma(fornitoreDi(a))}</select></label>
       <label class="f">GMA<select id="m-gmv">${opzioniGma(fornitoreDi(a), a.gmv)}</select></label>
