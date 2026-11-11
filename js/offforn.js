@@ -4,12 +4,15 @@
 import { num } from "./calc.js";
 import { norm, trovaIntestazione } from "./biblioteca.js";
 
-const RE_SOLDI = /^(?:€\s*)?-?\d{1,3}(?:[.\s]\d{3})*,(?:\d{2}|\d{4,5})(?:\s*€)?$|^(?:€\s*)?-?\d+,(?:\d{2}|\d{4,5})(?:\s*€)?$/;
+const RE_SOLDI = /^(?:(?:€|EUR)\s*)?-?\d{1,3}(?:[.\s]\d{3})*,(?:\d{2}|\d{4,5})(?:\s*(?:€|EUR))?$|^(?:(?:€|EUR)\s*)?-?\d+,(?:\d{2}|\d{4,5})(?:\s*(?:€|EUR))?$/;
 const RE_QTA = /^\d+(?:,\d+)?$/;
-const soldi = (t) => num(String(t).replace(/€/g, "").replace(/\s/g, ""));
+const soldi = (t) => num(String(t).replace(/€|EUR/g, "").replace(/\s/g, ""));
 const mediana = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 const moda = (a, arr = 1) => { const m = new Map(); for (const v of a) { const k = Math.round(v / arr) * arr; m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((x, y) => y[1] - x[1])[0]?.[0]; };
-const RE_TOTALE = /^\s*(sub\s*-?\s*)?total[ei]\b/i;
+const RE_TOTALE_INIZIO = /^\s*(sub\s*-?\s*)?total[ei]\b/i;
+// anche "Nome sezione Totale: EUR 1.234,56" (la scritta totale subito prima dell'importo, in fondo alla riga)
+const RE_TOTALE_FINE = /\btotal[ei]\s*:?\s*(?:€|EUR)?\s*-?\d{1,3}(?:\.\d{3})*,\d{2}\s*(?:€|EUR)?\s*$/i;
+const RE_TOTALE = { test: (t) => RE_TOTALE_INIZIO.test(t) || RE_TOTALE_FINE.test(t) };
 const RE_INTEST = /^(codice|cod\.?|articolo|prodotto|descrizione|u\.?\s?m\.?|q\.?\s?t[aà]['.]?|quantit[aà]|prezzo|unitario|totale|importo|vendita|in|euro|€|pos\.?|sconto|netto|listino|n\.|riga|voce|capitolato|azienda|marca|gdp|%|sc\.?)$/i;
 
 /* Prestazioni / servizi: in Oracle diventano attività tecnica (PITATT). */
@@ -36,7 +39,7 @@ function lineeDi(items, p) {
     for (const it of l.items) {
       const c = celle[celle.length - 1];
       const gap = c ? it.x - c.x2 : Infinity;
-      const soloEuro = /^\s*€\s*$/.test(it.str) && c && /\d\s*$/.test(c.t);
+      const soloEuro = (/^\s*€\s*$/.test(it.str) && c && /\d\s*$/.test(c.t)) || (c && /^(€|EUR)$/.test(c.t.trim()) && /^\s*-?\d/.test(it.str) && gap < 40);
       const largChar = it.str.length ? it.w / it.str.length : (it.h || 8) * 0.5;
       if (c && (soloEuro || gap < Math.max(1, Math.min((it.h || 8) * 0.45, largChar * 0.8)))) { c.t += (gap > 0.5 ? " " : "") + it.str; c.x2 = Math.max(c.x2, it.x + it.w); c.y = Math.min(c.y, it.y); }
       else celle.push({ t: it.str, x: it.x, x2: it.x + it.w, y: it.y, h: it.h || 0, f: it.f || "" });
@@ -96,6 +99,8 @@ function codaNumerica(l) {
       for (const t of parti) { pezzi.push({ t, x: xx, x2: xx + t.length * passo, y: x.y, tipo: RE_QTA.test(t) ? "num" : "testo" }); xx += (t.length + 1) * passo; }
     } else pezzi.push({ ...x, tipo: RE_QTA.test(x.t) ? "num" : "testo" });
   }
+  // quantità nella prima colonna a sinistra scritta con i decimali ("1,00 C-GE300WR descrizione … EUR 1.812,00"): non è un importo
+  if (pezzi.length > 2 && pezzi[0].tipo === "soldi" && pezzi[1].tipo === "testo" && pezzi.slice(2).some((x) => x.tipo === "soldi") && /^\d+,\d+$/.test(pezzi[0].t)) pezzi[0] = { ...pezzi[0], tipo: "num" };
   const soldiIdx = pezzi.map((x, i) => (x.tipo === "soldi" ? i : -1)).filter((i) => i >= 0);
   if (!soldiIdx.length) return null;
   // dopo il primo importo ci possono essere altre colonne (sconti %, codici sconto, marca…): contano solo gli importi
@@ -104,6 +109,9 @@ function codaNumerica(l) {
   let i = primo - 1, qta = null, um = "";
   if (i >= 0 && pezzi[i].tipo === "num") { qta = pezzi[i]; i--; }
   if (qta && i >= 0 && pezzi[i].tipo === "testo" && pezzi[i].t.length <= 5 && !/\d/.test(pezzi[i].t)) { um = pezzi[i]; i--; }
+  // quantità nella prima colonna a sinistra, prima del codice
+  if (!qta && primo > 1 && pezzi[0].tipo === "num" && pezzi.slice(1, primo).some((x) => x.tipo === "testo"))
+    return { valori, qta: pezzi[0], um: "", inizio: valori[0].x, resto: pezzi.slice(1, primo), qtaSx: true };
   return { valori, qta, um, inizio: (um || qta || valori[0]).x, resto: pezzi.slice(0, i + 1) };
 }
 
@@ -131,6 +139,8 @@ export function leggiOffertaPdf(pagine) {
       // q.tà × unitario non torna: può essere un errore del fornitore, la riga si tiene ma si segnala
       k.unitario = v[0]; k.totale = v.length > 1 ? v[v.length - 1] : v[0] * q; k.listino = v[0];
       if (v.length > 1) l.nonTorna = true;
+      // "prezzo unitario di listino" + "totale netto" (sconto già applicato): l'unitario netto è totale / q.tà
+      if (v.length === 2 && q > 0 && v[1] > 0 && v[1] < q * v[0] - 0.01) { k.unitario = v[1] / q; k.totale = v[1]; k.listino = v[0]; l.nonTorna = false; }
     }
     l.k = k; ancore.push(l);
   }
@@ -184,6 +194,8 @@ export function leggiOffertaPdf(pagine) {
     if (iInt >= 0) { da = iInt + 1; while (da < primaAncora && linee[da].celle.every((c) => c.t.split(" ").every((t) => RE_INTEST.test(t)))) da++; }
     for (const l of linee.slice(da)) {
       if (!l.k && ripetute.has(firma(l))) continue;
+      // intestazione della tabella ripetuta sotto ogni sezione ("Q.tà Articolo Descrizione Prezzo unitario …")
+      if (!l.k) { const tk = l.celle.flatMap((c) => c.t.split(" ")).filter(Boolean); if (tk.length >= 2 && tk.every((t) => RE_INTEST.test(t))) continue; }
       seq.push(l);
       if (/totale\s+generale/i.test(l.testo)) { fine = true; break; }
     }
@@ -213,7 +225,7 @@ export function leggiOffertaPdf(pagine) {
       const m = l.testo.replace(/^.*?total[ei]/i, "").match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/);
       l.valore = m ? soldi(m[0]) : soldi(soldiTot[soldiTot.length - 1].t);
     }
-    else if (l.h >= hb * 1.2 && !soldiTot.length && l.desc) l.tipo = "sezione";
+    else if (l.h >= hb * 1.2 && !soldiTot.length && (l.desc || (!l.cod && sx.length))) l.tipo = "sezione";
     else if (l.pos && !soldiTot.length && (l.cod || l.desc)) l.tipo = "sezione"; // riga numerata senza prezzo: titolo di gruppo
     else l.tipo = "testo";
     if (l.tipo === "testo" && !l.cod && l.desc && fontCorpo.get(l.p) && fontDesc(l) && fontDesc(l) !== fontCorpo.get(l.p)) {
@@ -277,6 +289,21 @@ export function leggiOffertaPdf(pagine) {
     });
     const n = L.length, m = art.length;
     const rotto = L.map((r, i) => (i > 0 && L[i - 1].y - r.y > passo * 1.45 ? 1 : 0));
+    // descrizioni che partono dalla riga dei prezzi e continuano sotto (allineate in alto): ogni gruppo di righe
+    // vicine (separato dal successivo da uno spazio più grande) contiene un solo articolo, che ne è la prima riga
+    {
+      const salti = L.slice(1).map((r, i) => L[i].y - r.y).filter((d) => d > 0.5);
+      const soglia = salti.length ? Math.min(...salti) * 1.4 : Infinity;
+      const gruppi = []; let g = [];
+      L.forEach((r, i) => { if (i && L[i - 1].y - r.y > soglia) { gruppi.push(g); g = []; } g.push(r); });
+      if (g.length) gruppi.push(g);
+      const conArt = gruppi.filter((x) => x.some((r) => r.own >= 0));
+      const buoni = conArt.filter((x) => x.filter((r) => r.own >= 0).length === 1 && x[0].own >= 0 && x.every((r) => r.own !== -2));
+      if (conArt.length >= 2 && buoni.length === conArt.length && conArt.length === m && gruppi.some((x) => x.length > 1)) {
+        for (const x of buoni) { const a = art[x[0].own]; a.righe = x; for (const r of x) if (r.l) r.l.usata = true; }
+        continue;
+      }
+    }
     const costo = (j, s, e) => { // righe s..e-1 all'articolo j
       for (let i = s; i < e; i++) { if (L[i].own === -2 || (L[i].own >= 0 && L[i].own !== j)) return Infinity; if (i > s && rotto[i]) return Infinity; }
       const proprio = L.findIndex((r) => r.own === j);
@@ -322,13 +349,27 @@ export function leggiOffertaPdf(pagine) {
   let par = [], nota = [];
   const chiudiNota = () => { const t = nota.join(" ").trim(); if (t.length >= 25) note.push(t); nota = []; };
   const nuovaSez = (nome) => { if (sez && !sez.righe.length && !sez.totalePdf) { sez.nome = nome; return; } sez = { nome, totalePdf: null, righe: [] }; sezioni.push(sez); };
+  let precSezione = null;
   for (const l of seq) {
     if (!(l.tipo === "testo" && l.nota)) chiudiNota();
-    if (l.tipo === "sezione") { par = []; nuovaSez([l.cod, l.desc].filter(Boolean).join(" ") || l.testo); }
+    const eraSezione = precSezione; precSezione = null;
+    if (l.tipo === "sezione") {
+      par = [];
+      const nome = [l.cod, l.desc].filter(Boolean).join(" ") || l.celle.map((c) => c.t).filter((t) => !RE_SOLDI.test(t)).join(" ");
+      // titolo su due righe: si unisce
+      const unita = eraSezione && sez && !sez.righe.length && !sez.totalePdf && eraSezione.p === l.p && eraSezione.y - l.y < l.h * 1.6 && Math.abs((eraSezione.celle[0]?.x ?? 0) - (l.celle[0]?.x ?? 0)) < 3;
+      if (unita) sez.nome += " " + nome; else nuovaSez(nome);
+      precSezione = l;
+    }
     else if (l.tipo === "totale") {
       par = [];
-      if (/generale/i.test(l.testo) || /^\s*total[ei]\s*$/i.test(l.desc || "")) { totaleGenerale = l.valore; sezGenerale = sezioni.length; }
-      else if (sez) sez.totalePdf = l.valore;
+      // "Nome sezione Totale: EUR …": il nome prima della scritta totale è quello della sezione che si chiude
+      const pref = l.testo.replace(/\btotal[ei]\b.*$/i, "").replace(/[:\s]+$/, "").trim();
+      if (/generale/i.test(l.testo) || /^\s*total[ei]\s*$/i.test(l.desc || "") || (!pref && RE_TOTALE_INIZIO.test(l.testo) && sezioni.length && sez?.totalePdf !== null)) { totaleGenerale = l.valore; sezGenerale = sezioni.length; }
+      else if (sez) {
+        sez.totalePdf = l.valore;
+        if (pref && pref.length <= 120 && !RE_SOLDI.test(pref)) { if (sez.autoNome || sez.nome === "Offerta") sez.nome = pref; sez = null; }
+      }
     } else if (l.tipo === "testo" && !l.usata) {
       if (l.nota) { if (l.desc) nota.push(l.desc); continue; }
       const t = [l.cod && !/^\.$/.test(l.cod) ? l.cod + (l.desc ? ":" : "") : "", l.desc].filter(Boolean).join(" ");
