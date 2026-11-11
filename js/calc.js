@@ -135,6 +135,8 @@ export function voceGma(g, forn) {
   if (forn) return l.find((x) => String(x.fornitore || "").trim().toUpperCase() === String(forn).trim().toUpperCase()) || null;
   return l[0] || null;
 }
+/* Codice con cui Oracle conosce il GMA (es. SENSITRON → SIFSFI): per cartellino e censimento. */
+export const gmaOracle = (g, forn) => (voceGma(g, forn) || voceGma(g))?.oracle || g;
 export const standardGma = (g, forn) => { const v = voceGma(g, forn); return v && STD_GMA.get(chiaveGma(v.fornitore, v.codice)) ? v : null; };
 export const haScontiPropri = (r) => !!(num(r.sc3) || num(r.sc4) || num(r.sc5) || num(r.aum1));
 export function scontiEffettivi(r) {
@@ -375,7 +377,9 @@ export function controlloCartellino(off, cliente, opz = {}) {
       continue;
     }
     const scontoOfferta = x.c.scontoListino ?? 0;
-    const scCart = num(cliente.sconti?.[gmv]);
+    // il cartellino del GMA; se non c'è, quello del codice con cui lo conosce Oracle (es. SENSITRON → SIFSFI)
+    const proprio = cliente.sconti?.[gmv], og = gmaOracle(gmv, x.riga.fornitore);
+    const scCart = num(proprio !== undefined && proprio !== "" && proprio !== null ? proprio : cliente.sconti?.[og]);
     const stato = scCart < scontoOfferta - 1e-9 ? "ok" : Math.abs(scCart - scontoOfferta) < 1e-9 ? "pari" : "fuori";
     esiti.push({ gmv, tipo: "sconto", offerta: scontoOfferta, cartellino: scCart, stato,
       testo: stato === "ok" ? "OK" : stato === "pari" ? "Sconto di cartellino" : "Inferiore al valore di cartellino" });

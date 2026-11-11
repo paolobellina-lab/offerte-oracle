@@ -4,7 +4,7 @@ import {
   listinoCalcolato, calcolaRiga, calcolaOfferta, righeOracle, controlloCartellino, freschezza, ordinaRighe,
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
-  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma, gmaGenerico,
+  fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma, gmaGenerico, gmaOracle,
 } from "./calc.js";
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
@@ -2977,7 +2977,7 @@ function modificaCliente(c) {
     </div>
     <h3 style="margin:14px 0 8px">Sconti di cartellino per GMA</h3>
     <div class="gmv-colonne">${perFornitore(gmvs).map(([forn, gs]) => `<div class="gmv-forn"><div class="gmv-forn-tit">${esc(forn)}</div><div class="lista-gmv">${gs.map((g) => `<label><span><b class="mono">${esc(g)}</b></span>
-      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" placeholder="es. 45+10"></span></label>`).join("")}</div></div>`).join("")}</div>`,
+      <span class="pct-wrap"><input class="pct" data-g="${esc(g)}" value="${esc(scontoCliTxt(c, g))}" ${(() => { const o = gmaOracle(g); return o !== g ? `placeholder="= ${esc(o)} ${esc(scontoCliTxt(c, o) || "")}" title="In Oracle è ${esc(o)}: vale il suo cartellino. Scrivi un valore solo per fare eccezione."` : 'placeholder="es. 45+10"'; })()}></span></label>`).join("")}</div></div>`).join("")}</div>`,
     pulsanti: [...(nuovo ? [] : [{ label: "Elimina cliente", value: "del", cls: "danger" }]),
       { label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {
@@ -3011,7 +3011,8 @@ function righeCensimento() {
   const out = gmas.map((g) => {
     const c = candidati(g), prima = salvate?.find((x) => x.g === g);
     const cod = prima ? prima.cod : c[0] ? codiceOracle(c[0]) : "";
-    return { g, cod, on: prima ? prima.on !== false : !!cod, cand: [...new Set(c.map((x) => codiceOracle(x)))].slice(0, 40) };
+    // un GMA che in Oracle ha un altro codice (es. SENSITRON → SIFSFI) non serve nel censimento: vale quello di Oracle
+    return { g, cod, on: prima ? prima.on !== false : !!cod && gmaOracle(g) === g, cand: [...new Set(c.map((x) => codiceOracle(x)))].slice(0, 40) };
   });
   for (const x of salvate || []) if (!out.some((y) => y.g === x.g)) out.push({ g: x.g, cod: x.cod, on: x.on !== false, cand: [] });
   return out;
@@ -4131,14 +4132,16 @@ function apriAcquistiStandard() {
         ognuno con i suoi sconti. Qui cambi il fornitore, rinomini o unisci un GMA (✎), ne aggiungi uno nuovo e imposti gli sconti di acquisto standard in cascata
         (Sconto 1, poi 2, poi 3) più un eventuale aumento. Gli articoli <b>senza sconti propri</b> usano questi valori; quelli con sconti propri restano un'eccezione.</p>
       <div class="row" style="margin-bottom:6px"><input id="as-cerca" type="search" class="grow" placeholder="Cerca GMA o fornitore"></div>
-      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num" title="Articoli con sconti propri: non seguono lo standard">Con sconti propri</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th></tr></thead>
-      <tbody id="as-righe">${ordG.map(([forn, idx]) => `<tr class="sotto as-forn"><td colspan="8">${esc(forn)}</td></tr>` +
+      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th class="num">Articoli</th><th class="num" title="Articoli con sconti propri: non seguono lo standard">Con sconti propri</th><th>Sconto 1</th><th>Sconto 2</th><th>Sconto 3</th><th>Aumento</th><th title="Codice con cui Oracle conosce questo GMA (es. SENSITRON e WAGNER in Oracle sono SIFSFI): cartellino e censimento usano quello">GMA in Oracle</th></tr></thead>
+      <tbody id="as-righe">${ordG.map(([forn, idx]) => `<tr class="sotto as-forn"><td colspan="9">${esc(forn)}</td></tr>` +
         idx.sort((x, y) => lista[x].codice.localeCompare(lista[y].codice)).map((i) => { const g = lista[i], x = conta.get(kv(g.fornitore, g.codice)) || { n: 0, propri: 0 };
           const doppio = lista.filter((y) => y.codice === g.codice).length > 1;
           return `<tr data-as-riga="${esc(g.codice)}" data-forn="${esc(forn)}"><td class="mono nowrap"><b>${esc(g.codice)}</b>${doppio ? ' <span class="badge info" title="Lo stesso codice esiste anche con un altro fornitore">+ altro fornitore</span>' : ""} <button type="button" class="tg-ed" data-sg-rin="${i}" title="Rinomina il GMA di questo fornitore">✎</button></td>
             <td><input data-as-f="${i}" list="as-forns" value="${esc(g.fornitore || "")}" placeholder="fornitore" style="width:210px"></td>
             <td class="num">${x.n || ""}</td><td class="num">${x.propri || ""}</td>
-            ${cella(i, g, "sc1")}${cella(i, g, "sc2")}${cella(i, g, "sc3")}${cella(i, g, "aum")}</tr>`; }).join("")).join("")}</tbody></table></div>
+            ${cella(i, g, "sc1")}${cella(i, g, "sc2")}${cella(i, g, "sc3")}${cella(i, g, "aum")}
+            <td><input data-as-o="${i}" list="as-gmas" class="mono" value="${esc(g.oracle || "")}" placeholder="${esc(g.codice)}" style="width:110px" title="Lascia vuoto se in Oracle il codice è lo stesso"></td></tr>`; }).join("")).join("")}</tbody></table></div>
+      <datalist id="as-gmas">${[...new Set(lista.map((g) => g.codice))].sort().map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
       <div class="card row" style="margin-top:10px;gap:8px;align-items:flex-end;flex-wrap:wrap"><b style="align-self:center">+ Nuovo GMA</b>
         <label class="f">Codice<input id="as-nuovo" placeholder="es. SN07" style="width:110px"></label>
         <label class="f grow">Fornitore<input id="as-nuovo-f" list="as-forns" placeholder="scegli o scrivi"></label>
@@ -4157,6 +4160,7 @@ function apriAcquistiStandard() {
       for (const i of $$("[data-as]", d)) { const g = lista[+i.dataset.as]; const x = daPct(i.value); if (x) g[i.dataset.k] = x; else delete g[i.dataset.k]; }
       // fornitore cambiato: gli articoli che avevano quel fornitore scritto lo seguono
       const cambi = [];
+      for (const i of $$("[data-as-o]", d)) { const g = lista[+i.dataset.asO], o = i.value.trim().toUpperCase(); if (o && o !== g.codice) g.oracle = o; else delete g.oracle; }
       for (const i of $$("[data-as-f]", d)) { const g = lista[+i.dataset.asF], nf = i.value.trim(); if ((g.fornitore || "") !== nf) { cambi.push({ c: g.codice, da: g.fornitore || "", a: nf }); g.fornitore = nf; } }
       // stesso codice + stesso fornitore due volte: si chiede conferma, al secondo "Salva" i GMA vengono uniti
       const gruppi = new Map(); for (const g of lista) { const k = kv(g.fornitore, g.codice); gruppi.set(k, [...(gruppi.get(k) || []), g]); }
