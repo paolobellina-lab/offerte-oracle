@@ -57,6 +57,14 @@ function lineeDi(items, p) {
    2) un importo da solo su una riga vicina (meno di una riga di distanza) a una riga con quantità e importi
       entra in quella riga, se nella sua colonna non c'è già niente. */
 function ricuciNumeri(linee) {
+  // righe quasi alla stessa altezza (sfalsate di pochi punti) con le celle in colonne diverse: sono la stessa riga
+  for (let i = 0; i + 1 < linee.length; i++) {
+    const A = linee[i], B = linee[i + 1], h = Math.max(A.h || 0, B.h || 0) || 8;
+    if (A.y - B.y > h * 0.45) continue;
+    if (A.celle.some((a) => B.celle.some((b) => a.x < b.x2 + 1 && b.x < a.x2 + 1))) continue;
+    A.celle = [...A.celle, ...B.celle].sort((a, b) => a.x - b.x); A.items.push(...B.items); A.h = h;
+    linee.splice(i + 1, 1); i--;
+  }
   const vicino = (a, b) => a.x < b.x2 + 2 && b.x < a.x2 + 2;
   for (let i = 0; i < linee.length; i++) for (const c of linee[i].celle) {
     if (!/,\d+$/.test(c.t)) continue;
@@ -99,6 +107,11 @@ function codaNumerica(l) {
       for (const t of parti) { pezzi.push({ t, x: xx, x2: xx + t.length * passo, y: x.y, tipo: RE_QTA.test(t) ? "num" : "testo" }); xx += (t.length + 1) * passo; }
     } else pezzi.push({ ...x, tipo: RE_QTA.test(x.t) ? "num" : "testo" });
   }
+  // quantità attaccata all'inizio della descrizione ("31 Diffusore SPOT da parete…"): si separa
+  if (pezzi.length > 1 && pezzi[0].tipo === "testo" && /^\d{1,5}\s+\S/.test(pezzi[0].t) && pezzi.some((x) => x.tipo === "soldi")) {
+    const m = pezzi[0].t.match(/^(\d{1,5})\s+(.*)$/), p0 = pezzi[0], w = (p0.x2 - p0.x) / p0.t.length;
+    pezzi.splice(0, 1, { ...p0, t: m[1], x2: p0.x + m[1].length * w, tipo: "num" }, { ...p0, t: m[2], x: p0.x + (m[1].length + 1) * w, tipo: "testo" });
+  }
   // quantità nella prima colonna a sinistra scritta con i decimali ("1,00 C-GE300WR descrizione … EUR 1.812,00"): non è un importo
   if (pezzi.length > 2 && pezzi[0].tipo === "soldi" && pezzi[1].tipo === "testo" && pezzi.slice(2).some((x) => x.tipo === "soldi") && /^\d+,\d+$/.test(pezzi[0].t)) pezzi[0] = { ...pezzi[0], tipo: "num" };
   const soldiIdx = pezzi.map((x, i) => (x.tipo === "soldi" ? i : -1)).filter((i) => i >= 0);
@@ -110,9 +123,11 @@ function codaNumerica(l) {
   if (i >= 0 && pezzi[i].tipo === "num") { qta = pezzi[i]; i--; }
   if (qta && i >= 0 && pezzi[i].tipo === "testo" && pezzi[i].t.length <= 5 && !/\d/.test(pezzi[i].t)) { um = pezzi[i]; i--; }
   // quantità nella prima colonna a sinistra, prima del codice
-  if (!qta && primo > 1 && pezzi[0].tipo === "num" && pezzi.slice(1, primo).some((x) => x.tipo === "testo"))
-    return { valori, qta: pezzi[0], um: "", inizio: valori[0].x, resto: pezzi.slice(1, primo), qtaSx: true };
-  return { valori, qta, um, inizio: (um || qta || valori[0]).x, resto: pezzi.slice(0, i + 1) };
+  const sx = primo > 1 && pezzi[0].tipo === "num" && pezzi.slice(1, primo).some((x) => x.tipo === "testo")
+    ? { valori, qta: pezzi[0], um: "", inizio: valori[0].x, resto: pezzi.slice(1, primo).map((x) => ({ ...x, tipo: x.tipo === "num" ? "testo" : x.tipo })), qtaSx: true } : null;
+  if (!qta && sx) return sx;
+  // il numero vicino ai prezzi può essere un codice numerico (es. 9137294): se q.tà × prezzo non torna, si prova quella a sinistra
+  return { valori, qta, um, inizio: (um || qta || valori[0]).x, resto: pezzi.slice(0, i + 1), alt: sx };
 }
 
 /* Offerta in PDF: { sezioni: [{ nome, totalePdf, righe: [{ codice, descrizione, um, qta, unitario, totale }] }], totaleGenerale, note }
@@ -123,10 +138,15 @@ export function leggiOffertaPdf(pagine) {
   const ancore = [];
   for (const linee of perPagina) for (const l of linee) {
     if (RE_TOTALE.test(l.testo)) continue;
-    const k = codaNumerica(l);
+    let k = codaNumerica(l);
     if (!k || !k.qta) continue;
+    const v = k.valori.map((x) => soldi(x.t));
+    if (k.alt) {
+      const ok = (qq) => v.some((u, i) => v.some((t, j) => j > i && u && Math.abs(qq * u - t) <= Math.max(0.05, Math.abs(t) * 0.002)));
+      if (!ok(num(k.qta.t)) && ok(num(k.alt.qta.t))) k = k.alt;
+    }
     // coppie unitario → totale (q.tà × unitario = totale): la più bassa è il netto, la più alta il listino
-    const q = num(k.qta.t), v = k.valori.map((x) => soldi(x.t));
+    const q = num(k.qta.t);
     const torna = (u, t) => Math.abs(q * u - t) <= Math.max(0.05, Math.abs(t) * 0.002);
     const coppie = [];
     for (let i = 0; i + 1 < v.length; i++) if (torna(v[i], v[i + 1])) coppie.push([v[i], v[i + 1]]);
@@ -173,7 +193,26 @@ export function leggiOffertaPdf(pagine) {
   const cluster = new Map();
   for (const l of ancore) for (const x of new Set(l.k.resto.filter((c) => c.x < xDesc - 2).map((c) => Math.round(c.x / 4) * 4))) cluster.set(x, (cluster.get(x) || 0) + 1);
   const xCod = Math.max(...[...cluster.entries()].filter(([, n]) => n >= ancore.length * 0.5).map(([x]) => x), -Infinity);
-  const inCodice = (c) => c.x < xDesc - 2 && (xCod === -Infinity || c.x >= xCod - 4);
+  let inCodice = (c) => c.x < xDesc - 2 && (xCod === -Infinity || c.x >= xCod - 4);
+  // codice a DESTRA della descrizione ("N. | DESCRIZIONE | CODICE | CADAUNO | TOTALE"), a volte spezzato su più righe
+  const RE_COD_DX = /^[A-Z0-9][A-Z0-9.\-\/]*(?: [A-Z0-9][A-Z0-9.\-\/]*)?$/;
+  let codDx = null;
+  {
+    // (con l'eventuale sigla della marca subito prima, es. "TU ECT4L12B")
+    const cand = ancore.filter((l) => l.k.resto.length >= 2).map((l) => {
+      const r = l.k.resto, c = r[r.length - 1], p = r[r.length - 2];
+      const marca = r.length >= 3 && /^[A-Z]{1,4}$/.test(p.t) && c.x - p.x2 < 20;
+      return { c: marca ? { ...c, t: p.t + " " + c.t, x: p.x } : c, d: r[0] };
+    })
+      .filter((o) => RE_COD_DX.test(o.c.t) && /\s/.test(o.d.t) && o.d.t.length > o.c.t.length && o.c.x > o.d.x2);
+    if (cand.length >= ancore.length * 0.6) {
+      const xs = cand.map((o) => o.c.x).sort((a, b) => a - b), dx = moda(cand.map((o) => o.d.x), 2);
+      const xMin = xs[Math.floor(xs.length * 0.1)];
+      if (xMin > dx + 40) { codDx = { x: xMin - 4 }; xDesc = dx; inCodice = (c) => c.x >= codDx.x && c.x < limDx; }
+    }
+  }
+  // righe che iniziano con un numero a sinistra (posizione o quantità): la descrizione parte dalla riga dei prezzi e continua sotto
+  const inAlto = xPos !== null || ancore.filter((l) => l.k.qtaSx).length >= ancore.length * 0.6;
   // altezza del testo delle descrizioni (i prezzi possono essere scritti più piccoli)
   const hb = moda(ancore.flatMap((l) => l.k.resto.filter((c) => c.x >= xDesc - 2).map((c) => c.h)), 0.5) || moda(ancore.flatMap((l) => l.items.map((i) => i.h)), 0.5) || 8;
   const pagAncore = new Set(ancore.map((l) => l.p));
@@ -215,10 +254,19 @@ export function leggiOffertaPdf(pagine) {
     let sx = l.k ? l.k.resto : l.celle.filter((c) => c.x < limDx);
     if (!l.k) { const tp = togliPos(sx); sx = tp.celle; l.pos = tp.pos; }
     l.cod = sx.filter(inCodice).map((c) => c.t).join(" ").trim();
-    l.desc = sx.filter((c) => c.x >= xDesc - 2).map((c) => c.t).join(" ").trim();
+    // con il codice a destra la descrizione è tutto quello che sta a sinistra del codice (inizia a x diverse dopo la quantità)
+    l.desc = sx.filter((c) => (codDx ? c.x < codDx.x : c.x >= xDesc - 2)).map((c) => c.t).join(" ").trim();
+    if (codDx && !l.k && l.cod) {
+      // nella colonna del codice: un pezzo di codice (va attaccato al codice dell'articolo sopra) o un valore della descrizione (es. "92 dB")
+      if (/^[A-Z0-9][A-Z0-9.\-\/]*(?: [A-Z0-9]{1,4})?$/.test(l.cod)) l.codFrag = l.cod; else l.desc = (l.desc + " " + l.cod).trim();
+      l.cod = "";
+    }
     const soldiTot = l.celle.filter((c) => RE_SOLDI.test(c.t) || /\d,\d{2}\s*€?$/.test(c.t));
+    const iSeq = seq.indexOf(l);
     if (l.k) l.tipo = "articolo";
-    else if (RE_TOTALE.test(l.testo) && soldiTot.length && /\biva\b|ivato|i\.v\.a/i.test(l.testo)) l.tipo = "ignora"; // totale IVA inclusa
+    // importo da solo sotto una riga di trattini ("------------" / "33.992,64"): è il totale
+    else if (l.celle.length === 1 && RE_SOLDI.test(l.celle[0].t) && iSeq > 0 && /^[-_=]{4,}$/.test(seq[iSeq - 1].testo.replace(/\s/g, ""))) { l.tipo = "totale"; l.valore = soldi(l.celle[0].t); l.sottoTrattini = true; }
+    else if (RE_TOTALE.test(l.testo) && soldiTot.length && /\biva\b|ivato|i\.v\.a|imposta/i.test(l.testo)) l.tipo = "ignora"; // IVA o totale IVA inclusa
     else if (RE_TOTALE.test(l.testo) && soldiTot.length) {
       // il primo importo dopo la scritta "totale" (sulla stessa riga ci può essere anche il totale IVA inclusa)
       l.tipo = "totale";
@@ -236,7 +284,9 @@ export function leggiOffertaPdf(pagine) {
     if (l.tipo === "sezione" && !l.sezDaCarattere && !l.pos) l.sezDaAltezza = true;
   }
   // se le sezioni sono scritte più grandi, i titoli maiuscoli dello stesso corpo del testo sono solo sottotitoli
-  if (seq.some((l) => l.sezDaAltezza)) for (const l of seq) if (l.sezDaCarattere) l.tipo = "testo";
+  // (contano solo i titoli seguiti da articoli: un testo grande in fondo, es. "PREZZI NETTI RISERVATI…", non è una sezione)
+  const ultimoArt = seq.map((l) => l.tipo === "articolo").lastIndexOf(true);
+  if (seq.some((l, i) => l.sezDaAltezza && i < ultimoArt)) for (const l of seq) if (l.sezDaCarattere) l.tipo = "testo";
   // passo tra le righe di una descrizione
   const passi = [];
   for (let i = 1; i < seq.length; i++) if (seq[i].p === seq[i - 1].p) { const d = seq[i - 1].y - seq[i].y; if (d > 0.5 && d < hb * 3) passi.push(d); }
@@ -274,7 +324,7 @@ export function leggiOffertaPdf(pagine) {
     for (const l of b) {
       if (l.tipo === "articolo") { if (l.desc) L.push({ y: l.y, t: l.desc, own: art.indexOf(l) }); }
       // con qualcosa nella colonna codice è una riga a sé (NOTE, Punti gestiti…) e separa le descrizioni
-      else if (l.tipo === "testo" && !l.usata && (l.cod || l.desc)) L.push({ y: l.y, t: l.desc, l, own: l.cod || l.titolo ? -2 : -1 });
+      else if (l.tipo === "testo" && !l.usata && (l.cod || l.desc || l.codFrag)) L.push({ y: l.y, t: l.desc, l, own: l.cod || l.titolo ? -2 : -1 });
     }
     L.sort((x, y) => y.y - x.y);
     // NOTE: l'etichetta è centrata sul suo paragrafo; tante righe sopra quante sotto sono la nota
@@ -287,6 +337,28 @@ export function leggiOffertaPdf(pagine) {
       while (giu < L.length - 1 && L[giu + 1].own === -1 && r.y - L[giu + 1].y <= span && L[giu].y - L[giu + 1].y <= passo * 1.45) giu++;
       for (let k = su; k <= giu; k++) { L[k].own = -2; if (L[k].l) L[k].l.nota = true; }
     });
+    if (inAlto) {
+      // ogni riga va all'articolo sopra; quelle prima del primo articolo sono note; i pezzi di codice si attaccano al codice
+      let cur = null, frag = false;
+      const salti = L.slice(1).map((r, i) => L[i].y - r.y).filter((d) => d > hb * 0.6);
+      const riga = salti.length ? Math.min(...salti) : passo;
+      L.forEach((r, i) => {
+        // una riga vuota (o più) dopo la descrizione chiude l'articolo: il testo che segue è a parte
+        if (i && r.own < 0 && cur && L[i - 1].y - r.y > riga * 2.2) cur = null;
+        if (r.own >= 0) { cur = art[r.own]; cur.righe = [r]; frag = true; return; }
+        // una riga in un altro carattere (grassetto) in mezzo alla descrizione ne fa parte; NOTE e codici no
+        if (r.own === -2 && !(r.l && r.l.titolo && !r.l.cod && !r.l.nota)) { cur = null; return; }
+        if (!cur) { if (r.l && r.t) { r.l.nota = true; } return; }
+        if (r.l?.codFrag) {
+          if (frag) cur.cod = (cur.cod || "") + (/[-\/.]$/.test(cur.cod || "") || !cur.cod ? "" : "") + r.l.codFrag;
+          else r.t = (r.t + " " + r.l.codFrag).trim();
+        } else frag = false;
+        if (r.t) cur.righe.push(r);
+        if (r.l) r.l.usata = true;
+      });
+      for (const a of art) if (!a.righe) a.righe = [];
+      continue;
+    }
     const n = L.length, m = art.length;
     const rotto = L.map((r, i) => (i > 0 && L[i - 1].y - r.y > passo * 1.45 ? 1 : 0));
     // descrizioni che partono dalla riga dei prezzi e continuano sotto (allineate in alto): ogni gruppo di righe
@@ -349,7 +421,7 @@ export function leggiOffertaPdf(pagine) {
   let par = [], nota = [];
   const chiudiNota = () => { const t = nota.join(" ").trim(); if (t.length >= 25) note.push(t); nota = []; };
   const nuovaSez = (nome) => { if (sez && !sez.righe.length && !sez.totalePdf) { sez.nome = nome; return; } sez = { nome, totalePdf: null, righe: [] }; sezioni.push(sez); };
-  let precSezione = null;
+  let precSezione = null, genBloccato = false;
   for (const l of seq) {
     if (!(l.tipo === "testo" && l.nota)) chiudiNota();
     const eraSezione = precSezione; precSezione = null;
@@ -365,6 +437,9 @@ export function leggiOffertaPdf(pagine) {
       par = [];
       // "Nome sezione Totale: EUR …": il nome prima della scritta totale è quello della sezione che si chiude
       const pref = l.testo.replace(/\btotal[ei]\b.*$/i, "").replace(/[:\s]+$/, "").trim();
+      if (genBloccato) continue;
+      if (l.sottoTrattini && !sezioni.some((x) => x.totalePdf !== null)) { totaleGenerale = l.valore; sezGenerale = sezioni.length; continue; }
+      if (/imponibile/i.test(l.testo)) { totaleGenerale = l.valore; sezGenerale = sezioni.length; genBloccato = true; continue; }
       if (/generale/i.test(l.testo) || /^\s*total[ei]\s*$/i.test(l.desc || "") || (!pref && RE_TOTALE_INIZIO.test(l.testo) && sezioni.length && sez?.totalePdf !== null)) { totaleGenerale = l.valore; sezGenerale = sezioni.length; }
       else if (sez) {
         sez.totalePdf = l.valore;
@@ -375,8 +450,10 @@ export function leggiOffertaPdf(pagine) {
       const t = [l.cod && !/^\.$/.test(l.cod) ? l.cod + (l.desc ? ":" : "") : "", l.desc].filter(Boolean).join(" ");
       if (t) par.push(t);
     } else if (l.tipo === "articolo") {
-      if (!sez) nuovaSez("Offerta");
       const k = l.k;
+      // riga a valore zero senza un codice (es. "Porto franco c/addebito" nel piè di pagina): non è un articolo
+      if (!k.unitario && !k.totale && !/^[A-Z0-9][A-Z0-9.\-\/ ]*$/.test(l.cod || "")) continue;
+      if (!sez) nuovaSez("Offerta");
       const testa = par.join(" ").trim(); par = [];
       const corpo = l.righe.map((r) => r.t).join(" ");
       const descr = (testa && corpo ? testa + (/-$/.test(testa) ? "" : " – ") + corpo : testa || corpo).replace(/\s+/g, " ").trim();
