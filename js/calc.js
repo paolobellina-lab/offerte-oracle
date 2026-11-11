@@ -242,10 +242,10 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   let perPezzo, ric = null, fVen = null, baseVen, fonteVen, scLis = null;
   if (k.imp === "listino") {
     // listino riparametrizzato: il prezzo di listino è quello che, con lo sconto di listino, dà il prezzo di acquisto.
-    // Standard: articoli = sconto di listino del GMA con più righe; attività = nessuno sconto (si imposta nella riga ATT
-    // della pagina prezzi). La riparametrizzazione dell'articolo nel database non si usa più. Attività arrotondata alle centinaia.
-    const f0L = att ? 1 : 1 - (k.lis.std || 0);
-    const spG = valido(leggiSconti(k.lis.gma[g])), spC = generalePer(att, k.lis.gen);
+    // Standard: sconto di listino del GMA con più righe, per articoli e attività (l'attività si può forzare nella riga ATT). La riparametrizzazione dell'articolo nel database non si usa più. Attività arrotondata alle centinaia.
+    // anche l'attività segue la riparametrizzazione del Generale; si può forzare nella sua riga (come gli altri GMA)
+    const f0L = 1 - (k.lis.std || 0);
+    const spG = valido(leggiSconti(k.lis.gma[g])), spC = valido(leggiSconti(k.lis.gen));
     const fL = spG ? applica(spG, f0L) : spC ? applica(spC, f0L) : f0L;
     fonteVen = spG ? "gma" : spC ? "generale" : "standard";
     scLis = 1 - fL;

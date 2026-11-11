@@ -1991,8 +1991,8 @@ function disegnaGmv(c, rc) {
   // il Generale vale per il GMA senza valori propri (sull'attività solo se è in aggiunta):
   // se cambia lo standard, la cella standard del GMA dice "come Generale"; se aggiunge solo extra, resta lo standard del GMA
   const vale = (gen, g) => !!normTesto(gen) && (!soloAtt(g) || normTesto(gen).startsWith("+"));
-  const opzGen = (gen, g, tipo = "sc") => {
-    if (!vale(gen, g)) return {};
+  const opzGen = (gen, g, tipo = "sc", tutti = false) => {
+    if (!(tutti ? !!normTesto(gen) : vale(gen, g))) return {};
     const { over, extra } = scomponi(gen);
     return { eredita: over !== null, phExtra: extra.length ? `Gen.: ${extra.map((x) => cellaDaTermine(x, tipo)).join(" · ")}` : "extra" };
   };
@@ -2002,12 +2002,12 @@ function disegnaGmv(c, rc) {
     conGma.map(([g]) => riga(g, htmlCondizione({ dove: "acqGma", gma: g, val: c.acq.gma[g], tipo: "sc", std: stdDi(g), ...opzGen(c.acq.gen, g) }))).join("");
   const ricStd = pctTesto(ricAutoCap(c));
   const lisM = k.imp === "listino";
-  // standard dello sconto di listino: lo sconto di acquisto del GMA con più righe (uguale per tutti); attività: nessuno
+  // standard dello sconto di listino: lo sconto di acquisto del GMA con più righe, uguale per tutti (anche l'attività)
   const lisStd = pctTesto(k.lis.std || 0);
-  const stdRip = (g) => (soloAtt(g) ? "0" : lisStd);
+  const stdRip = () => lisStd;
   $("#cond-ven").innerHTML = lisM
     ? riga("", htmlCondizione({ dove: "lisGen", val: c.lis.gen, tipo: "sc", std: lisStd }), true) +
-      conGma.map(([g]) => riga(g, htmlCondizione({ dove: "lisGma", gma: g, val: c.lis.gma[g], tipo: "sc", std: stdRip(g), ...opzGen(c.lis.gen, g) }))).join("")
+      conGma.map(([g]) => riga(g, htmlCondizione({ dove: "lisGma", gma: g, val: c.lis.gma[g], tipo: "sc", std: stdRip(g), ...opzGen(c.lis.gen, g, "sc", true) }))).join("")
     : ricarico
     ? riga("", htmlCondizione({ dove: "ricGen", val: c.ven.ricGen, tipo: "ric", std: ricStd }), true) +
       conGma.map(([g]) => riga(g, htmlCondizione({ dove: "ricGma", gma: g, val: c.ven.ricGma[g], tipo: "ric", std: ricStd, ...(normTesto(c.ven.ricGen) ? (() => { const { over, extra } = scomponi(c.ven.ricGen); return { eredita: over !== null, phExtra: extra.length ? `Gen.: ${extra.join(" · ")}` : "extra" }; })() : {}) }))).join("")
