@@ -3149,8 +3149,8 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
   const lista = [...trovati.values()].sort((a, b) => a.g.localeCompare(b.g));
   const tabella = (cli) => lista.map((x) => {
     const att = x.g === "ATT";
-    const prima = cli ? (att ? (cli.att === "" || cli.att === undefined ? "" : euro(cli.att)) : scontoCliTxt(cli, x.g) ? scontoCliTxt(cli, x.g) + "%" : "") : "";
-    const dopo = att ? (x.unit ? euro(x.unit * (1 - x.f)) : "") : x.f ? (x.testo || pctVal(x.f)) + "%" : "0%";
+    const prima = cli ? (att ? (cli.att === "" || cli.att === undefined ? "" : euro(cli.att)) : scontoCliTxt(cli, x.g) === "NC" ? "NC" : scontoCliTxt(cli, x.g) ? scontoCliTxt(cli, x.g) + "%" : "") : "";
+    const dopo = att ? (x.unit ? euro(x.unit * (1 - x.f)) : "") : x.f ? (x.testo || pctVal(x.f)) + "%" : "NC";
     const cambia = cli && prima !== dopo;
     return `<tr><td class="mono"><b>${esc(x.g)}</b></td><td class="small">${esc(fornitoriTxt(x.g))}</td><td class="mono small">${esc(x.cod)}</td>
       <td class="small">${x.termini.map((t) => `${esc(t.n)} ${pctTxt(t.v)}`).join(" · ") || '<span class="muted">nessuno sconto</span>'}${x.aum.length ? ` · aumento ${x.aum.map(pctTxt).join("+")}` : ""}${x.forzata ? ' <span class="badge warn" title="Nella riga c\'è un prezzo netto forzato">netto forzato</span>' : ""}</td>
@@ -3166,7 +3166,8 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
       <div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th>Articolo</th><th>Sconti applicati da Oracle</th><th class="num">Cartellino attuale</th><th class="num">Nuovo</th></tr></thead>
         <tbody id="cs-righe"></tbody></table></div>
       <p class="muted small" style="margin:8px 0 0">Si aggiornano solo i GMA presenti nel file; gli altri sconti del cliente restano com'erano.
-        Per l'attività tecnica (ATT) si salva la tariffa = prezzo che Oracle ha messo sulla riga PITATT.TEC.</p>`,
+        Per l'attività tecnica (ATT) si salva la tariffa = prezzo che Oracle ha messo sulla riga PITATT.TEC.
+        I GMA senza nessuno sconto diventano <b>NC</b> (non censito).</p>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva il cartellino", value: "ok", cls: "primary" }],
     onApri(d) {
       const agg = () => {
@@ -3190,7 +3191,7 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
       for (const x of lista) {
         if (x.g === "ATT") { if (x.unit) dati.att = Math.round(x.unit * (1 - x.f) * 100) / 100; continue; }
         if (x.f) { dati.sconti[x.g] = x.f; if (x.testo && x.testo.includes("+")) dati.scontiTesto[x.g] = x.testo; else delete dati.scontiTesto[x.g]; }
-        else { delete dati.sconti[x.g]; delete dati.scontiTesto[x.g]; }
+        else { dati.sconti[x.g] = "NC"; delete dati.scontiTesto[x.g]; } // nessuno sconto da Oracle: non censito
       }
       dati.censito = oggiIso();
       const id = cli?.id || slug(val) + "-" + db.nuovoId().slice(-4);
