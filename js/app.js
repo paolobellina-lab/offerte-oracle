@@ -224,6 +224,7 @@ function collega() {
     impostaStandardGma(S.gmv);
     S.fornitori = docs.find((d) => d.id === "fornitori")?.lista || [];
     S.censCfg = docs.find((d) => d.id === "censimento") || {};
+    if (document.activeElement?.id !== "cl-cens-noff") $("#cl-cens-noff").value = S.censCfg.nOfferta || "";
     ridisegna();
   }, onErr));
   ascoltatori.push(db.ascolta(COLL.cat, (docs) => {
@@ -3073,7 +3074,7 @@ $("#cl-cens-scarica").addEventListener("click", () => {
     },
     async onConferma(v) {
       const salva = righe.map((x) => ({ g: x.g, cod: x.cod, on: x.on }));
-      try { await db.salva(COLL.cfg, "censimento", { righe: salva }); S.censCfg = { righe: salva }; } catch (x) { errore(x, "Scelte non salvate"); }
+      try { await db.salva(COLL.cfg, "censimento", { ...S.censCfg, righe: salva }); S.censCfg = { ...S.censCfg, righe: salva }; } catch (x) { errore(x, "Scelte non salvate"); }
       if (v === "salva") { toast("Scelte salvate."); return; }
       const scelte = righe.filter((x) => x.on && x.cod);
       if (!scelte.length) { toast("Nessuna riga da scaricare."); return false; }
@@ -3130,6 +3131,11 @@ async function righeFileOracle(f) {
   const wb = await leggiExcel(await f.arrayBuffer());
   return wb.foglio(wb.nomi[0]);
 }
+$("#cl-cens-noff").addEventListener("change", async (e) => {
+  const v = e.target.value.trim();
+  try { await db.salva(COLL.cfg, "censimento", { ...S.censCfg, nOfferta: v }); S.censCfg = { ...S.censCfg, nOfferta: v }; toast("N° offerta Gadmel L5 salvato.", 2000); }
+  catch (x) { errore(x, "N° offerta non salvato"); }
+});
 $("#cl-cens-carica").addEventListener("click", () => $("#cl-cens-file").click());
 $("#cl-cens-file").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -4079,7 +4085,7 @@ async function rinominaGma(vecchio, nuovo, forn = "") {
   // censimento
   if (S.censCfg?.righe?.some((x) => x.g === vecchio)) {
     const righe = S.censCfg.righe.filter((x) => !(esiste && x.g === vecchio && S.censCfg.righe.some((y) => y.g === nuovo))).map((x) => (x.g === vecchio ? { ...x, g: nuovo } : x));
-    ops.push({ tipo: "set", coll: COLL.cfg, id: "censimento", data: { righe } });
+    ops.push({ tipo: "set", coll: COLL.cfg, id: "censimento", data: { ...S.censCfg, righe } });
   }
   } else if (S.off) {
     // solo le righe dell'offerta aperta di questo fornitore
