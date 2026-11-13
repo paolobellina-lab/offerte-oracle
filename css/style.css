@@ -977,3 +977,4 @@ select.stato-off { font-size: .85rem; padding: 3px 6px; background: #fff; color:
 .cens-bottom { align-self: flex-end; }
 button.cens-bottom { height: 38px; box-sizing: border-box; }
 label.cens-bottom input { height: 38px; box-sizing: border-box; }
+#cl-cens-noff { font-size: 1.05rem; letter-spacing: .03em; }
