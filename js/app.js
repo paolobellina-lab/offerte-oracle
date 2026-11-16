@@ -393,6 +393,33 @@ function rinominaCapitolo(c) {
   });
 }
 
+/* Copia di un capitolo nella stessa offerta: righe (nuove), condizioni di prezzo e impostazioni; resta legato allo stesso database. */
+function duplicaCapitolo(c) {
+  if (!c) return;
+  let n = 2, proposto = `${c.nome} (copia)`;
+  while (S.off.capitoli.some((x) => x.nome === proposto)) proposto = `${c.nome} (copia ${n++})`;
+  dialogo({
+    titolo: `Duplica il capitolo ${c.nome}`,
+    html: `<label class="f">Nome del nuovo capitolo<input id="dc-nome" value="${esc(proposto)}"></label>
+      <p class="muted small">Si copiano righe, quantità, note, capitolati, condizioni di prezzo e impostazioni dell'output.
+        ${S.capitoli.some((x) => x.nome === dbNome(c)) ? `La copia resta legata al database <b>${esc(dbNome(c))}</b>.` : ""}</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Duplica", value: "ok", cls: "primary" }],
+    onApri: (d) => setTimeout(() => { const i = $("#dc-nome", d); i.focus(); i.select(); }, 50),
+    onConferma(v, d) {
+      const nome = $("#dc-nome", d).value.trim();
+      if (!nome) { toast("Scrivi il nome."); return false; }
+      if (S.off.capitoli.some((x) => x.nome === nome)) { toast("C'è già un capitolo con questo nome."); return false; }
+      const k = structuredClone(c);
+      k.nome = nome; k.base = dbNome(c); if (k.base === nome) delete k.base;
+      k.righe = (k.righe || []).map((r) => ({ ...r, id: db.nuovoId() }));
+      S.off.capitoli.splice(S.off.capitoli.indexOf(c) + 1, 0, k);
+      S.capAtt = nome; S.sel = new Set();
+      modificata(); disegnaOfferta(true);
+      toast(`Capitolo duplicato: ${nome} (${k.righe.length} righe).`);
+    },
+  });
+}
+
 /* ================= Elenco offerte ================= */
 $("#nuova-offerta").addEventListener("click", async () => {
   const o = nuovaOffertaVuota();
@@ -664,6 +691,24 @@ $("#cap-tabs").addEventListener("dblclick", (e) => {
   const b = e.target.closest("button[data-cap]"); if (!b || !b.dataset.cap) return;
   rinominaCapitolo(S.off.capitoli.find((c) => c.nome === b.dataset.cap));
 });
+// tasto destro su un capitolo del menu: rinomina / duplica
+$("#cap-tabs").addEventListener("contextmenu", (e) => {
+  const b = e.target.closest("button[data-cap]"); if (!b || !b.dataset.cap) return;
+  e.preventDefault();
+  const m = $("#menu-dx");
+  m.innerHTML = `<div class="dx-titolo">${esc(b.dataset.cap)}</div>
+    <button type="button" data-dxtab="rin">✎ Rinomina…</button><button type="button" data-dxtab="dup">⧉ Duplica…</button>`;
+  m.dataset.cap = b.dataset.cap;
+  m.hidden = false; menuDxAperto = Date.now();
+  m.style.left = Math.min(e.clientX, innerWidth - m.offsetWidth - 8) + "px";
+  m.style.top = Math.min(e.clientY, innerHeight - m.offsetHeight - 8) + "px";
+});
+$("#menu-dx").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dxtab]"); if (!b) return;
+  const c = S.off?.capitoli.find((x) => x.nome === $("#menu-dx").dataset.cap);
+  chiudiMenuDx();
+  if (c) (b.dataset.dxtab === "rin" ? rinominaCapitolo : duplicaCapitolo)(c);
+});
 $("#cap-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cap]"); if (!b) return;
   S.capAtt = b.dataset.cap; S.sel = new Set();
@@ -928,6 +973,7 @@ function disegnaRiepilogo() {
       <td class="num solo-av">${r.venduto ? pctTxt(marginePct(r.venduto, r.acquistato)) || "0%" : "—"}</td>
       <td>${!cli ? "" : fuori ? `<span class="badge bad">${fuori} fuori</span>` : '<span class="badge ok">OK</span>'}</td>
       <td class="nowrap"><button class="btn small" data-xlsx-cap="${esc(c.nome)}" ${r.righe ? "" : "disabled"} title="Scarica il foglio per Oracle di questo capitolo">⤓ Excel</button>
+        <button class="btn small" data-duplica-cap="${esc(c.nome)}" title="Duplica il capitolo con righe, condizioni di prezzo e impostazioni">⧉ Duplica</button>
         <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
   $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td></td><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
@@ -950,6 +996,8 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
   if (rn) return rinominaCapitolo(S.off.capitoli.find((c) => c.nome === rn.dataset.rinominaCap));
   const v = e.target.closest("[data-vai-cap]");
   if (v) { S.capAtt = v.dataset.vaiCap; S.sub = "righe"; S.sel = new Set(); return disegnaOfferta(true); }
+  const du = e.target.closest("[data-duplica-cap]");
+  if (du) return duplicaCapitolo(S.off.capitoli.find((c) => c.nome === du.dataset.duplicaCap));
   const t = e.target.closest("[data-togli-cap]");
   if (t) return togliCapitolo(S.off.capitoli.find((c) => c.nome === t.dataset.togliCap));
   const x = e.target.closest("[data-xlsx-cap]");
