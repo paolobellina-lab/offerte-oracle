@@ -361,7 +361,7 @@ function opzCap(cap) {
 }
 function totaliOfferta(o) {
   let venduto = 0, acquistato = 0, righe = 0;
-  for (const c of capitoliOff(o)) {
+  for (const c of capitoliOff(o).filter((x) => x.esporta !== false)) {
     const r = riepilogoCapitolo(c, opzCap(c));
     venduto += r.venduto; acquistato += r.acquistato; righe += r.righe;
   }
@@ -903,7 +903,8 @@ function disegnaOffertaIn(cambioSub) {
   // totali dell'offerta
   const cli = clienteOff();
   let venduto = 0, acquistato = 0, righe = 0, fuori = 0;
-  for (const c of o.capitoli) {
+  // solo i capitoli spuntati (le varianti tenute deselezionate non contano)
+  for (const c of o.capitoli.filter((x) => x.esporta !== false)) {
     const r = riepilogoCapitolo(c, opzCap(c));
     venduto += r.venduto; acquistato += r.acquistato; righe += r.righe;
     fuori += controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
@@ -963,7 +964,7 @@ function disegnaRiepilogo() {
   const righe = o.capitoli.map((c) => {
     const r = riepilogoCapitolo(c, opzCap(c));
     const fuori = controlloCartellino(c, cli, opzCap(c)).filter((x) => x.stato === "fuori").length;
-    tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe;
+    if (c.esporta !== false) { tot.venduto += r.venduto; tot.acquistato += r.acquistato; tot.attV += r.attivita.venduto; tot.matV += r.materiale.venduto; tot.righe += r.righe; }
     return `<tr class="${c.esporta === false ? "qta-zero" : ""}"><td><input type="checkbox" data-esporta="${esc(c.nome)}" ${c.esporta === false ? "" : "checked"} title="Esporta questo capitolo"></td>
       <td><span class="nowrap"><button class="btn small" data-vai-cap="${esc(c.nome)}">${esc(c.nome)}</button><button type="button" class="tg-ed" data-rinomina-cap="${esc(c.nome)}" title="Rinomina il capitolo">✎</button></span>${c.base ? `<div class="muted small">database ${esc(c.base)}</div>` : ""}${c.fonte ? `<div class="muted small" title="Importato dall'offerta del fornitore">da ${esc(c.fonte)}</div>` : ""}</td>
       <td class="small nowrap">${esc(descrCondizioni(c))}</td><td class="num">${r.righe}</td>
@@ -976,7 +977,7 @@ function disegnaRiepilogo() {
         <button class="btn small" data-duplica-cap="${esc(c.nome)}" title="Duplica il capitolo con righe, condizioni di prezzo e impostazioni">⧉ Duplica</button>
         <button class="icon" data-togli-cap="${esc(c.nome)}" title="Togli il capitolo dall'offerta">✕</button></td></tr>`;
   }).join("");
-  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td></td><td>Totale offerta</td><td></td><td class="num">${tot.righe}</td>
+  $("#riepilogo-capitoli").innerHTML = righe ? righe + `<tr class="totale"><td></td><td>Totale offerta${o.capitoli.some((c) => c.esporta === false) ? '<div class="small" style="font-weight:400">solo i capitoli spuntati</div>' : ""}</td><td></td><td class="num">${tot.righe}</td>
       <td class="num">${euro(tot.venduto)}</td><td class="num solo-av">${euro(tot.acquistato)}</td><td class="num">${euro(tot.matV)}</td><td class="num">${euro(tot.attV)}</td>
       <td class="num solo-av">${tot.acquistato ? pctTxt(ricaricoPct(tot.venduto, tot.acquistato)) || "0%" : ""}</td>
       <td class="num solo-av">${tot.venduto ? pctTxt(marginePct(tot.venduto, tot.acquistato)) || "0%" : ""}</td><td></td><td></td></tr>`
@@ -988,9 +989,9 @@ function disegnaRiepilogo() {
 $("#riepilogo-capitoli").addEventListener("change", (e) => {
   const t = e.target.closest("[data-esporta]"); if (!t) return;
   const c = S.off.capitoli.find((x) => x.nome === t.dataset.esporta); if (!c) return;
-  c.esporta = t.checked; modificata(); disegnaRiepilogo();
+  c.esporta = t.checked; modificata(); disegnaOfferta(true);
 });
-$("#esp-tutti").addEventListener("change", (e) => { for (const c of S.off.capitoli) c.esporta = e.target.checked; modificata(); disegnaRiepilogo(); });
+$("#esp-tutti").addEventListener("change", (e) => { for (const c of S.off.capitoli) c.esporta = e.target.checked; modificata(); disegnaOfferta(true); });
 $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const rn = e.target.closest("[data-rinomina-cap]");
   if (rn) return rinominaCapitolo(S.off.capitoli.find((c) => c.nome === rn.dataset.rinominaCap));
