@@ -4165,7 +4165,7 @@ async function controllaAcquisti(file) {
   const confronta = (c) => {
     const opz = opzCap(c), app = new Map();
     for (const r of c.righe || []) {
-      if (isAttivita(r) || !num(r.qta)) continue;
+      if (!num(r.qta)) continue; // anche l'attività tecnica: prezzo al giorno, quantità = giornate
       const x = calcolaRiga(r, c, opz.ricarichi);
       const chiavi = (isGenerico(r) ? [r.nOrdine || r.descrizione] : [codiceArticolo(r), r.codice, r.nOrdine]).map(chiaveAcq).filter(Boolean);
       // stesso codice; oppure codice Oracle che finisce col codice dell'app (in Oracle c'è il prefisso del fornitore, es. "SIE ")
@@ -4178,8 +4178,12 @@ async function controllaAcquisti(file) {
       const o = perCod.get(k), a = app.get(k);
       const uO = o ? o.valore / (o.qta || 1) : null, uA = a ? a.unit : null;
       let stato = !a ? "soloOr" : !o ? "soloApp" : Math.abs(uO - uA) <= Math.max(0.01, Math.abs(uO) * 0.001) ? "ok" : "diverso";
-      const listDiv = o && a && o.prezzo && Math.abs(o.prezzo - a.listino) > Math.max(0.01, o.prezzo * 0.001);
-      return { k, o, a, uO, uA, stato, listDiv, qtaDiv: o && a && Math.abs(o.qta - a.qta) > 0.001 };
+      // listino da confrontare solo se Oracle ha listino + sconto; se lo sconto è vuoto, il "prezzo" Oracle è già il netto
+      const conSconto = !!String(o?.sconti || "").replace(/[\s0,.%+]/g, "");
+      const listDiv = conSconto && a && o.prezzo && Math.abs(o.prezzo - a.listino) > Math.max(0.01, o.prezzo * 0.001);
+      // nuovo listino per allineare l'app: quello di Oracle, oppure (prezzo netto) quello che con lo sconto dell'app dà il netto di Oracle
+      const nuovoListino = !o || !a ? null : listDiv ? o.prezzo : stato === "diverso" && !conSconto && a.fattore ? uO / a.fattore : null;
+      return { k, o, a, uO, uA, stato, listDiv, nuovoListino, qtaDiv: o && a && Math.abs(o.qta - a.qta) > 0.001 };
     });
     const ord = { diverso: 0, soloOr: 1, soloApp: 2, ok: 3 };
     return out.sort((x, y) => ord[x.stato] - ord[y.stato] || x.k.localeCompare(y.k));
@@ -4187,19 +4191,19 @@ async function controllaAcquisti(file) {
   let cap = capDef;
   const disegna = (d) => {
     const lista = confronta(cap), cnt = (s) => lista.filter((x) => x.stato === s).length;
-    const totApp = riepilogoCapitolo(cap, opzCap(cap)).materiale.acquistato;
+    const totApp = riepilogoCapitolo(cap, opzCap(cap)).acquistato;
     const okTot = Math.abs(totApp - totOr) <= tolTot(totOr);
-    const nAgg = lista.filter((x) => x.listDiv).length;
+    const nAgg = lista.filter((x) => x.nuovoListino !== null).length;
     $("#ca-riep", d).innerHTML = `
       <div class="row" style="flex-wrap:wrap;gap:6px 16px;align-items:center">
-        <span>Totale Oracle <b>${euro(totOr)}</b></span><span>Acquistato app (materiale) <b>${euro(totApp)}</b></span>
+        <span>Totale Oracle <b>${euro(totOr)}</b></span><span>Acquistato app <b>${euro(totApp)}</b></span>
         <span class="${okTot ? "ok" : "bad"}"><b>${okTot ? "✓ i totali coincidono" : "⚠ differenza " + euro(totApp - totOr)}</b></span>
         <span class="badge ${cnt("diverso") ? "bad" : "info"}">${cnt("diverso")} prezzi diversi</span>
         <span class="badge info">${cnt("ok")} uguali</span>
         ${cnt("soloOr") ? `<span class="badge warn">${cnt("soloOr")} solo in Oracle</span>` : ""}
         ${cnt("soloApp") ? `<span class="badge warn">${cnt("soloApp")} solo nell'app</span>` : ""}
       </div>`;
-    $("#ca-agg", d).hidden = !nAgg; $("#ca-agg", d).textContent = `Aggiorna nell'app il listino di ${nAgg} articol${nAgg === 1 ? "o" : "i"} con quello di Oracle`;
+    $("#ca-agg", d).hidden = !nAgg; $("#ca-agg", d).textContent = `Allinea nell'app il prezzo di ${nAgg} articol${nAgg === 1 ? "o" : "i"} a quello di Oracle`;
     const colore = { diverso: "#fde3e3", soloOr: "#fff3cd", soloApp: "#fff3cd", ok: "" };
     const lab = { diverso: "⚠ prezzo diverso", soloOr: "solo in Oracle", soloApp: "solo nell'app", ok: "✓" };
     $("#ca-righe", d).innerHTML = lista.map((x) => { const bg = colore[x.stato] ? ` style="background:${colore[x.stato]}"` : "";
@@ -4229,7 +4233,7 @@ async function controllaAcquisti(file) {
       $("#ca-cap", d).addEventListener("change", (e) => { cap = S.off.capitoli.find((c) => c.nome === e.target.value); disegna(d); });
       $("#ca-agg", d).addEventListener("click", () => {
         let n = 0;
-        for (const x of confronta(cap)) if (x.listDiv) for (const r of x.a.righe) { nuovoPrezzoArticolo(r, x.o.prezzo); n++; }
+        for (const x of confronta(cap)) if (x.nuovoListino !== null) for (const r of x.a.righe) { nuovoPrezzoArticolo(r, Math.round(x.nuovoListino * 1e4) / 1e4); n++; }
         modificata(); ridisegnaOfferta(); disegna(d);
         toast(`Listino aggiornato in ${n} righe del capitolo ${cap.nome} (solo in questa offerta).`, 5000);
       });
