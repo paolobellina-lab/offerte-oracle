@@ -3586,8 +3586,14 @@ $("#file-oracle").addEventListener("change", async (e) => {
     }
     if (/\.csv$|\.txt$/i.test(f.name)) return confrontaOracle(BIB.righeDaTesto(await f.text()));
     const wb = await leggiExcel(await f.arrayBuffer());
-    const nome = wb.nomi.find((n) => /AGGIORNAMENTO LISTINO$/i.test(n)) || wb.nomi[0];
-    confrontaOracle(await wb.foglio(nome));
+    const fogli = [];
+    for (const n of wb.nomi) fogli.push({ nome: n, righe: (await wb.foglio(n)) || [] });
+    // estrazione da Oracle: foglio "… AGGIORNAMENTO LISTINO" o il primo con la colonna "Codice Articolo"
+    const haCodArt = (r) => r.slice(0, 40).some((x) => (x || []).some((c) => /codice articolo/i.test(String(c ?? ""))));
+    const ora = fogli.find((x) => /AGGIORNAMENTO LISTINO$/i.test(x.nome)) || fogli.find((x) => haCodArt(x.righe));
+    if (ora) return confrontaOracle(ora.righe);
+    // altrimenti è un listino del fornitore: si leggono tutti i fogli (lo stesso codice in più fogli conta una volta)
+    confrontaListinoFornitore(fogli, f.name);
   } catch (x) { errore(x, "File non leggibile"); }
 });
 
@@ -3602,10 +3608,27 @@ const bibCaricata = () => new Promise((ok) => {
 /* Prezzo diverso? Con le righe scontate il confronto si fa sul prezzo unitario arrotondato al centesimo,
    così un listino ricavato da un prezzo arrotondato (es. 15,88 / 0,25) non sembra cambiato. */
 const diversoDaOracle = (m, listino) => (m.sconto > 0.0001 ? Math.abs(m.unitario - listino * (1 - m.sconto)) > 0.0051 : Math.abs(m.prezzo - listino) > 0.004);
-async function confrontaOracle(righe) {
+/* Listino del fornitore (Excel a più fogli, colonne "Codice Prodotto", "Prezzo di listino"…): i codici non hanno il precodice
+   di Oracle, quindi si confrontano col codice del fornitore (senza precodice). */
+function confrontaListinoFornitore(fogli, nomeFile) {
   const box = $("#riepilogo-oracle");
-  let mappa;
-  try { mappa = leggiAggiornamentoListino(righe); } catch (x) { box.innerHTML = `<div class="avviso bad">${esc(x.message)}</div>`; return; }
+  const conInt = fogli.map((x) => ({ ...x, int: BIB.trovaIntestazione(x.righe) })).filter((x) => x.int);
+  if (!conInt.length) { box.innerHTML = `<div class="avviso bad">Non trovo la riga delle intestazioni (servono almeno il codice e il prezzo di listino).</div>`; return; }
+  const mappaCol = BIB.indovinaMappa(conInt[0].int.celle);
+  const letti = BIB.leggiListino(conInt, mappaCol, {});
+  const mappa = new Map();
+  for (const a of letti.articoli) mappa.set(a.codice.replace(/\s+/g, "").toUpperCase(), { prezzo: a.listino, unitario: a.listino, sconto: 0, gmv: "" });
+  mappa.saltate = 0; mappa.fornitore = true;
+  mappa.info = `Listino fornitore <b>${esc(nomeFile)}</b>: ${conInt.length} fogli letti, colonna codice “${esc(mappaCol.codice || "?")}”, prezzo “${esc(mappaCol.prezzo || "?")}”.
+    I codici si confrontano senza il precodice di Oracle (es. SIE, VAN).`;
+  return confrontaOracle(null, mappa);
+}
+async function confrontaOracle(righe, mappaPronta = null) {
+  const box = $("#riepilogo-oracle");
+  let mappa = mappaPronta;
+  if (!mappa) try { mappa = leggiAggiornamentoListino(righe); } catch (x) { box.innerHTML = `<div class="avviso bad">${esc(x.message)}</div>`; return; }
+  // listino del fornitore: si cerca anche il codice senza precodice
+  const trova = (codOracle, codForn) => { const m = mappa.get(codOracle); if (m) return [m, codOracle]; if (!mappa.fornitore) return [null]; const k = String(codForn || "").replace(/\s+/g, "").toUpperCase(); return [mappa.get(k), k]; };
   box.innerHTML = `<div class="avviso info">Confronto ${mappa.size} codici con il database e la biblioteca…</div>`;
   await bibCaricata();
   const cambi = [];
@@ -3614,18 +3637,18 @@ async function confrontaOracle(righe) {
   for (const a of S.catalogo) {
     const cod = codiceArticolo(a);
     if (isGenerico(a) || CODICI_GENERICI.has(cod)) continue;
-    const m = mappa.get(cod);
+    const [m, kTrov] = trova(cod, a.codice);
     if (!m) continue;
-    trovati.add(cod);
+    trovati.add(kTrov);
     const cambiaPrezzo = diversoDaOracle(m, num(a.listinoAcquisto));
     const cambiaGmv = m.gmv && m.gmv !== a.gmv;
     if (cambiaPrezzo || cambiaGmv) cambi.push({ a, m, dove: a.capitolo, prima: num(a.listinoAcquisto), gma: a.gmv }); else uguali++;
   }
   for (const b of S.bib) {
     const cod = codiceBib(b);
-    const m = mappa.get(cod);
+    const [m, kTrov] = trova(cod, b.codice);
     if (!m) continue;
-    trovati.add(cod);
+    trovati.add(kTrov);
     if (diversoDaOracle(m, num(b.listino))) cambi.push({ b, m, dove: `Biblioteca · ${b.fornitore}`, prima: num(b.listino), gma: condBib(b).gma });
     else uguali++;
   }
@@ -3633,11 +3656,12 @@ async function confrontaOracle(righe) {
   S.aggOracle = cambi;
   const nDb = cambi.filter((x) => x.a).length, nBib = cambi.length - nDb;
   box.innerHTML = `
+    ${mappa.info ? `<div class="avviso info" style="margin-bottom:6px">${mappa.info}</div>` : ""}
     <div class="avviso ${cambi.length ? "info" : "ok"}">${mappa.size} codici letti: <b>${cambi.length}</b> da aggiornare (${nDb} nel database, ${nBib} in biblioteca), ${uguali} già allineati${nonTrovati.length ? `, ${nonTrovati.length} codici che non sono né nel database né in biblioteca` : ""}${mappa.saltate ? `, ${mappa.saltate} righe saltate (prezzo netto forzato o sconto in euro: il listino non si ricava)` : ""}.
       ${mappa.dubbio ? `<div class="avviso bad" style="margin-top:6px">Sembrano righe di un'offerta ma <b>non ci sono le colonne degli sconti</b> (Sconto 3/4/5): il prezzo unitario viene preso come listino. Se in Oracle le righe erano scontate, i listini risulteranno sbagliati: esporta anche le colonne degli sconti.</div>` : ""}
       ${[...mappa.values()].some((m) => m.sconto > 0.0001) ? "<br>Sono righe di un'offerta: il prezzo unitario di Oracle è già scontato, quindi il listino si ricava togliendo gli sconti della riga (Sconto 3/4/5, Aumenti)." : ""}
       Gli articoli generici (P000ARTICOLO_GEN, PITATT.TEC) non si aggiornano: hanno tutti lo stesso codice in Oracle.</div>
-    ${cambi.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Dove</th><th>Codice</th><th>Articolo</th><th class="num">Listino attuale</th><th class="num">Listino Oracle</th><th class="num">Diff.</th><th>GMA</th></tr></thead><tbody>
+    ${cambi.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Dove</th><th>Codice</th><th>Articolo</th><th class="num">Listino attuale</th><th class="num">${mappa.fornitore ? "Listino nuovo" : "Listino Oracle"}</th><th class="num">Diff.</th><th>GMA</th></tr></thead><tbody>
       ${cambi.map(({ a, b, m, dove, prima, gma }) => { const d = prima ? (m.prezzo / prima - 1) : 0;
         return `<tr><td class="small">${esc(dove)}</td><td class="mono">${esc(a ? codiceArticolo(a) : codiceBib(b))}</td><td>${esc((a || b).nOrdine || (b ? b.codice : ""))}</td>
         <td class="num">${euro(prima)}</td><td class="num"><b>${euro(m.prezzo)}</b>${m.sconto > 0.0001 ? `<div class="muted small">${euro(m.unitario)} con ${pctTxt(m.sconto)}</div>` : ""}</td>
