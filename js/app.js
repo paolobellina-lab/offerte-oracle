@@ -1182,7 +1182,10 @@ function informativaWordDialogo() {
           if (i < 0) { righe.push(`<span class="bad">${esc(file.name)}: nessun capitolo con sigla ${esc(o.sigla || "?")}</span>${avvisoTe}`); continue; }
           const c = sp[i];
           $(`[data-inum="${i}"]`, b).value = o.numero; $(`[data-idata="${i}"]`, b).value = o.data;
-          c.inf = { ...(c.inf || {}), oracle: { numero: o.numero, data: o.data, valoreMerce: o.valoreMerce, trasporto: o.trasporto } };
+          c.inf = { ...(c.inf || {}), nOff: o.numero, dataOff: o.data, oracle: { numero: o.numero, data: o.data, valoreMerce: o.valoreMerce, trasporto: o.trasporto } };
+          // salvato subito nell'offerta, anche se poi non si scarica il Word
+          S.off.infCliente = { ...(S.off.infCliente || {}), ragione: $("#inf-rag", b).value.trim(), via: $("#inf-via", b).value.trim(), citta: $("#inf-citta", b).value.trim() };
+          modificata();
           $(`[data-ora="${i}"]`, b).innerHTML = statoOracle(c);
           const ok = !$(`[data-ora="${i}"] .bad`, b);
           $(`tr[data-riga="${i}"]`, b).querySelectorAll("td").forEach((td) => { td.style.background = ok ? "#e3f4e3" : "#fde3e3"; });
