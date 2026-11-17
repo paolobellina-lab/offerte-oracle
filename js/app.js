@@ -1004,6 +1004,60 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
   const x = e.target.closest("[data-xlsx-cap]");
   if (x) impostaEScarica(S.off.capitoli.find((c) => c.nome === x.dataset.xlsxCap));
 });
+/* ================= Mail (Gmail) ================= */
+// nome completo del capitolo per le mail: descrizione del capitolo del database, altrimenti il nome
+const descrCap = (c) => S.capitoli.find((x) => x.nome === dbNome(c))?.descrizione || c.nome;
+const descrCapDb = (x) => x.descrizione || x.nome;
+function apriGmail(oggetto, corpo) {
+  const url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(oggetto)}&body=${encodeURIComponent(corpo)}`;
+  window.open(url, "_blank", "noopener");
+}
+const oggettoMail = () => { const r = campiRif(S.off); return ["OF", r.rif, r.lavoro].filter(Boolean).join(" - "); };
+const elenco = (l) => l.map((x) => `- ${x}`).join("\n");
+function mailOffertaCliente() {
+  const sp = S.off.capitoli.filter((c) => c.esporta !== false);
+  if (!sp.length) return toast("Spunta almeno un capitolo.");
+  const fatti = [...new Set(sp.map(descrCap))];
+  // tutti gli altri capitoli che l'app conosce: si cancellano a mano quelli che non servono
+  const altri = [...new Set(S.capitoli.map(descrCapDb))].filter((d) => !fatti.includes(d));
+  const corpo = `Buongiorno
+In riferimento alla TE in oggetto, trovi in allegato informativa
+commerciale completa di offerte per i capitoli :
+
+${elenco(fatti)}
+
+Siamo in attesa da parte dei fornitori di quotazioni per i capitoli, appena disponibili li integro nell'informativa :
+${elenco(altri)}
+
+
+Non sono stati sviluppati i seguenti capitoli
+${elenco(altri)}
+sarà possibile un'eventuale integrazione in fase 2
+
+resto a disposizione
+Cordiali saluti`;
+  apriGmail(oggettoMail(), corpo);
+}
+const euroTondo = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " €";
+function mailCostiInformativa() {
+  const sp = S.off.capitoli.filter((c) => c.esporta !== false);
+  if (!sp.length) return toast("Spunta almeno un capitolo.");
+  // importo = venduto del capitolo arrotondato per eccesso ai 500 €
+  const righe = sp.map((c) => `- ${descrCap(c)} : ${euroTondo(Math.ceil(riepilogoCapitolo(c, opzCap(c)).venduto / 500) * 500)}`);
+  const corpo = `Buongiorno
+in allegato trovi le offerte da inserire nell'informativa commerciale
+sotto ti indico i costi dei capitoli :
+
+${righe.join("\n")}
+
+Per quanto concerne la descrizione delle attività tecniche, ti chiedo gentilmente di inserire il testo che trovi nell'allegato nella parte finale del Capitolo … e ….
+
+cordiali saluti`;
+  apriGmail(oggettoMail(), corpo);
+}
+$("#mail-costi").addEventListener("click", mailCostiInformativa);
+$("#mail-cliente").addEventListener("click", mailOffertaCliente);
+
 $("#scarica-tutti").addEventListener("click", () => {
   const caps = S.off.capitoli.filter((c) => c.esporta !== false && calcolaOfferta(c).righe.length);
   const vai = async () => { for (const c of caps) { scaricaXlsx(c); await new Promise((r) => setTimeout(r, 600)); } };
@@ -2979,14 +3033,15 @@ $("#c-impost").addEventListener("click", () => {
   dialogo({
     titolo: "Ricarico standard per capitolo",
     html: `<p class="muted small" style="margin-top:0">Il ricarico automatico si applica alle offerte “VENDITA CLIENTE” quando non è indicato un ricarico nell'offerta o nel GMA.</p>
-      <table><thead><tr><th>Capitolo</th><th class="num">Articoli</th><th>Ricarico automatico</th></tr></thead><tbody>
+      <table><thead><tr><th>Capitolo</th><th class="num">Articoli</th><th>Ricarico automatico</th><th title="Nome completo del capitolo usato nelle mail (es. FIRE → Rivelazione Incendio)">Descrizione per le mail</th></tr></thead><tbody>
       ${S.capitoli.map((c, i) => `<tr><td>${esc(c.nome)}</td><td class="num">${S.catalogo.filter((a) => a.capitolo === c.nome).length}</td>
-        <td><span class="pct-wrap"><input class="pct" data-i="${i}" value="${esc(pctVal(c.ricarico))}"></span></td></tr>`).join("")}
+        <td><span class="pct-wrap"><input class="pct" data-i="${i}" value="${esc(pctVal(c.ricarico))}"></span></td>
+        <td><input data-desc="${i}" value="${esc(c.descrizione || "")}" placeholder="${esc(c.nome)}" style="min-width:240px"></td></tr>`).join("")}
       </tbody></table>
       <label class="f" style="margin-top:12px">Nuovo capitolo (nome)<input id="m-nuovocap" placeholder="es. EVAC"></label>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {
-      const lista = S.capitoli.map((c, i) => ({ ...c, ricarico: daPct($(`[data-i="${i}"]`, b).value) }));
+      const lista = S.capitoli.map((c, i) => ({ ...c, ricarico: daPct($(`[data-i="${i}"]`, b).value), descrizione: $(`[data-desc="${i}"]`, b).value.trim() }));
       const nuovo = $("#m-nuovocap", b).value.trim().toUpperCase().replace(/\s+/g, "_");
       if (nuovo && !lista.some((c) => c.nome === nuovo)) lista.push({ nome: nuovo, ricarico: 0.28, ordine: lista.length });
       await db.salva(COLL.cfg, "capitoli", { lista });
