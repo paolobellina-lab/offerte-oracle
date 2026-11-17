@@ -4138,6 +4138,106 @@ async function importaOffertaFornitore(file) {
     },
   });
 }
+
+/* ================= Controllo prezzi di acquisto con un'offerta Oracle in acquisto (PDF) =================
+   Il PDF si legge e si scarta (non si salva). Per ogni codice: listino, sconto e netto di Oracle contro quelli dell'app. */
+const chiaveAcq = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+async function controllaAcquisti(file) {
+  if (!S.off) return;
+  toast(`Leggo ${file.name}…`, 2500);
+  let pag, righeOr, testa;
+  try { pag = await testoPdf(file); righeOr = OFF.righeOracle(pag); testa = OFF.leggiOffertaOracle(pag); } catch (x) { return errore(x, "PDF non leggibile"); }
+  if (!righeOr.length) return toast("Nel PDF non trovo righe di un'offerta Oracle.", 6000);
+  // capitolo proposto: sigla nel Rif. Cliente o nel nome del file (…_FIRE.pdf), altrimenti quello aperto
+  const sigla = (testa?.sigla || (file.name.match(/_([A-Z]+)\.pdf$/i)?.[1] || "")).toUpperCase();
+  const capDef = S.off.capitoli.find((c) => infCap(c).sigla === sigla || c.nome.toUpperCase() === sigla) || capAtt() || S.off.capitoli[0];
+  if (!capDef) return toast("L'offerta non ha capitoli.");
+  // Oracle: righe raggruppate per codice
+  const perCod = new Map();
+  for (const r of righeOr) {
+    const k = chiaveAcq(r.nOrdine || r.codice);
+    const g = perCod.get(k) || { codice: r.nOrdine || r.codice, descrizione: r.descrizione, qta: 0, valore: 0, prezzo: r.prezzo, sconti: r.sconti, prezzi: new Set() };
+    g.qta += r.qta; g.valore += r.valore; g.prezzi.add(Math.round(r.unitario * 1e4)); perCod.set(k, g);
+  }
+  const totOr = righeOr.reduce((s, r) => s + r.valore, 0);
+  const due = (o, a) => `<div>${o || "—"}</div><div class="muted">${a || "—"}</div>`;
+  const sc = (f) => (f === null || f === undefined ? "" : fNum.format(Math.round((1 - f) * 1e4) / 100) + "%");
+  const confronta = (c) => {
+    const opz = opzCap(c), app = new Map();
+    for (const r of c.righe || []) {
+      if (isAttivita(r) || !num(r.qta)) continue;
+      const x = calcolaRiga(r, c, opz.ricarichi);
+      const chiavi = (isGenerico(r) ? [r.nOrdine || r.descrizione] : [codiceArticolo(r), r.codice, r.nOrdine]).map(chiaveAcq).filter(Boolean);
+      // stesso codice; oppure codice Oracle che finisce col codice dell'app (in Oracle c'è il prefisso del fornitore, es. "SIE ")
+      const k = chiavi.find((y) => perCod.has(y)) || [...perCod.keys()].find((z) => chiavi.some((y) => y.length >= 6 && z.endsWith(y))) || chiavi[0];
+      const g = app.get(k) || { codice: isGenerico(r) ? r.nOrdine || "(generico)" : codiceArticolo(r), descrizione: r.descrizione || r.nOrdine || "", qta: 0, acq: 0, listino: num(r.listinoAcquisto), fattore: x.acq.fattore, unit: x.acq.unitario, righe: [] };
+      g.qta += x.acq.qta; g.acq += x.acq.totale; g.righe.push(r); app.set(k, g);
+    }
+    const chiavi = [...new Set([...perCod.keys(), ...app.keys()])];
+    const out = chiavi.map((k) => {
+      const o = perCod.get(k), a = app.get(k);
+      const uO = o ? o.valore / (o.qta || 1) : null, uA = a ? a.unit : null;
+      let stato = !a ? "soloOr" : !o ? "soloApp" : Math.abs(uO - uA) <= Math.max(0.01, Math.abs(uO) * 0.001) ? "ok" : "diverso";
+      const listDiv = o && a && o.prezzo && Math.abs(o.prezzo - a.listino) > Math.max(0.01, o.prezzo * 0.001);
+      return { k, o, a, uO, uA, stato, listDiv, qtaDiv: o && a && Math.abs(o.qta - a.qta) > 0.001 };
+    });
+    const ord = { diverso: 0, soloOr: 1, soloApp: 2, ok: 3 };
+    return out.sort((x, y) => ord[x.stato] - ord[y.stato] || x.k.localeCompare(y.k));
+  };
+  let cap = capDef;
+  const disegna = (d) => {
+    const lista = confronta(cap), cnt = (s) => lista.filter((x) => x.stato === s).length;
+    const totApp = riepilogoCapitolo(cap, opzCap(cap)).materiale.acquistato;
+    const okTot = Math.abs(totApp - totOr) <= tolTot(totOr);
+    const nAgg = lista.filter((x) => x.listDiv).length;
+    $("#ca-riep", d).innerHTML = `
+      <div class="row" style="flex-wrap:wrap;gap:6px 16px;align-items:center">
+        <span>Totale Oracle <b>${euro(totOr)}</b></span><span>Acquistato app (materiale) <b>${euro(totApp)}</b></span>
+        <span class="${okTot ? "ok" : "bad"}"><b>${okTot ? "✓ i totali coincidono" : "⚠ differenza " + euro(totApp - totOr)}</b></span>
+        <span class="badge ${cnt("diverso") ? "bad" : "info"}">${cnt("diverso")} prezzi diversi</span>
+        <span class="badge info">${cnt("ok")} uguali</span>
+        ${cnt("soloOr") ? `<span class="badge warn">${cnt("soloOr")} solo in Oracle</span>` : ""}
+        ${cnt("soloApp") ? `<span class="badge warn">${cnt("soloApp")} solo nell'app</span>` : ""}
+      </div>`;
+    $("#ca-agg", d).hidden = !nAgg; $("#ca-agg", d).textContent = `Aggiorna nell'app il listino di ${nAgg} articol${nAgg === 1 ? "o" : "i"} con quello di Oracle`;
+    const colore = { diverso: "#fde3e3", soloOr: "#fff3cd", soloApp: "#fff3cd", ok: "" };
+    const lab = { diverso: "⚠ prezzo diverso", soloOr: "solo in Oracle", soloApp: "solo nell'app", ok: "✓" };
+    $("#ca-righe", d).innerHTML = lista.map((x) => { const bg = colore[x.stato] ? ` style="background:${colore[x.stato]}"` : "";
+      const diff = x.uO !== null && x.uA ? (x.uO / x.uA - 1) : null;
+      return `<tr>
+      <td${bg} class="mono small">${esc(x.o?.codice || x.a?.codice)}</td><td${bg} class="small">${esc((x.o?.descrizione || x.a?.descrizione || "").slice(0, 60))}</td>
+      <td${bg} class="num ${x.qtaDiv ? "bad" : ""}">${due(x.o ? fNum.format(x.o.qta) : "", x.a ? fNum.format(x.a.qta) : "")}</td>
+      <td${bg} class="num ${x.listDiv ? "bad" : ""}">${due(x.o?.prezzo ? euro(x.o.prezzo) : "", x.a ? euro(x.a.listino) : "")}</td>
+      <td${bg} class="num">${due(x.o?.sconti ? esc(x.o.sconti.replace(/,00\b/g, "")) + "%" : "", x.a ? sc(x.a.fattore) : "")}</td>
+      <td${bg} class="num">${due(x.uO !== null ? `<b>${euro(x.uO)}</b>${x.o?.prezzi.size > 1 ? ' <span class="bad" title="Lo stesso codice ha prezzi diversi in più righe">*</span>' : ""}` : "", x.uA !== null ? `<b>${euro(x.uA)}</b>` : "")}</td>
+      <td${bg} class="num ${diff && Math.abs(diff) > 0.001 ? "bad" : ""}">${diff !== null && x.stato !== "ok" ? (diff > 0 ? "+" : "") + fNum.format(Math.round(diff * 1e4) / 100) + "%" : ""}</td>
+      <td${bg} class="small nowrap">${lab[x.stato]}</td></tr>`; }).join("");
+  };
+  dialogo({
+    largo: true, titolo: `Controllo prezzi di acquisto: ${file.name}`,
+    html: `<div class="row" style="gap:10px;align-items:end;flex-wrap:wrap">
+        <label class="f">Capitolo dell'app da confrontare<select id="ca-cap">${S.off.capitoli.map((c) => `<option ${c === capDef ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select></label>
+        <span class="small muted">Offerta Oracle${testa?.numero ? ` n° ${esc(testa.numero)} del ${esc(testa.data)}` : ""} · ${righeOr.length} righe, ${perCod.size} codici. Il PDF non viene salvato.</span></div>
+      <div id="ca-riep" style="margin:10px 0"></div>
+      <div style="overflow:auto;max-height:55vh"><table style="font-size:12px"><thead><tr><th>Codice</th><th>Descrizione</th><th class="num">Q.tà<br>Oracle / app</th>
+        <th class="num">Listino<br>Oracle / app</th><th class="num">Sconto<br>Oracle / app</th><th class="num">Netto<br>Oracle / app</th><th class="num">Diff.</th><th></th></tr></thead><tbody id="ca-righe"></tbody></table></div>
+      <p class="small muted">In ogni cella: sopra Oracle, sotto (in grigio) l'app. Netto = prezzo di acquisto unitario (Valore Riga / quantità per Oracle). Gli sconti dell'app si cambiano nella pagina "Sconti e ricarichi".</p>
+      <button type="button" class="btn" id="ca-agg" hidden></button>`,
+    pulsanti: [{ label: "Chiudi", value: "annulla" }],
+    onApri(d) {
+      disegna(d);
+      $("#ca-cap", d).addEventListener("change", (e) => { cap = S.off.capitoli.find((c) => c.nome === e.target.value); disegna(d); });
+      $("#ca-agg", d).addEventListener("click", () => {
+        let n = 0;
+        for (const x of confronta(cap)) if (x.listDiv) for (const r of x.a.righe) { nuovoPrezzoArticolo(r, x.o.prezzo); n++; }
+        modificata(); ridisegnaOfferta(); disegna(d);
+        toast(`Listino aggiornato in ${n} righe del capitolo ${cap.nome} (solo in questa offerta).`, 5000);
+      });
+    },
+  });
+}
+$("#sb-ctrl-acq").addEventListener("click", () => $("#ctrl-acq-file").click());
+$("#ctrl-acq-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); controllaAcquisti(f); } });
 $("#sb-imp-off").addEventListener("click", () => $("#imp-off-file").click());
 $("#imp-off-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); importaOffertaFornitore(f); } });
 

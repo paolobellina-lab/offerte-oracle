@@ -708,3 +708,38 @@ export function indirizzoOracle(s) {
   const via = parole.slice(0, k + 1).join(" "), citta = parole.slice(k + 1).join(" ");
   return { via, citta: `${m[3] ? m[3] + " - " : ""}${citta.toUpperCase()} ( ${m[2].toUpperCase()} )` };
 }
+
+/* Righe di un'offerta Oracle (stesso PDF di leggiOffertaOracle), lette a colonne: per il controllo dei prezzi di acquisto.
+   Ogni riga è ancorata all'unità di misura (PZ, MT, …); il prezzo può andare a capo su più righe ("10.780,0" / "0000"). */
+export function righeOracle(pagine) {
+  const n = (s) => { const v = parseFloat(String(s).replace(/\s/g, "").replace(/\./g, "").replace(",", ".")); return isNaN(v) ? null : v; };
+  const righe = [];
+  for (const pg of pagine) {
+    const h = (re) => pg.find((i) => re.test(i.str.trim()));
+    const hUm = h(/^U\.M\.$/), hQ = h(/^Quantità$/i), hP = h(/^Prezzo$/), hR = h(/^Vs\. Rif\.$/i), hM = h(/^Moltip\.$/i),
+      hS = h(/^Sconti$/i), hV = h(/^Valore Riga$/i), hD = h(/^Disponibilità$/i), hDe = h(/^Descrizione Prodotto$/i), hA = h(/^Articolo$/i);
+    if (!hUm || !hQ || !hP || !hV) continue;
+    const yTesta = hUm.y;
+    const fra = (x0, x1, y, dy) => pg.filter((i) => i.x >= x0 && i.x < x1 && Math.abs(i.y - y) <= dy && i.y < yTesta - 2).sort((a, b) => b.y - a.y || a.x - b.x);
+    const cDe = hDe ? hDe.x - 40 : 130;
+    for (const a of pg.filter((i) => Math.abs(i.x - hUm.x) < 8 && i.y < yTesta - 2 && /^[A-Z]{1,3}$/.test(i.str.trim()))) {
+      const y = a.y;
+      // il codice inizia a sinistra dell'intestazione "Articolo"; le descrizioni lunghe sulla stessa riga partono più a destra
+      const codice = fra(0, hA ? hA.x + 12 : cDe, y, 4).map((i) => i.str.trim()).join(" ");
+      const qta = n(fra(hQ.x - 12, hP.x - 6, y, 4).map((i) => i.str).join(""));
+      const prezzo = n(fra(hP.x - 6, (hR || hM).x - 4, y, 8).map((i) => i.str.trim()).join(""));
+      const sconti = hS ? fra(hS.x - 6, hV.x - 8, y, 4).map((i) => i.str.trim()).join(" ") : "";
+      const valore = n(fra(hV.x - 8, hD ? hD.x - 3 : hV.x + 60, y, 4).map((i) => i.str).join(""));
+      const descrizione = fra(hA ? hA.x + 12 : cDe, hUm.x - 4, y, 10).map((i) => i.str.trim()).join(" ");
+      if (!codice || qta === null || valore === null) continue;
+      // articolo generico (P000 ARTICOLO_GEN): il n° di ordinazione è la riga sopra "Articolo :"
+      let nOrdine = "";
+      if (/ARTICOLO_GEN/i.test(codice)) {
+        const lab = pg.find((i) => /^Articolo\s*:$/i.test(i.str.trim()) && i.y > y && i.y - y < 16);
+        if (lab) nOrdine = pg.filter((i) => i.y > lab.y + 2 && i.y - lab.y < 12 && Math.abs(i.x + i.w / 2 - (lab.x + lab.w / 2)) < 60).map((i) => i.str.trim()).join("");
+      }
+      righe.push({ codice, nOrdine, descrizione: descrizione.replace(/^Articolo\s*:\s*/i, ""), um: a.str.trim(), qta, prezzo, sconti, valore, unitario: qta ? valore / qta : 0 });
+    }
+  }
+  return righe;
+}
