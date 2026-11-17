@@ -1170,7 +1170,7 @@ function informativaWordDialogo() {
           try { o = OFF.leggiOffertaOracle(await testoPdf(file)); } catch (x) { o = null; }
           if (!o) { righe.push(`<span class="bad">${esc(file.name)}: non sembra un'offerta Oracle</span>`); continue; }
           // se nel Rif. Cliente manca la sigla, la si prende dal nome del file (…_FIRE.pdf)
-          if (!o.sigla) { const mf = file.name.match(/(TE\d{6,})[_\s-]*([A-Z+]+)\.pdf$/i); if (mf) { o.te ||= mf[1].toUpperCase(); o.sigla = mf[2].toUpperCase(); } }
+          if (!o.sigla) { const mf = file.name.match(/([A-Z]{2}\d{6,})[_\s-]*([A-Z+]+)\.pdf$/i); if (mf) { o.te ||= mf[1].toUpperCase(); o.sigla = mf[2].toUpperCase(); } }
           const te = $("#inf-te", b).value.trim().toUpperCase();
           const avvisoTe = te && o.te && o.te !== te ? ` <span class="bad">⚠ riferimento ${esc(o.te)} diverso da ${esc(te)}</span>` : "";
           const i = sp.findIndex((c, k) => $(`[data-isig="${k}"]`, b).value.trim().toUpperCase() === o.sigla && $(`[data-icap="${k}"]`, b).value);

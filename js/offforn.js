@@ -692,7 +692,7 @@ export function leggiOffertaOracle(pagine) {
     trasporto = n(sotto(etich(/^Spese Trasporto$/i, pg), 14, pg)[0]?.str);
   }
   // "OF_" davanti al TE può mancare (scritto a mano in Oracle): basta TE + numero + sigla
-  const m = rif.match(/(TE\d{6,})[_\s-]*([A-Z+]+)/i);
+  const m = rif.match(/([A-Z]{2}\d{6,})[_\s-]*([A-Z+]+)/i);
   return { numero, data, rif, te: m ? m[1].toUpperCase() : "", sigla: m ? m[2].toUpperCase() : "", ragione, indirizzo, valoreMerce, trasporto };
 }
 
