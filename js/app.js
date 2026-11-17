@@ -1039,19 +1039,34 @@ Cordiali saluti`;
   apriGmail(oggettoMail(), corpo);
 }
 const euroTondo = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " €";
+// costo per l'informativa: acquistato arrotondato per eccesso a 100 € (sotto 5.000), 500 € (sotto 50.000), 1.000 € (sopra)
+const tondoCosto = (v) => { const p = v < 5000 ? 100 : v < 50000 ? 500 : 1000; return Math.ceil(v / p) * p; };
+// numero del capitolo dell'informativa in cui va il testo delle attività tecniche
+function capInformativa(c) {
+  const t = [c.nome, dbNome(c), descrCap(c)].join(" ").toUpperCase();
+  if (/\bBMS\b/.test(t)) return 9;
+  if (/KNX/.test(t)) return 4;
+  if (/FIRE|INCENDI|ANTINTRUS|SPAZI.?CALMI|EVAC|TVCC|CONTROLLO.?ACCESS|VIVALDI|TUTONDO|SENSITRON/.test(t)) return 6;
+  return null;
+}
+const unisciE = (l) => (l.length < 2 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]);
 function mailCostiInformativa() {
   const sp = S.off.capitoli.filter((c) => c.esporta !== false);
   if (!sp.length) return toast("Spunta almeno un capitolo.");
-  // importo = venduto del capitolo arrotondato per eccesso ai 500 €
-  const righe = sp.map((c) => `- ${descrCap(c)} : ${euroTondo(Math.ceil(riepilogoCapitolo(c, opzCap(c)).venduto / 500) * 500)}`);
+  const righe = [], nums = new Set();
+  for (const c of sp) {
+    const r = riepilogoCapitolo(c, opzCap(c));
+    righe.push(`- ${descrCap(c)} : ${euroTondo(tondoCosto(r.acquistato))}`);
+    if (r.attivita.venduto > 0 || (c.righe || []).some((x) => isAttivita(x) && num(x.qta) > 0)) { const n = capInformativa(c); if (n) nums.add(n); }
+  }
+  const nn = [...nums].sort((a, b) => a - b);
+  const frase = nn.length ? `\nPer quanto concerne la descrizione delle attività tecniche, ti chiedo gentilmente di inserire il testo che trovi nell'allegato nella parte finale del Capitolo ${unisciE(nn.map(String))}.\n` : "";
   const corpo = `Buongiorno
 in allegato trovi le offerte da inserire nell'informativa commerciale
 sotto ti indico i costi dei capitoli :
 
 ${righe.join("\n")}
-
-Per quanto concerne la descrizione delle attività tecniche, ti chiedo gentilmente di inserire il testo che trovi nell'allegato nella parte finale del Capitolo … e ….
-
+${frase}
 cordiali saluti`;
   apriGmail(oggettoMail(), corpo);
 }
