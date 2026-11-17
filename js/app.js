@@ -1060,7 +1060,8 @@ function mailCostiInformativa() {
     if (r.attivita.venduto > 0 || (c.righe || []).some((x) => isAttivita(x) && num(x.qta) > 0)) { const n = capInformativa(c); if (n) nums.add(n); }
   }
   const nn = [...nums].sort((a, b) => a - b);
-  const frase = nn.length ? `\nPer quanto concerne la descrizione delle attività tecniche, ti chiedo gentilmente di inserire il testo che trovi nell'allegato nella parte finale del Capitolo ${unisciE(nn.map(String))}.\n` : "";
+  const frase = nn.length ? `\nPer quanto concerne la descrizione delle attività tecniche, ti chiedo gentilmente di inserire il testo che trovi nell'allegato nella parte finale del Capitolo ${unisciE(nn.map(String))}.\n`
+    : `\nPer quanto concerne la descrizione delle attività tecniche, non sono necessarie in quanto vendita solo materiale .\n`;
   const corpo = `Buongiorno
 in allegato trovi le offerte da inserire nell'informativa commerciale
 sotto ti indico i costi dei capitoli :
