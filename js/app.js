@@ -456,6 +456,7 @@ function disegnaElencoOfferte() {
   const nomeCli = (id) => cliDi(id)?.nome || "";
   const nelleRighe = new Set();
   const lista = S.offerte.filter((o) => {
+    if (!ultimaVersione(o)) return false;
     if (stato && (o.stato === "consegnata" ? "consegnata" : "lavorazione") !== stato) return false;
     if (cliF && (cliF === "__nessuno" ? !!o.cliente : o.cliente !== cliF)) return false;
     if (famF && (famF === "__nessuna" ? !!campiRif(o).famiglia : campiRif(o).famiglia !== famF)) return false;
@@ -471,7 +472,7 @@ function disegnaElencoOfferte() {
     const cons = o.stato === "consegnata";
     return `<tr class="cliccabile ${cons ? "off-consegnata" : "off-lavorazione"}" data-id="${esc(o.id)}">
       <td class="fam-cel">${esc(campiRif(o).famiglia)}</td>
-      <td>${(() => { const r = campiRif(o); return r.rif ? `<b class="mono">${esc(r.rif)}</b>${r.lavoro ? " - " + esc(r.lavoro) : ""}` : `<b>${esc(o.nome || "(senza riferimento)")}</b>`; })()}${nelleRighe.has(o.id) ? ` <span class="badge info" title="La ricerca è stata trovata negli articoli dell'offerta">trovato negli articoli</span>` : ""}</td><td>${esc(nomeCli(o.cliente))}</td>
+      <td>${(() => { const r = campiRif(o); return (r.rif ? `<b class="mono">${esc(r.rif)}</b>${r.lavoro ? " - " + esc(r.lavoro) : ""}` : `<b>${esc(o.nome || "(senza riferimento)")}</b>`) + (versioniDi(o).length > 1 || versDi(o) > 1 ? ` <span class="badge info" title="${versioniDi(o).length} revisioni">Rev. ${revTxt(versDi(o))}</span>` : ""); })()}${nelleRighe.has(o.id) ? ` <span class="badge info" title="La ricerca è stata trovata negli articoli dell'offerta">trovato negli articoli</span>` : ""}</td><td>${esc(nomeCli(o.cliente))}</td>
       <td class="small">${capitoliOff(o).map((c) => `<span class="badge info">${esc(c.nome)}</span>`).join(" ")}</td>
       <td class="num">${t.righe}</td><td class="num">${euro(t.venduto)}</td>
       <td class="num">${t.venduto ? pctTxt(marginePct(t.venduto, t.acquistato)) || "0%" : ""}</td>
@@ -503,7 +504,7 @@ async function duplica(o) {
   if (!o) return;
   // il riferimento Itecnici è univoco: la copia lo lascia vuoto, la famiglia resta (stesso lavoro)
   const rr = campiRif(o), lav = (rr.lavoro || o.nome || "Offerta") + " (copia)";
-  const n = { ...normalizza(o), id: db.nuovoId(), famiglia: rr.famiglia, rif: "", lavoro: lav, nome: lav, stato: "lavorazione",
+  const n = { ...normalizza(o), id: db.nuovoId(), gruppo: null, versione: 1, famiglia: rr.famiglia, rif: "", lavoro: lav, nome: lav, stato: "lavorazione",
     creatoIl: Date.now(), aggiornatoIl: Date.now(), creatoDa: S.utente?.email || "" };
   try { await db.salva(COLL.off, n.id, n); toast("Offerta duplicata"); apriOfferta(n.id, false, n); } catch (x) { errore(x); }
 }
@@ -585,12 +586,41 @@ function campiRif(o) {
   return m ? { famiglia: o.famiglia || "", rif: m[1].toUpperCase(), lavoro: (m[2] || "").trim() } : { famiglia: o.famiglia || "", rif: "", lavoro: o.nome || "" };
 }
 const nomeDaRif = (r) => [r.rif, r.lavoro].filter(Boolean).join(" - ");
+/* Revisioni: le offerte con lo stesso "gruppo" sono revisioni della stessa offerta (versione 1, 2, …).
+   Nell'elenco si vede solo l'ultima; dentro l'offerta si possono aprire le precedenti. */
+const gruppoDi = (o) => o.gruppo || o.id;
+const versDi = (o) => +o.versione || 1;
+const revTxt = (n) => String(n).padStart(2, "0");
+const versioniDi = (o) => S.offerte.filter((x) => gruppoDi(x) === gruppoDi(o)).sort((a, b) => versDi(a) - versDi(b));
+const ultimaVersione = (o) => { const v = versioniDi(o); return !v.length || v[v.length - 1].id === o.id || versDi(v[v.length - 1]) <= versDi(o); };
+function disegnaVersioni() {
+  const o = S.off; if (!o) return;
+  let v = versioniDi(o); if (!v.some((x) => x.id === o.id)) v = [...v, o].sort((a, b) => versDi(a) - versDi(b));
+  $("#o-vers").innerHTML = v.map((x) => `<option value="${esc(x.id)}" ${x.id === o.id ? "selected" : ""}>Rev. ${revTxt(versDi(x))} · ${dataOra(x.creatoIl || x.aggiornatoIl)}</option>`).join("");
+  const ultima = v[v.length - 1];
+  const info = $("#o-vers-info") || (() => { const d = document.createElement("div"); d.id = "o-vers-info"; $("#o-rif-info").after(d); return d; })();
+  info.className = ultima.id === o.id ? "" : "vers-vecchia small";
+  info.innerHTML = ultima.id === o.id ? "" : `Stai guardando la revisione ${revTxt(versDi(o))}: l'ultima è la ${revTxt(versDi(ultima))}. <button type="button" class="btn small" data-vai="${esc(ultima.id)}">Apri l'ultima</button>`;
+  info.style.gridColumn = "1 / -1";
+}
+$("#o-vers").addEventListener("change", async (e) => { if (e.target.value === S.off?.id) return; await salvaOfferta(); apriOfferta(e.target.value); });
+document.addEventListener("click", async (e) => { const b = e.target.closest("#o-vers-info [data-vai]"); if (!b) return; await salvaOfferta(); apriOfferta(b.dataset.vai); });
+$("#o-nuova-rev").addEventListener("click", async () => {
+  const o = S.off; if (!o) return;
+  await salvaOfferta();
+  const max = Math.max(...versioniDi(o).map(versDi), versDi(o));
+  const n = { ...normalizza(structuredClone(o)), id: db.nuovoId(), gruppo: gruppoDi(o), versione: max + 1, stato: "lavorazione",
+    creatoIl: Date.now(), aggiornatoIl: Date.now(), creatoDa: S.utente?.email || "" };
+  for (const c of n.capitoli || []) if (c.inf) { delete c.inf.nOff; delete c.inf.dataOff; delete c.inf.oracle; }
+  if (o.gruppo !== gruppoDi(o) || o.versione === undefined) { o.gruppo = gruppoDi(o); o.versione = versDi(o); try { await db.salva(COLL.off, o.id, { ...o }); } catch (x) { return errore(x); } }
+  try { await db.salva(COLL.off, n.id, n); toast(`Creata la revisione ${revTxt(n.versione)}`); apriOfferta(n.id, false, n); } catch (x) { errore(x); }
+});
 function infoRif() {
   const o = S.off; if (!o) return;
   const r = campiRif(o), msg = [];
-  const doppio = r.rif && S.offerte.filter((x) => x.id !== o.id && campiRif(x).rif === r.rif);
+  const doppio = r.rif && S.offerte.filter((x) => x.id !== o.id && gruppoDi(x) !== gruppoDi(o) && campiRif(x).rif === r.rif && ultimaVersione(x));
   if (doppio?.length) msg.push(`<span class="bad">⚠ Il riferimento ${esc(r.rif)} è già usato da: ${doppio.map((x) => esc(x.nome || "")).join("; ")}</span>`);
-  const fam = r.famiglia && S.offerte.filter((x) => x.id !== o.id && campiRif(x).famiglia === r.famiglia);
+  const fam = r.famiglia && S.offerte.filter((x) => x.id !== o.id && gruppoDi(x) !== gruppoDi(o) && campiRif(x).famiglia === r.famiglia && ultimaVersione(x));
   if (fam?.length) msg.push(`<span class="muted">Stessa famiglia: ${fam.map((x) => `${esc(x.nome || "")}${S.clienti.find((c) => c.id === x.cliente) ? " (" + esc(S.clienti.find((c) => c.id === x.cliente).nome) + ")" : ""}`).join("; ")}</span>`);
   $("#o-rif-info").innerHTML = msg.join("<br>");
 }
@@ -614,7 +644,7 @@ function disegnaTestata() {
   if (!o) return;
   { const r = campiRif(o); $("#o-fam").value = r.famiglia; $("#o-rif").value = r.rif; $("#o-lav").value = r.lavoro; }
   $("#o-fam-lista").innerHTML = [...new Set(S.offerte.map((x) => campiRif(x).famiglia).filter(Boolean))].sort().map((f) => `<option value="${esc(f)}">`).join("");
-  infoRif();
+  infoRif(); disegnaVersioni();
   $("#o-note").value = o.note || "";
   $("#o-cliente").innerHTML = `<option value="">— nessun cliente (niente controllo cartellino) —</option>` +
     S.clienti.map((c) => `<option value="${esc(c.id)}" class="${c.censito ? "cli-ok" : "cli-no"}" ${c.id === o.cliente ? "selected" : ""}>${c.censito ? "● " : "○ "}${esc(c.nome)}</option>`).join("");
@@ -1094,30 +1124,97 @@ function informativaWordDialogo() {
   const sp = S.off.capitoli.filter((c) => c.esporta !== false);
   if (!sp.length) return toast("Spunta almeno un capitolo.");
   const oggi = new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const rif = campiRif(S.off), ic = S.off.infCliente || {};
+  const vend = (c) => riepilogoCapitolo(c, opzCap(c)).venduto;
+  const statoOracle = (c) => {
+    const o = c.inf?.oracle; if (!o || o.valoreMerce == null) return "";
+    const v = vend(c), ok = Math.abs(o.valoreMerce - v) < 1 || (o.trasporto && Math.abs(o.valoreMerce + o.trasporto - v) < 1);
+    return ok ? `<span class="ok">✓ ${euro(o.valoreMerce)}</span>`
+      : `<span class="bad">⚠ ${euro(o.valoreMerce)}</span> <button type="button" class="btn small" data-usa="${o.valoreMerce}">usa questo</button>`;
+  };
+  const campo = (id, lab, val, w = "100%") => `<label class="small muted" style="display:block">${lab}<input id="${id}" value="${esc(val)}" style="width:${w}"></label>`;
   dialogo({
     largo: true, titolo: "Informativa commerciale (Word)",
-    html: `<p class="muted small" style="margin-top:0">Si compilano i capitoli 6 (KNX), 7 (impianti speciali) e 9 (HVAC - BMS), gli allegati e il riepilogo economico.
-        Prezzo = venduto del capitolo. Le "Attività Tecnica" si mettono solo per i capitoli che hanno attività tecnica.</p>
-      <table><thead><tr><th>Capitolo</th><th>Cap. informativa</th><th>Sigla</th><th>N° offerta Oracle</th><th>Data offerta</th><th class="num">Prezzo</th><th>Attività</th></tr></thead><tbody>
-      ${sp.map((c, i) => { const f = infCap(c); return `<tr><td><b>${esc(c.nome)}</b></td>
-        <td><select data-icap="${i}">${["", "6", "7", "9"].map((n) => `<option value="${n}" ${String(f.cap || "") === n ? "selected" : ""}>${n ? "Capitolo " + n : "— non va nell'informativa"}</option>`).join("")}</select></td>
+    html: `<div id="inf-drop" style="border:2px dashed var(--bordo,#bbb);border-radius:8px;padding:12px;text-align:center;cursor:pointer;margin-bottom:10px">
+        📎 Trascina qui i PDF delle offerte Oracle (OF_${esc(rif.rif || "TE…")}_FIRE.pdf, …_INTR.pdf …) oppure clicca per sceglierli.<br>
+        <span class="small muted">Leggo numero, data, cliente e Valore Merce; il capitolo si riconosce dalla sigla in "Rif. Cliente".</span>
+        <input type="file" id="inf-file" accept=".pdf" multiple hidden></div>
+      <div id="inf-msg" class="small"></div>
+      <div style="display:grid;grid-template-columns:2fr 2fr 2fr 1fr;gap:8px;margin:8px 0">
+        ${campo("inf-rag", "Spett.le (ragione sociale)", ic.ragione || clienteOff()?.nome || "")}
+        ${campo("inf-via", "Via", ic.via || "")}
+        ${campo("inf-citta", "CAP - Città ( Prov )", ic.citta || "")}
+        ${campo("inf-data", "Data (Bergamo, …)", oggi)}
+        ${campo("inf-ogg", "OGGETTO", rif.lavoro || ic.oggetto || "")}
+        ${campo("inf-te", "Riferimento TE", rif.rif || "")}
+        ${campo("inf-rev", "Revisione", revTxt(versDi(S.off)))}
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Capitolo</th><th>Cap. informativa</th><th>Sigla</th><th>N° offerta Oracle</th><th>Data offerta</th><th class="num">Venduto app</th><th>Oracle</th><th class="num">Prezzo informativa</th><th>Attività</th></tr></thead><tbody>
+      ${sp.map((c, i) => { const f = infCap(c); return `<tr data-riga="${i}"><td><b>${esc(c.nome)}</b></td>
+        <td><select data-icap="${i}" style="width:150px">${["", "6", "7", "9"].map((n) => `<option value="${n}" ${String(f.cap || "") === n ? "selected" : ""}>${n ? "Capitolo " + n : "— non va nell'informativa"}</option>`).join("")}</select></td>
         <td><input data-isig="${i}" class="mono" value="${esc(f.sigla)}" style="width:80px"></td>
-        <td><input data-inum="${i}" class="mono" value="${esc(c.inf?.nOff || "")}" placeholder="es. 291852" style="width:110px"></td>
-        <td><input data-idata="${i}" value="${esc(c.inf?.dataOff || oggi)}" style="width:110px"></td>
-        <td class="num">${euro(riepilogoCapitolo(c, opzCap(c)).venduto)}</td><td>${conAttivita(c) ? "sì" : "—"}</td></tr>`; }).join("")}
-      </tbody></table>`,
+        <td><input data-inum="${i}" class="mono" value="${esc(c.inf?.nOff || "")}" placeholder="es. 291852" style="width:100px"></td>
+        <td><input data-idata="${i}" value="${esc(c.inf?.dataOff || oggi)}" style="width:100px"></td>
+        <td class="num">${euro(vend(c))}</td><td data-ora="${i}">${statoOracle(c)}</td>
+        <td class="num"><input data-iprz="${i}" class="num" value="${euroNum(c.inf?.prezzo ?? vend(c))}" style="width:110px"></td>
+        <td>${conAttivita(c) ? "sì" : "—"}</td></tr>`; }).join("")}
+      </tbody></table></div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "⤓ Scarica il Word", value: "ok", cls: "primary" }],
+    onApri(b) {
+      const drop = $("#inf-drop", b), inp = $("#inf-file", b), msg = $("#inf-msg", b);
+      const leggi = async (files) => {
+        const righe = [];
+        for (const file of files) {
+          if (!/\.pdf$/i.test(file.name)) { righe.push(`<span class="bad">${esc(file.name)}: non è un PDF</span>`); continue; }
+          let o;
+          try { o = OFF.leggiOffertaOracle(await testoPdf(file)); } catch (x) { o = null; }
+          if (!o) { righe.push(`<span class="bad">${esc(file.name)}: non sembra un'offerta Oracle</span>`); continue; }
+          const te = $("#inf-te", b).value.trim().toUpperCase();
+          const avvisoTe = te && o.te && o.te !== te ? ` <span class="bad">⚠ riferimento ${esc(o.te)} diverso da ${esc(te)}</span>` : "";
+          const i = sp.findIndex((c, k) => $(`[data-isig="${k}"]`, b).value.trim().toUpperCase() === o.sigla && $(`[data-icap="${k}"]`, b).value);
+          if (o.ragione && !$("#inf-rag", b).dataset.pdf) {
+            const ind = OFF.indirizzoOracle(o.indirizzo);
+            $("#inf-rag", b).value = o.ragione; $("#inf-via", b).value = ind.via; $("#inf-citta", b).value = ind.citta;
+            $("#inf-rag", b).dataset.pdf = "1";
+          }
+          if (i < 0) { righe.push(`<span class="bad">${esc(file.name)}: nessun capitolo con sigla ${esc(o.sigla || "?")}</span>${avvisoTe}`); continue; }
+          const c = sp[i];
+          $(`[data-inum="${i}"]`, b).value = o.numero; $(`[data-idata="${i}"]`, b).value = o.data;
+          c.inf = { ...(c.inf || {}), oracle: { numero: o.numero, data: o.data, valoreMerce: o.valoreMerce, trasporto: o.trasporto } };
+          $(`[data-ora="${i}"]`, b).innerHTML = statoOracle(c);
+          const ok = !$(`[data-ora="${i}"] .bad`, b);
+          $(`tr[data-riga="${i}"]`, b).querySelectorAll("td").forEach((td) => { td.style.background = ok ? "#e3f4e3" : "#fde3e3"; });
+          righe.push(`${ok ? "✓" : "⚠"} ${esc(o.rif)}: n° ${esc(o.numero)} del ${esc(o.data)} → ${esc(c.nome)}${ok ? "" : ` <span class="bad">— Valore Merce Oracle ${euro(o.valoreMerce)}, app ${euro(vend(c))}</span>`}${avvisoTe}`);
+        }
+        msg.innerHTML = righe.join("<br>");
+      };
+      drop.addEventListener("click", () => inp.click());
+      inp.addEventListener("change", () => { leggi([...inp.files]); inp.value = ""; });
+      drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.style.background = "#eef4ff"; });
+      drop.addEventListener("dragleave", () => { drop.style.background = ""; });
+      drop.addEventListener("drop", (e) => { e.preventDefault(); drop.style.background = ""; leggi([...e.dataTransfer.files]); });
+      b.addEventListener("click", (e) => {
+        const u = e.target.closest("[data-usa]"); if (!u) return;
+        const i = u.closest("tr").dataset.riga; $(`[data-iprz="${i}"]`, b).value = euroNum(+u.dataset.usa);
+        u.closest("tr").querySelectorAll("td").forEach((td) => { td.style.background = "#fff3cd"; });
+      });
+    },
     async onConferma(v, b) {
       const capitoli = { 6: [], 7: [], 9: [] };
       sp.forEach((c, i) => {
-        c.inf = { cap: $(`[data-icap="${i}"]`, b).value, sigla: $(`[data-isig="${i}"]`, b).value.trim().toUpperCase(), nOff: $(`[data-inum="${i}"]`, b).value.trim(), dataOff: $(`[data-idata="${i}"]`, b).value.trim() };
-        if (c.inf.cap) capitoli[c.inf.cap].push({ sigla: c.inf.sigla, nOff: c.inf.nOff, dataOff: c.inf.dataOff, prezzo: riepilogoCapitolo(c, opzCap(c)).venduto, attivita: conAttivita(c) });
+        const prz = num($(`[data-iprz="${i}"]`, b).value), vd = vend(c);
+        c.inf = { ...(c.inf || {}), cap: $(`[data-icap="${i}"]`, b).value, sigla: $(`[data-isig="${i}"]`, b).value.trim().toUpperCase(), nOff: $(`[data-inum="${i}"]`, b).value.trim(), dataOff: $(`[data-idata="${i}"]`, b).value.trim() };
+        // il prezzo si ricorda solo se diverso dal venduto (così segue l'app quando cambia)
+        if (Math.abs(prz - vd) >= 0.01) c.inf.prezzo = prz; else delete c.inf.prezzo;
+        if (c.inf.cap) capitoli[c.inf.cap].push({ sigla: c.inf.sigla, nOff: c.inf.nOff, dataOff: c.inf.dataOff, prezzo: prz, attivita: conAttivita(c) });
       });
+      const te = $("#inf-te", b).value.trim().toUpperCase() || rif.rif || "TE";
+      S.off.infCliente = { ragione: $("#inf-rag", b).value.trim(), via: $("#inf-via", b).value.trim(), citta: $("#inf-citta", b).value.trim(), oggetto: $("#inf-ogg", b).value.trim() };
       modificata();
       try {
         const modello = await (await fetch("modelli/informativa.docx", { cache: "no-cache" })).arrayBuffer();
-        const blob = await informativaWord(modello, { rif: campiRif(S.off).rif || "TE", capitoli }, euroNum);
-        scarica(blob, `INFORMATIVA_COMMERCIALE_${campiRif(S.off).rif || "TE"}.docx`);
+        const blob = await informativaWord(modello, { rif: te, capitoli, cliente: S.off.infCliente, data: $("#inf-data", b).value.trim(), oggetto: S.off.infCliente.oggetto, revisione: $("#inf-rev", b).value.trim() }, euroNum);
+        scarica(blob, `INFORMATIVA_COMMERCIALE_${te}.docx`);
       } catch (x) { errore(x, "Word non creato"); return false; }
     },
   });
