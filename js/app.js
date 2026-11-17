@@ -4184,11 +4184,12 @@ async function controllaAcquisti(file) {
   if (!capDef) return toast("L'offerta non ha capitoli.");
   // Oracle: righe raggruppate per codice
   const perCod = new Map();
-  for (const r of righeOr) {
-    const k = chiaveAcq(r.nOrdine || r.codice);
+  righeOr.forEach((r, i) => {
+    // generico senza n° di ordinazione letto: riga a sé (si abbina dopo per quantità e prezzo)
+    const k = /ARTICOLO_?GEN/i.test(r.codice) && !r.nOrdine ? `?GEN${i}` : chiaveAcq(r.nOrdine || r.codice);
     const g = perCod.get(k) || { codice: r.nOrdine || r.codice, descrizione: r.descrizione, qta: 0, valore: 0, prezzo: r.prezzo, sconti: r.sconti, prezzi: new Set() };
     g.qta += r.qta; g.valore += r.valore; g.prezzi.add(Math.round(r.unitario * 1e4)); perCod.set(k, g);
-  }
+  });
   const totOr = righeOr.reduce((s, r) => s + r.valore, 0);
   const due = (o, a) => `<div>${o || "—"}</div><div class="muted">${a || "—"}</div>`;
   const sc = (f) => (f === null || f === undefined ? "" : fNum.format(Math.round((1 - f) * 1e4) / 100) + "%");
@@ -4203,9 +4204,16 @@ async function controllaAcquisti(file) {
       const g = app.get(k) || { codice: isGenerico(r) ? r.nOrdine || "(generico)" : codiceArticolo(r), descrizione: r.descrizione || r.nOrdine || "", qta: 0, acq: 0, listino: num(r.listinoAcquisto), fattore: x.acq.fattore, unit: x.acq.unitario, righe: [] };
       g.qta += x.acq.qta; g.acq += x.acq.totale; g.righe.push(r); app.set(k, g);
     }
-    const chiavi = [...new Set([...perCod.keys(), ...app.keys()])];
+    // generici di Oracle senza n° di ordinazione: si abbinano ai generici dell'app rimasti soli, prima per quantità e prezzo, poi per quantità
+    const coppie = new Map();
+    const genOr = [...perCod.keys()].filter((k) => k.startsWith("?GEN"));
+    const appSoli = () => [...app.entries()].filter(([k, a]) => !perCod.has(k) && ![...coppie.values()].includes(k) && a.righe.every(isGenerico));
+    for (const prova of [(o, a) => Math.abs(o.qta - a.qta) < 0.001 && Math.abs(o.valore / o.qta - a.unit) <= Math.max(0.01, a.unit * 0.001), (o, a) => Math.abs(o.qta - a.qta) < 0.001])
+      for (const k of genOr) { if (coppie.has(k)) continue; const o = perCod.get(k), t = appSoli().find(([, a]) => prova(o, a)); if (t) coppie.set(k, t[0]); }
+    const usate = new Set(coppie.values());
+    const chiavi = [...new Set([...perCod.keys(), ...[...app.keys()].filter((k) => !usate.has(k))])];
     const out = chiavi.map((k) => {
-      const o = perCod.get(k), a = app.get(k);
+      const o = perCod.get(k), a = app.get(coppie.get(k) || k);
       const uO = o ? o.valore / (o.qta || 1) : null, uA = a ? a.unit : null;
       let stato = !a ? "soloOr" : !o ? "soloApp" : Math.abs(uO - uA) <= Math.max(0.01, Math.abs(uO) * 0.001) ? "ok" : "diverso";
       // listino da confrontare solo se Oracle ha listino + sconto; se lo sconto è vuoto, il "prezzo" Oracle è già il netto
@@ -4239,7 +4247,7 @@ async function controllaAcquisti(file) {
     $("#ca-righe", d).innerHTML = lista.map((x) => { const bg = colore[x.stato] ? ` style="background:${colore[x.stato]}"` : "";
       const diff = x.uO !== null && x.uA ? (x.uO / x.uA - 1) : null;
       return `<tr>
-      <td${bg} class="mono small">${esc(x.o?.codice || x.a?.codice)}</td><td${bg} class="small">${esc((x.o?.descrizione || x.a?.descrizione || "").slice(0, 60))}</td>
+      <td${bg} class="mono small">${esc(x.k.startsWith("?GEN") && x.a ? x.a.codice : x.o?.codice || x.a?.codice)}</td><td${bg} class="small">${esc(((x.k.startsWith("?GEN") && x.a ? x.a.descrizione : x.o?.descrizione) || x.a?.descrizione || "").slice(0, 60))}</td>
       <td${bg} class="num ${x.qtaDiv ? "bad" : ""}">${due(x.o ? fNum.format(x.o.qta) : "", x.a ? fNum.format(x.a.qta) : "")}</td>
       <td${bg} class="num ${x.listDiv ? "bad" : ""}">${due(x.o?.prezzo ? euro(x.o.prezzo) : "", x.a ? euro(x.a.listino) : "")}</td>
       <td${bg} class="num">${due(x.o?.sconti ? esc(x.o.sconti.replace(/,00\b/g, "")) + "%" : "", x.a ? sc(x.a.fattore) : "")}</td>
