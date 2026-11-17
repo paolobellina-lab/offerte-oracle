@@ -3490,6 +3490,13 @@ async function analizza(file) {
   box.innerHTML = `<div class="avviso info">Lettura di ${esc(file.name)}…</div>`;
   try {
     const r = await analizzaFile(await file.arrayBuffer());
+    // non è il file Template (nessun articolo né capitolo): è un listino o un'estrazione Oracle → aggiornamento prezzi
+    if (!r.articoli.length && !r.capitoli.length) {
+      box.innerHTML = `<div class="avviso info"><b>${esc(file.name)}</b> non è il file Template delle offerte: lo uso per <b>aggiornare i prezzi</b> (vedi sotto, “Aggiorna i prezzi da Oracle”).</div>`;
+      await aggiornaPrezziDaFile(file);
+      $("#riepilogo-oracle").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     S.importato = { ...r, nomeFile: file.name };
     const giaCat = new Set(S.catalogo.map((a) => a.capitolo));
     const capQ = [...new Set(r.conQuantita.map((a) => a.capitolo))];
@@ -3575,9 +3582,8 @@ $("#analizza-oracle").addEventListener("click", () => {
   if (!t.trim()) return toast("Incolla prima le righe copiate da Oracle.");
   confrontaOracle(righeDaTestoIncollato(t));
 });
-$("#file-oracle").addEventListener("change", async (e) => {
-  const f = e.target.files[0]; e.target.value = "";
-  if (!f) return;
+$("#file-oracle").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) aggiornaPrezziDaFile(f); });
+async function aggiornaPrezziDaFile(f) {
   try {
     if (/\.pdf$/i.test(f.name)) {
       const fogli = BIB.righeDaPdf(await testoPdf(f));
@@ -3595,7 +3601,7 @@ $("#file-oracle").addEventListener("change", async (e) => {
     // altrimenti è un listino del fornitore: si leggono tutti i fogli (lo stesso codice in più fogli conta una volta)
     confrontaListinoFornitore(fogli, f.name);
   } catch (x) { errore(x, "File non leggibile"); }
-});
+}
 
 const CODICI_GENERICI = new Set([CODICE_GENERICO, "PITATT.TEC"]);
 /* Si confrontano i prezzi con il database e con la biblioteca (stesso codice Oracle = precodice + codice). */
