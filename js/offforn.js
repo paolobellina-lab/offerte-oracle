@@ -662,3 +662,48 @@ export function leggiOffertaTabella(fogli, mappa) {
   const piene = sezioni.filter((s) => s.righe.length);
   return piene.length ? { sezioni: piene, totaleGenerale: null, note: [] } : null;
 }
+
+/* ---------- Offerta Oracle di Telmotor (PDF generato dal gestionale) ----------
+   Dall'intestazione della prima pagina: numero, data, Rif. Cliente (OF_TExxxx_SIGLA), ragione sociale e indirizzo del cliente;
+   dal piede dell'ultima pagina: Valore Merce e Spese Trasporto. Il valore sta sotto la sua etichetta, nella stessa colonna. */
+export function leggiOffertaOracle(pagine) {
+  const p1 = pagine[0] || [];
+  const etich = (re, pg = p1) => pg.find((i) => re.test(i.str.trim()));
+  // valori sotto un'etichetta: stessa colonna (x vicino), entro "fino" punti più in basso
+  const sotto = (lab, fino = 12, pg = p1) => {
+    if (!lab) return [];
+    return pg.filter((i) => i !== lab && Math.abs(i.x - lab.x) < 6 && i.y < lab.y - 1 && i.y > lab.y - fino).sort((a, b) => b.y - a.y);
+  };
+  const primo = (re, fino) => sotto(etich(re), fino)[0]?.str.trim() || "";
+  if (!etich(/^Tipo documento$/i) || !/^Offerta$/i.test(primo(/^Tipo documento$/i))) return null;
+  const numero = primo(/^Numero$/);
+  const data = primo(/^Data$/);
+  // il riferimento può andare a capo (OF_TE26034164_FI / RE): si uniscono le righe della colonna fino all'etichetta successiva
+  const labRif = etich(/^Rif\.? Cliente$/i);
+  const rif = sotto(labRif, 22).map((i) => i.str.trim()).join("").replace(/\s+/g, "");
+  const ragione = primo(/^Ragione Sociale$/i);
+  const indirizzo = primo(/^Indirizzo$/i);
+  let valoreMerce = null, trasporto = null;
+  const n = (s) => { const v = parseFloat(String(s).replace(/\./g, "").replace(",", ".")); return isNaN(v) ? null : v; };
+  for (let k = pagine.length - 1; k >= 0 && valoreMerce === null; k--) {
+    const pg = pagine[k], lv = etich(/^Valore Merce$/i, pg);
+    if (!lv) continue;
+    valoreMerce = n(sotto(lv, 14, pg)[0]?.str);
+    trasporto = n(sotto(etich(/^Spese Trasporto$/i, pg), 14, pg)[0]?.str);
+  }
+  const m = rif.match(/^OF_?(TE\d+)_?([A-Z+]+)/i);
+  return { numero, data, rif, te: m ? m[1].toUpperCase() : "", sigla: m ? m[2].toUpperCase() : "", ragione, indirizzo, valoreMerce, trasporto };
+}
+
+/* "VIA A. VOLTA, 4 Legnaro (PD) 35020 IT" -> { via: "VIA A. VOLTA, 4", citta: "35020 - LEGNARO ( PD )" } */
+export function indirizzoOracle(s) {
+  const t = String(s || "").replace(/\s+IT$/i, "").trim();
+  const m = t.match(/^(.*?)\s*\(([A-Z]{2})\)\s*(\d{5})?$/i);
+  if (!m) return { via: t, citta: "" };
+  // la via finisce col numero civico (ultima parola con una cifra); se non c'è, la città è l'ultima parola
+  const parole = m[1].trim().split(/\s+/);
+  let k = -1; parole.forEach((w, i) => { if (/\d/.test(w)) k = i; });
+  if (k < 0 || k === parole.length - 1) k = parole.length - 2;
+  const via = parole.slice(0, k + 1).join(" "), citta = parole.slice(k + 1).join(" ");
+  return { via, citta: `${m[3] ? m[3] + " - " : ""}${citta.toUpperCase()} ( ${m[2].toUpperCase()} )` };
+}

@@ -107,6 +107,8 @@
             <label class="f">Famiglia (TF)<input id="o-fam" class="mono" list="o-fam-lista" placeholder="es. TE26034298" title="Lega più offerte (anche a clienti diversi) allo stesso lavoro"><datalist id="o-fam-lista"></datalist></label>
             <label class="f">Riferimento Itecnici<input id="o-rif" class="mono" placeholder="es. TE26034298" title="Riferimento univoco di questa offerta"></label>
             <label class="f lav">Lavoro<input id="o-lav" placeholder="es. HOTEL AQUARDENS TERME VERONA" title="Nota descrittiva"></label>
+            <label class="f">Revisione<span class="cli-riga"><select id="o-vers" title="Revisioni di questa offerta: scegline una per aprirla"></select>
+              <button type="button" class="btn" id="o-nuova-rev" title="Duplica questa offerta come nuova revisione, per aggiornarla">+ Nuova revisione</button></span></label>
             <span class="small" id="o-rif-info"></span>
           </div>
           <label class="f wide">Cliente
@@ -133,6 +135,7 @@
       <div id="p-riepilogo" hidden>
         <div class="row" style="margin-bottom:8px">
           <h2 class="grow titolo-sez" style="margin:0">Riepilogo per capitolo</h2>
+          <button class="btn" id="inf-word" title="Scarica l'informativa commerciale in Word (capitoli 6, 7, 9, allegati e riepilogo economico)">📄 Informativa Word</button>
           <button class="btn" id="mail-costi" title="Apre Gmail con la mail dei costi dei capitoli spuntati per l'informativa">✉ Invia costi informativa</button>
           <button class="btn" id="mail-cliente" title="Apre Gmail con la mail dell'offerta al cliente (capitoli spuntati)">✉ Invia offerta cliente</button>
           <button class="btn primary" id="scarica-tutti">Scarica i fogli Oracle dei capitoli spuntati</button>
