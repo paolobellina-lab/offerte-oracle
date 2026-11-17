@@ -733,12 +733,20 @@ export function righeOracle(pagine) {
       const descrizione = fra(hA ? hA.x + 12 : cDe, hUm.x - 4, y, 10).map((i) => i.str.trim()).join(" ");
       if (!codice || qta === null || valore === null) continue;
       // articolo generico (P000 ARTICOLO_GEN): il n° di ordinazione è la riga sopra "Articolo :"
-      let nOrdine = "";
+      let nOrdine = "", descrGen = "";
       if (/ARTICOLO_GEN/i.test(codice)) {
-        const lab = pg.find((i) => /^Articolo\s*:$/i.test(i.str.trim()) && i.y > y && i.y - y < 16);
-        if (lab) nOrdine = pg.filter((i) => i.y > lab.y + 2 && i.y - lab.y < 12 && Math.abs(i.x + i.w / 2 - (lab.x + lab.w / 2)) < 60).map((i) => i.str.trim()).join("");
+        // "Articolo :" più vicino sopra la riga (con descrizioni lunghe può stare diverse righe più su), senza un'altra riga in mezzo
+        const ancore = pg.filter((i) => Math.abs(i.x - hUm.x) < 8 && i.y < yTesta - 2 && /^[A-Z]{1,3}$/.test(i.str.trim())).map((i) => i.y);
+        const lab = pg.filter((i) => /^Articolo\s*:$/i.test(i.str.trim()) && i.y > y && i.y - y < 90 && !ancore.some((ay) => ay > y + 1 && ay < i.y))
+          .sort((p, q) => p.y - q.y)[0];
+        if (lab) {
+          nOrdine = pg.filter((i) => i.y > lab.y + 2 && i.y - lab.y < 12 && Math.abs(i.x + i.w / 2 - (lab.x + lab.w / 2)) < 60).map((i) => i.str.trim()).join("");
+          // descrizione del generico: le righe di testo sotto "Articolo :" fino alla riga successiva
+          const sotto = Math.max(...ancore.filter((ay) => ay < y - 1), y - 60);
+          descrGen = pg.filter((i) => i.x >= (hA ? hA.x + 12 : cDe) && i.x < hUm.x - 4 && i.y < lab.y - 1 && i.y > sotto + 8).sort((a, b) => b.y - a.y || a.x - b.x).map((i) => i.str.trim()).join(" ");
+        }
       }
-      righe.push({ codice, nOrdine, descrizione: descrizione.replace(/^Articolo\s*:\s*/i, ""), um: a.str.trim(), qta, prezzo, sconti, valore, unitario: qta ? valore / qta : 0 });
+      righe.push({ codice, nOrdine, descrizione: (descrGen || descrizione).replace(/^Articolo\s*:\s*/i, ""), um: a.str.trim(), qta, prezzo, sconti, valore, unitario: qta ? valore / qta : 0 });
     }
   }
   return righe;
