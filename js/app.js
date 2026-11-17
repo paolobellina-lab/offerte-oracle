@@ -11,6 +11,7 @@ import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
 import * as BIB from "./biblioteca.js";
 import * as OFF from "./offforn.js";
 import { attivaTendine } from "./tendina.js";
+import { informativaWord } from "./docx.js";
 attivaTendine();
 
 /* ================= Stato ================= */
@@ -1071,6 +1072,57 @@ ${frase}
 cordiali saluti`;
   apriGmail(oggettoMail(), corpo);
 }
+/* ================= Informativa commerciale (Word) ================= */
+// capitolo dell'informativa e sigla di un capitolo del database: quelli scritti nelle impostazioni, altrimenti dedotti dal nome
+function infDb(x) {
+  const t = `${x.nome} ${x.descrizione || ""}`.toUpperCase();
+  let cap = "", sigla = "";
+  if (/\bBMS\b|HVAC/.test(t)) { cap = 9; sigla = /HVAC/.test(t) ? "HVAC" : "BMS"; }
+  else if (/KNX|JUNG/.test(t)) { cap = 6; sigla = "KNX"; }
+  else if (/FIRE|INCENDI|SENSITRON/.test(t)) { cap = 7; sigla = "FIRE"; }
+  else if (/ANTINTRUS/.test(t)) { cap = 7; sigla = "INTR"; }
+  else if (/CONTROLLO.?ACCESS/.test(t)) { cap = 7; sigla = "CA"; }
+  else if (/TVCC/.test(t)) { cap = 7; sigla = "TVCC"; }
+  else if (/EVAC|VIVALDI|TUTONDO/.test(t)) { cap = 7; sigla = "EVAC"; }
+  else if (/SPAZI.?CALMI/.test(t)) { cap = 7; sigla = "SPAZ"; }
+  return { cap: x.capInf !== undefined && x.capInf !== null && x.capInf !== "" ? +x.capInf : x.capInf === "" ? "" : cap, sigla: x.sigla || sigla || String(x.nome).slice(0, 4).toUpperCase() };
+}
+const infCap = (c) => { const d = infDb(S.capitoli.find((x) => x.nome === dbNome(c)) || { nome: dbNome(c) }); return { cap: c.inf?.cap ?? d.cap, sigla: c.inf?.sigla || d.sigla }; };
+const conAttivita = (c) => riepilogoCapitolo(c, opzCap(c)).attivita.venduto > 0 || (c.righe || []).some((x) => isAttivita(x) && num(x.qta) > 0);
+const euroNum = (v) => (Math.round(v * 100) / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+function informativaWordDialogo() {
+  const sp = S.off.capitoli.filter((c) => c.esporta !== false);
+  if (!sp.length) return toast("Spunta almeno un capitolo.");
+  const oggi = new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
+  dialogo({
+    largo: true, titolo: "Informativa commerciale (Word)",
+    html: `<p class="muted small" style="margin-top:0">Si compilano i capitoli 6 (KNX), 7 (impianti speciali) e 9 (HVAC - BMS), gli allegati e il riepilogo economico.
+        Prezzo = venduto del capitolo. Le "Attività Tecnica" si mettono solo per i capitoli che hanno attività tecnica.</p>
+      <table><thead><tr><th>Capitolo</th><th>Cap. informativa</th><th>Sigla</th><th>N° offerta Oracle</th><th>Data offerta</th><th class="num">Prezzo</th><th>Attività</th></tr></thead><tbody>
+      ${sp.map((c, i) => { const f = infCap(c); return `<tr><td><b>${esc(c.nome)}</b></td>
+        <td><select data-icap="${i}">${["", "6", "7", "9"].map((n) => `<option value="${n}" ${String(f.cap || "") === n ? "selected" : ""}>${n ? "Capitolo " + n : "— non va nell'informativa"}</option>`).join("")}</select></td>
+        <td><input data-isig="${i}" class="mono" value="${esc(f.sigla)}" style="width:80px"></td>
+        <td><input data-inum="${i}" class="mono" value="${esc(c.inf?.nOff || "")}" placeholder="es. 291852" style="width:110px"></td>
+        <td><input data-idata="${i}" value="${esc(c.inf?.dataOff || oggi)}" style="width:110px"></td>
+        <td class="num">${euro(riepilogoCapitolo(c, opzCap(c)).venduto)}</td><td>${conAttivita(c) ? "sì" : "—"}</td></tr>`; }).join("")}
+      </tbody></table>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "⤓ Scarica il Word", value: "ok", cls: "primary" }],
+    async onConferma(v, b) {
+      const capitoli = { 6: [], 7: [], 9: [] };
+      sp.forEach((c, i) => {
+        c.inf = { cap: $(`[data-icap="${i}"]`, b).value, sigla: $(`[data-isig="${i}"]`, b).value.trim().toUpperCase(), nOff: $(`[data-inum="${i}"]`, b).value.trim(), dataOff: $(`[data-idata="${i}"]`, b).value.trim() };
+        if (c.inf.cap) capitoli[c.inf.cap].push({ sigla: c.inf.sigla, nOff: c.inf.nOff, dataOff: c.inf.dataOff, prezzo: riepilogoCapitolo(c, opzCap(c)).venduto, attivita: conAttivita(c) });
+      });
+      modificata();
+      try {
+        const modello = await (await fetch("modelli/informativa.docx", { cache: "no-cache" })).arrayBuffer();
+        const blob = await informativaWord(modello, { rif: campiRif(S.off).rif || "TE", capitoli }, euroNum);
+        scarica(blob, `INFORMATIVA_COMMERCIALE_${campiRif(S.off).rif || "TE"}.docx`);
+      } catch (x) { errore(x, "Word non creato"); return false; }
+    },
+  });
+}
+$("#inf-word").addEventListener("click", informativaWordDialogo);
 $("#mail-costi").addEventListener("click", mailCostiInformativa);
 $("#mail-cliente").addEventListener("click", mailOffertaCliente);
 
@@ -3049,15 +3101,18 @@ $("#c-impost").addEventListener("click", () => {
   dialogo({
     titolo: "Ricarico standard per capitolo",
     html: `<p class="muted small" style="margin-top:0">Il ricarico automatico si applica alle offerte “VENDITA CLIENTE” quando non è indicato un ricarico nell'offerta o nel GMA.</p>
-      <table><thead><tr><th>Capitolo</th><th class="num">Articoli</th><th>Ricarico automatico</th><th title="Nome completo del capitolo usato nelle mail (es. FIRE → Rivelazione Incendio)">Descrizione per le mail</th></tr></thead><tbody>
+      <table><thead><tr><th>Capitolo</th><th class="num">Articoli</th><th>Ricarico automatico</th><th title="Nome completo del capitolo usato nelle mail (es. FIRE → Rivelazione Incendio)">Descrizione per le mail</th><th title="Capitolo dell'informativa commerciale in cui va (6 KNX, 7 impianti speciali, 9 HVAC-BMS)">Cap. informativa</th><th title="Sigla nel nome dell'offerta: OF_TE…_FIRE">Sigla</th></tr></thead><tbody>
       ${S.capitoli.map((c, i) => `<tr><td>${esc(c.nome)}</td><td class="num">${S.catalogo.filter((a) => a.capitolo === c.nome).length}</td>
         <td><span class="pct-wrap"><input class="pct" data-i="${i}" value="${esc(pctVal(c.ricarico))}"></span></td>
-        <td><input data-desc="${i}" value="${esc(c.descrizione || "")}" placeholder="${esc(c.nome)}" style="min-width:240px"></td></tr>`).join("")}
+        <td><input data-desc="${i}" value="${esc(c.descrizione || "")}" placeholder="${esc(c.nome)}" style="min-width:240px"></td>
+        <td><select data-capinf="${i}">${["", "6", "7", "9"].map((n) => `<option value="${n}" ${String(infDb(c).cap || "") === n ? "selected" : ""}>${n ? "Capitolo " + n : "—"}</option>`).join("")}</select></td>
+        <td><input data-sigla="${i}" class="mono" value="${esc(infDb(c).sigla)}" style="width:80px"></td></tr>`).join("")}
       </tbody></table>
       <label class="f" style="margin-top:12px">Nuovo capitolo (nome)<input id="m-nuovocap" placeholder="es. EVAC"></label>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, b) {
-      const lista = S.capitoli.map((c, i) => ({ ...c, ricarico: daPct($(`[data-i="${i}"]`, b).value), descrizione: $(`[data-desc="${i}"]`, b).value.trim() }));
+      const lista = S.capitoli.map((c, i) => ({ ...c, ricarico: daPct($(`[data-i="${i}"]`, b).value), descrizione: $(`[data-desc="${i}"]`, b).value.trim(),
+        capInf: $(`[data-capinf="${i}"]`, b).value, sigla: $(`[data-sigla="${i}"]`, b).value.trim().toUpperCase() }));
       const nuovo = $("#m-nuovocap", b).value.trim().toUpperCase().replace(/\s+/g, "_");
       if (nuovo && !lista.some((c) => c.nome === nuovo)) lista.push({ nome: nuovo, ricarico: 0.28, ordine: lista.length });
       await db.salva(COLL.cfg, "capitoli", { lista });
