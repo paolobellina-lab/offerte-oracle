@@ -82,7 +82,11 @@ export async function informativaWord(modello, dati, euro) {
   // prima pagina: cliente sotto "Spett.le", luogo e data, oggetto, riferimento TE
   const par = tutti(body, "p"), iP = (re) => par.findIndex((p) => re.test(testo(p).trim()));
   const iSp = iP(/^Spett\.le$/i), cl = dati.cliente || {};
-  if (iSp >= 0) [cl.ragione, cl.via, cl.citta].forEach((v, k) => { if (v && par[iSp + 1 + k]) scrivi(par[iSp + 1 + k], v); });
+  if (iSp >= 0) [cl.ragione, cl.via, cl.citta].forEach((v, k) => {
+    const pp = par[iSp + 1 + k]; if (!pp) return;
+    if (v) scrivi(pp, v);
+    for (const h of tutti(pp, "highlight")) h.parentNode.removeChild(h); // nel modello l'indirizzo è evidenziato in giallo
+  });
   const iData = iP(/^Bergamo,/i); if (iData >= 0 && dati.data) scrivi(par[iData], `Bergamo, ${dati.data}`);
   const iOgg = iP(/^OGGETTO:/i); if (iOgg >= 0 && dati.oggetto) scrivi(par[iOgg], `OGGETTO: ${dati.oggetto}`);
   if (dati.revisione) for (const t of tutti(body, "t")) if (/revisione\s+01/i.test(t.textContent)) t.textContent = t.textContent.replace(/revisione\s+01/gi, `revisione ${dati.revisione}`);
