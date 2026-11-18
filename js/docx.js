@@ -75,7 +75,7 @@ export async function informativaWord(modello, dati, euro) {
   const isP = (n) => n.localName === "p", isT = (n) => n.localName === "tbl";
   const trova = (re, da = 0) => { const f = figli(); for (let i = da; i < f.length; i++) if (isP(f[i]) && re.test(testo(f[i]).trim())) return i; return -1; };
   const rif = dati.rif || "TE";
-  const nomeOff = (v) => `OF_${rif}_${v.sigla}`;
+  const nomeOff = (v) => `OF_${rif}${dati.versione > 1 ? "_V" + dati.versione : ""}_${v.sigla}`;
   const descrOff = (v) => `${nomeOff(v)}${v.nOff ? ` (n° ${v.nOff}${v.dataOff ? ` del ${v.dataOff}` : ""})` : ""}`;
   const capTitoli = { 6: /^Capitolo 6\./, 7: /^Capitolo 7\./, 8: /^Capitolo 8\./, 9: /^Capitolo 9\./, 10: /^Capitolo 10\./ };
 

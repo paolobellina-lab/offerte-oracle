@@ -612,6 +612,9 @@ $("#o-nuova-rev").addEventListener("click", async () => {
   const n = { ...normalizza(structuredClone(o)), id: db.nuovoId(), gruppo: gruppoDi(o), versione: max + 1, stato: "lavorazione",
     creatoIl: Date.now(), aggiornatoIl: Date.now(), creatoDa: S.utente?.email || "" };
   for (const c of n.capitoli || []) if (c.inf) { delete c.inf.nOff; delete c.inf.dataOff; delete c.inf.oracle; }
+  // note per Oracle personalizzate: il riferimento passa alla nuova versione (OF_TE…_V2_ → _V3_)
+  const te = campiRif(o).rif;
+  if (te) for (const c of n.capitoli || []) if (c.noteOracle) c.noteOracle = c.noteOracle.replace(new RegExp(`OF_${te}(_V\\d+)?_`, "g"), `OF_${te}_V${max + 1}_`);
   if (o.gruppo !== gruppoDi(o) || o.versione === undefined) { o.gruppo = gruppoDi(o); o.versione = versDi(o); try { await db.salva(COLL.off, o.id, { ...o }); } catch (x) { return errore(x); } }
   try { await db.salva(COLL.off, n.id, n); toast(`Creata la revisione ${revTxt(n.versione)}`); apriOfferta(n.id, false, n); } catch (x) { errore(x); }
 });
@@ -1115,9 +1118,14 @@ function infDb(x) {
   else if (/TVCC/.test(t)) { cap = 7; sigla = "TVCC"; }
   else if (/EVAC|VIVALDI|TUTONDO/.test(t)) { cap = 7; sigla = "EVAC"; }
   else if (/SPAZI.?CALMI/.test(t)) { cap = 7; sigla = "SPAZ"; }
-  return { cap: x.capInf !== undefined && x.capInf !== null && x.capInf !== "" ? +x.capInf : x.capInf === "" ? "" : cap, sigla: x.sigla || sigla || String(x.nome).slice(0, 4).toUpperCase() };
+  return { cap: x.capInf !== undefined && x.capInf !== null && x.capInf !== "" ? +x.capInf : x.capInf === "" ? "" : cap, sigla: x.sigla || sigla || String(x.nome).slice(0, 4).toUpperCase(),
+    riconosciuto: !!(x.sigla || x.capInf || sigla) };
 }
-const infCap = (c) => { const d = infDb(S.capitoli.find((x) => x.nome === dbNome(c)) || { nome: dbNome(c) }); return { cap: c.inf?.cap ?? d.cap, sigla: c.inf?.sigla || d.sigla }; };
+const infCap = (c) => {
+  let d = infDb(S.capitoli.find((x) => x.nome === dbNome(c)) || { nome: dbNome(c) });
+  // capitolo nato da un'offerta fornitore (database "OFFERTA…"): si riconosce dal nome del capitolo nell'offerta
+  if (!d.riconosciuto && c.nome !== dbNome(c)) { const d2 = infDb(S.capitoli.find((x) => x.nome === c.nome) || { nome: c.nome }); if (d2.riconosciuto) d = d2; }
+  return { cap: c.inf?.cap ?? d.cap, sigla: c.inf?.sigla || d.sigla }; };
 const conAttivita = (c) => riepilogoCapitolo(c, opzCap(c)).attivita.venduto > 0 || (c.righe || []).some((x) => isAttivita(x) && num(x.qta) > 0);
 const euroNum = (v) => (Math.round(v * 100) / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function informativaWordDialogo() {
@@ -1170,9 +1178,11 @@ function informativaWordDialogo() {
           try { o = OFF.leggiOffertaOracle(await testoPdf(file)); } catch (x) { o = null; }
           if (!o) { righe.push(`<span class="bad">${esc(file.name)}: non sembra un'offerta Oracle</span>`); continue; }
           // se nel Rif. Cliente manca la sigla, la si prende dal nome del file (…_FIRE.pdf)
-          if (!o.sigla) { const mf = file.name.match(/([A-Z]{2}\d{6,})[_\s-]*([A-Z+]+)\.pdf$/i); if (mf) { o.te ||= mf[1].toUpperCase(); o.sigla = mf[2].toUpperCase(); } }
+          if (!o.sigla) { const mf = file.name.match(/([A-Z]{2}\d{6,})(?:[_\s-]*V\d+)?[_\s-]*([A-Z+]+)\.pdf$/i); if (mf) { o.te ||= mf[1].toUpperCase(); o.sigla = mf[2].toUpperCase(); } }
           const te = $("#inf-te", b).value.trim().toUpperCase();
           const avvisoTe = te && o.te && o.te !== te ? ` <span class="bad">⚠ riferimento ${esc(o.te)} diverso da ${esc(te)}</span>` : "";
+          const revW = num($("#inf-rev", b).value) || versDi(S.off);
+          const avvisoV = (o.versione || 1) !== revW ? ` <span class="bad">⚠ è della versione ${o.versione || 1}, l'informativa è la revisione ${revTxt(revW)}</span>` : "";
           const i = sp.findIndex((c, k) => $(`[data-isig="${k}"]`, b).value.trim().toUpperCase() === o.sigla && $(`[data-icap="${k}"]`, b).value);
           if (o.ragione && !$("#inf-rag", b).dataset.pdf) {
             const ind = OFF.indirizzoOracle(o.indirizzo);
@@ -1189,7 +1199,7 @@ function informativaWordDialogo() {
           $(`[data-ora="${i}"]`, b).innerHTML = statoOracle(c);
           const ok = !$(`[data-ora="${i}"] .bad`, b);
           $(`tr[data-riga="${i}"]`, b).querySelectorAll("td").forEach((td) => { td.style.background = ok ? "#e3f4e3" : "#fde3e3"; });
-          righe.push(`${ok ? "✓" : "⚠"} ${esc(o.rif)}: n° ${esc(o.numero)} del ${esc(o.data)} → ${esc(c.nome)}${ok ? "" : ` <span class="bad">— Valore Merce Oracle ${euro(o.valoreMerce)}, app ${euro(vend(c))}</span>`}${avvisoTe}`);
+          righe.push(`${ok ? "✓" : "⚠"} ${esc(o.rif)}: n° ${esc(o.numero)} del ${esc(o.data)} → ${esc(c.nome)}${ok ? "" : ` <span class="bad">— Valore Merce Oracle ${euro(o.valoreMerce)}, app ${euro(vend(c))}</span>`}${avvisoTe}${avvisoV}`);
         }
         msg.innerHTML = righe.join("<br>");
       };
@@ -1218,7 +1228,7 @@ function informativaWordDialogo() {
       modificata();
       try {
         const modello = await (await fetch("modelli/informativa.docx", { cache: "no-cache" })).arrayBuffer();
-        const blob = await informativaWord(modello, { rif: te, capitoli, cliente: S.off.infCliente, data: $("#inf-data", b).value.trim(), oggetto: S.off.infCliente.oggetto, revisione: $("#inf-rev", b).value.trim() }, euroNum);
+        const blob = await informativaWord(modello, { rif: te, capitoli, cliente: S.off.infCliente, data: $("#inf-data", b).value.trim(), oggetto: S.off.infCliente.oggetto, revisione: $("#inf-rev", b).value.trim(), versione: num($("#inf-rev", b).value) || versDi(S.off) }, euroNum);
         scarica(blob, `INFORMATIVA_COMMERCIALE_${te}.docx`);
       } catch (x) { errore(x, "Word non creato"); return false; }
     },
@@ -2336,6 +2346,24 @@ OFFERTA PRELIMINARE DA RIVEDERE IN FASE D'ORDINE.
 
 POSIZIONI DI COMPUTO:`;
 }
+const capExport = () => S.off?.capitoli.find((x) => x.nome === S.capAtt) || capAtt();
+function statoNote(c) {
+  const mod = $("#export-note").value !== (c.noteOracle || noteOracle(c));
+  $("#note-stato").textContent = mod ? "Modifiche non salvate" : c.noteOracle ? "Testo personalizzato salvato per questo capitolo" : "Testo standard";
+  $("#note-stato").className = mod ? "bad small" : "muted small";
+  $("#salva-note").classList.toggle("primary", mod);
+}
+$("#export-note").addEventListener("input", () => { const c = capExport(); if (c) statoNote(c); });
+$("#salva-note").addEventListener("click", () => {
+  const c = capExport(); if (!c) return;
+  const t = $("#export-note").value;
+  if (t.trim() === noteOracle(c).trim()) delete c.noteOracle; else c.noteOracle = t;
+  modificata(); statoNote(c); toast("Note salvate nel capitolo.", 2000);
+});
+$("#std-note").addEventListener("click", () => {
+  const c = capExport(); if (!c) return;
+  delete c.noteOracle; $("#export-note").value = noteOracle(c); modificata(); statoNote(c); toast("Note riportate al testo standard.", 2000);
+});
 $("#copia-note").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("#export-note").value); toast("Note copiate.", 2000); } catch { $("#export-note").select(); document.execCommand("copy"); toast("Note copiate.", 2000); }
 });
@@ -2378,7 +2406,8 @@ function disegnaExport(c) {
   if (senzaCap) av.push(`<div class="avviso bad"><b>Non tutte le righe hanno un capitolato:</b> ${senzaCap} ${senzaCap === 1 ? "riga è" : "righe sono"} senza capitolato${c.sottocapitoli ? " e in Oracle avranno “Nome Capitolato” vuoto" : ""}.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
-  $("#export-note").value = noteOracle(c);
+  if (document.activeElement !== $("#export-note")) $("#export-note").value = c.noteOracle || noteOracle(c);
+  statoNote(c);
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
     <tbody>${righe.map((r) => `<tr>${r.map((v, i) => `<td class="${typeof v === "number" ? "num" : i === 1 ? "mono" : ""}"${typeof v === "string" && v.length > 30 ? ` title="${esc(v)}"` : ""}>${esc(typeof v === "number" ? numIt(v) : v)}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }

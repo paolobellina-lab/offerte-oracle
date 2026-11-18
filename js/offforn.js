@@ -695,8 +695,8 @@ export function leggiOffertaOracle(pagine) {
     trasporto = n(sotto(etich(/^Spese Trasporto$/i, pg), 14, pg)[0]?.str);
   }
   // "OF_" davanti al TE può mancare (scritto a mano in Oracle): basta TE + numero + sigla
-  const m = rif.match(/([A-Z]{2}\d{6,})[_\s-]*([A-Z+]+)/i);
-  return { numero, data, rif, te: m ? m[1].toUpperCase() : "", sigla: m ? m[2].toUpperCase() : "", ragione, codiceCliente, piva, indirizzo, valoreMerce, trasporto };
+  const m = rif.match(/([A-Z]{2}\d{6,})(?:[_\s-]*V(\d+)(?=[_\s-]))?[_\s-]*([A-Z+]+)/i);
+  return { numero, data, rif, te: m ? m[1].toUpperCase() : "", versione: m?.[2] ? +m[2] : null, sigla: m ? m[3].toUpperCase() : "", ragione, codiceCliente, piva, indirizzo, valoreMerce, trasporto };
 }
 
 /* "VIA A. VOLTA, 4 Legnaro (PD) 35020 IT" -> { via: "VIA A. VOLTA, 4", citta: "35020 - LEGNARO ( PD )" } */
