@@ -2323,10 +2323,11 @@ const datiOracle = (c) => righeOracle(c, opzCap(c));
 /* Note da incollare nell'offerta Oracle: sigla del capitolo (come nell'informativa) e riferimento dell'offerta. */
 function noteOracle(c) {
   const sigla = (infCap(c).sigla || c.nome).toUpperCase(), te = campiRif(S.off).rif || "TE…";
-  return `CAPITOLO: ${sigla}
+  const v = versDi(S.off) > 1 ? `_V${versDi(S.off)}` : ""; // dalla revisione 2: OF_TE26033724_V2_SPAZ
+  return `CAPITOLO: ${c.nome.toUpperCase()}
 
 NOSTRO RIFERIMENTO TECNICO
-OF_${te}-${sigla}
+OF_${te}${v}_${sigla}
 
 CONDIZIONE SPECIALE A VOI RISERVATA VALIDA ESCLUSIVAMENTE PER QUESTA FORNITURA IN RIFERIMENTO A TUTTE LE POSIZIONI E QUANTITÀ QUOTATE. I PREZZI NON SEGUONO IL LISTINO-SCONTO A VOI
 SOLITAMENTE RISERVATO.
