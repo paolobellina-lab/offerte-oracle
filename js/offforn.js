@@ -140,8 +140,9 @@ function codaNumerica(l) {
     } else pezzi.push({ ...x, tipo: RE_QTA.test(x.t) ? "num" : "testo" });
   }
   // quantità attaccata all'inizio della descrizione ("31 Diffusore SPOT da parete…"): si separa
-  if (pezzi.length > 1 && pezzi[0].tipo === "testo" && /^\d{1,5}\s+\S/.test(pezzi[0].t) && pezzi.some((x) => x.tipo === "soldi")) {
-    const m = pezzi[0].t.match(/^(\d{1,5})\s+(.*)$/), p0 = pezzi[0], w = (p0.x2 - p0.x) / p0.t.length;
+  // (anche con i decimali e attaccata al codice: "18,00 C-L-SIS-SIP-8B")
+  if (pezzi.length > 1 && pezzi[0].tipo === "testo" && /^\d{1,5}(,\d{1,3})?\s+\S/.test(pezzi[0].t) && pezzi.some((x) => x.tipo === "soldi")) {
+    const m = pezzi[0].t.match(/^(\d{1,5}(?:,\d{1,3})?)\s+(.*)$/), p0 = pezzi[0], w = (p0.x2 - p0.x) / p0.t.length;
     pezzi.splice(0, 1, { ...p0, t: m[1], x2: p0.x + m[1].length * w, tipo: "num" }, { ...p0, t: m[2], x: p0.x + (m[1].length + 1) * w, tipo: "testo" });
   }
   // quantità nella prima colonna a sinistra scritta con i decimali ("1,00 C-GE300WR descrizione … EUR 1.812,00"): non è un importo
@@ -291,7 +292,8 @@ export function leggiOffertaPdf(pagine) {
         const t = linee[j];
         if (t.k || ripetute.has(firma(t))) continue;
         const lett = t.testo.replace(/[^A-Za-zÀ-ÿ]/g, "");
-        if (lett.length >= 3 && lett === lett.toUpperCase() && t.testo.length <= 60 && t.celle.every((c) => c.x < xDesc - 8) && !RE_TOTALE.test(t.testo)) { t.titoloSopra = true; seq.push(t); break; }
+        // (subito sopra l'intestazione vale anche non maiuscolo, es. "Server VirtuoSIS")
+        if (lett.length >= 3 && (lett === lett.toUpperCase() || j === iInt - 1) && !RE_SOLDI.test(t.testo) && t.testo.length <= 60 && t.celle.every((c) => c.x < xDesc - 8) && !RE_TOTALE.test(t.testo)) { t.titoloSopra = true; seq.push(t); break; }
       }
     }
     for (const l of linee.slice(da)) {
@@ -543,7 +545,10 @@ export function leggiOffertaPdf(pagine) {
     const eraSezione = precSezione; precSezione = null;
     if (l.tipo === "sezione") {
       par = [];
-      const nome = [l.cod, l.desc].filter(Boolean).join(" ") || l.celle.map((c) => c.t).filter((t) => !RE_SOLDI.test(t)).join(" ");
+      let nome = [l.cod, l.desc].filter(Boolean).join(" ") || l.celle.map((c) => c.t).filter((t) => !RE_SOLDI.test(t)).join(" ");
+      // titolo che inizia a sinistra della colonna del codice ("Diffusori audio - Horn Format   Da Esterno"): si prende tutto
+      const tutto = l.celle.filter((c) => c.x < limDx && !RE_SOLDI.test(c.t)).map((c) => c.t).join(" ").trim();
+      if (!l.pos && !/^\d+\s/.test(tutto) && tutto.length > nome.length && tutto.endsWith(nome)) nome = tutto;
       // titolo su due righe: si unisce
       const unita = eraSezione && sez && !sez.righe.length && !sez.totalePdf && eraSezione.p === l.p && eraSezione.y - l.y < l.h * 1.6 && Math.abs((eraSezione.celle[0]?.x ?? 0) - (l.celle[0]?.x ?? 0)) < 3;
       if (unita) sez.nome += " " + nome; else nuovaSez(nome);
