@@ -1142,8 +1142,8 @@ function informativaWordDialogo() {
       <div id="inf-msg" class="small"></div>
       <div style="display:grid;grid-template-columns:2fr 2fr 2fr 1fr;gap:8px;margin:8px 0">
         ${campo("inf-rag", "Spett.le (ragione sociale)", ic.ragione || clienteOff()?.nome || "")}
-        ${campo("inf-via", "Via", ic.via || "")}
-        ${campo("inf-citta", "CAP - Città ( Prov )", ic.citta || "")}
+        ${campo("inf-via", "Via", ic.via || clienteOff()?.via || "")}
+        ${campo("inf-citta", "CAP - Città ( Prov )", ic.citta || clienteOff()?.citta || "")}
         ${campo("inf-data", "Data (Bergamo, …)", oggi)}
         ${campo("inf-ogg", "OGGETTO", rif.lavoro || ic.oggetto || "")}
         ${campo("inf-te", "Riferimento TE", rif.rif || "")}
@@ -3257,6 +3257,9 @@ function modificaCliente(c) {
       <label class="f wide">Ragione sociale<input id="k-nome" value="${esc(c.nome)}" required></label>
       <label class="f">Codice cliente<input id="k-cod" value="${esc(c.codice)}"></label>
       <label class="f">Tariffa attività tecnica €<input id="k-att" inputmode="decimal" value="${esc(c.att === "" ? "" : String(c.att).replace(".", ","))}"></label>
+      <label class="f">P.IVA / CF<input id="k-piva" class="mono" value="${esc(c.piva || "")}"></label>
+      <label class="f wide">Via<input id="k-via" value="${esc(c.via || "")}"></label>
+      <label class="f wide">CAP - Città ( Prov )<input id="k-citta" value="${esc(c.citta || "")}" placeholder="es. 35020 - LEGNARO ( PD )"></label>
     </div>
     <h3 style="margin:14px 0 8px">Sconti di cartellino per GMA</h3>
     <p class="muted small" style="margin:-4px 0 8px">Scrivi <b>NC</b> per un GMA non censito: nel controllo dell'offerta comparirà "Non censito" invece di OK o fuori cartellino.</p>
@@ -3275,7 +3278,8 @@ function modificaCliente(c) {
         const x = cascata(i.value); if (x.f) { sconti[i.dataset.g] = x.f; if (x.testo.includes("+")) scontiTesto[i.dataset.g] = x.testo; } });
       const attTxt = $("#k-att", b).value.trim();
       const id = c.id || slug(nome) + "-" + db.nuovoId().slice(-4);
-      await db.salva(COLL.cli, id, { ...(c.censito ? { censito: c.censito } : {}), nome, codice: $("#k-cod", b).value.trim(), att: attTxt === "" ? "" : num(attTxt), sconti, scontiTesto });
+      await db.salva(COLL.cli, id, { ...(c.censito ? { censito: c.censito } : {}), nome, codice: $("#k-cod", b).value.trim(), att: attTxt === "" ? "" : num(attTxt), sconti, scontiTesto,
+        piva: $("#k-piva", b).value.trim(), via: $("#k-via", b).value.trim(), citta: $("#k-citta", b).value.trim() });
       toast("Cliente salvato");
     },
   });
@@ -3402,6 +3406,32 @@ function scontiDaLineeOracle(righe) {
   }
   return out;
 }
+/* PDF di un'offerta Oracle → sconti per GMA (la colonna "Sconti" della riga; il GMA si ricava dal codice articolo). */
+function scontiDaPdfOracle(pagine) {
+  const k = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const gmaDi = new Map();
+  for (const a of S.catalogo) if (!isGenerico(a) && a.gmv) gmaDi.set(k(codiceOracle(a)), a.gmv);
+  for (const x of S.censCfg?.righe || []) if (x.cod) gmaDi.set(k(x.cod), x.g);
+  const out = new Map(), diversi = new Set();
+  const righe = OFF.righeOracle(pagine);
+  // offerta di censimento (tutte le righe a quantità 1): vale anche "nessuno sconto" (→ NC) e la tariffa dell'attività.
+  // In un'offerta normale si prendono solo i GMA con uno sconto: i prezzi possono essere forzati e l'attività è a corpo.
+  const censimento = righe.length > 0 && righe.every((r) => Math.abs(r.qta - 1) < 1e-6);
+  for (const r of righe) {
+    const cod = r.codice.replace(/\s+/g, "");
+    if (/ARTICOLO_?GEN/i.test(cod)) continue; // generici: nessun cartellino
+    const g = /^PITATT\.?TEC$/i.test(cod) ? "ATT" : gmaDi.get(k(cod)) || "";
+    if (!g) continue;
+    const termini = String(r.sconti || "").split(/[+\s]+/).map((t) => num(t) / 100).filter((v) => v > 0).map((v, i) => ({ n: `Sconto ${i + 1}`, v }));
+    const testo = termini.map((x) => String(Math.round(x.v * 1e4) / 100).replace(".", ",")).join("+");
+    const f = 1 - termini.reduce((a, x) => a * (1 - x.v), 1);
+    if (!censimento && (g === "ATT" || !f)) continue;
+    if (out.has(g)) { if (Math.abs(out.get(g).f - f) > 1e-4) diversi.add(g); continue; }
+    out.set(g, { g, cod, testo, f, termini, aum: [], unit: g === "ATT" ? r.unitario : r.prezzo, forzata: false });
+  }
+  out.diversi = diversi; out.censimento = censimento;
+  return out;
+}
 async function righeFileOracle(f) {
   if (/\.pdf$/i.test(f.name)) { const fogli = BIB.righeDaPdf(await testoPdf(f)); if (!fogli.length) throw new Error("Nel PDF non trovo righe."); return fogli[0].righe; }
   if (/\.csv$|\.txt$/i.test(f.name)) return BIB.righeDaTesto(await f.text());
@@ -3416,13 +3446,24 @@ $("#cl-cens-noff").addEventListener("change", async (e) => {
 $("#cl-cens-carica").addEventListener("click", () => $("#cl-cens-file").click());
 $("#cl-cens-file").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  let trovati;
-  try { trovati = scontiDaLineeOracle(await righeFileOracle(f)); } catch (x) { return errore(x, "File non leggibile"); }
-  if (!trovati.size) return toast("Nel file non trovo righe con un GMA.", 6000);
+  censimentoDaFile(f);
+});
+$("#cl-da-pdf").addEventListener("click", () => $("#cl-cens-file").click());
+async function censimentoDaFile(f) {
+  let trovati, testa = null;
+  try {
+    if (/\.pdf$/i.test(f.name)) {
+      const pag = await testoPdf(f);
+      testa = OFF.leggiOffertaOracle(pag);
+      trovati = testa ? scontiDaPdfOracle(pag) : scontiDaLineeOracle(await righeFileOracle(f));
+    } else trovati = scontiDaLineeOracle(await righeFileOracle(f));
+  } catch (x) { return errore(x, "File non leggibile"); }
+  if (!trovati.size && !testa?.ragione) return toast("Nel file non trovo righe con un GMA.", 6000);
   const etich = (c) => `${c.nome}${c.codice ? " · " + c.codice : ""}`;
-  // il cliente si può riconoscere dal nome del file (es. "Linee_ROSSI SPA.xlsx")
+  const indPdf = testa ? OFF.indirizzoOracle(testa.indirizzo) : null;
+  // il cliente: dal codice cliente del PDF Oracle, o dal nome del file (es. "Linee_ROSSI SPA.xlsx")
   const nomeF = f.name.toLowerCase();
-  const ipotesi = S.clienti.find((c) => (c.codice && nomeF.includes(String(c.codice).toLowerCase())) || (c.nome && c.nome.length > 3 && nomeF.includes(c.nome.toLowerCase())));
+  const ipotesi = (testa?.codiceCliente && S.clienti.find((c) => String(c.codice || "").trim() === testa.codiceCliente)) || (testa?.ragione && S.clienti.find((c) => c.nome?.toUpperCase() === testa.ragione.toUpperCase())) || S.clienti.find((c) => (c.codice && nomeF.includes(String(c.codice).toLowerCase())) || (c.nome && c.nome.length > 3 && nomeF.includes(c.nome.toLowerCase())));
   const lista = [...trovati.values()].sort((a, b) => a.g.localeCompare(b.g));
   const tabella = (cli) => lista.map((x) => {
     const att = x.g === "ATT";
@@ -3434,11 +3475,18 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
       <td class="num">${prima ? esc(prima) : '<span class="muted">—</span>'}</td><td class="num"><b>${esc(dopo)}</b>${cambia ? ' <span class="badge warn">cambia</span>' : ""}</td></tr>`;
   }).join("");
   dialogo({
-    titolo: `Censimento cartellino · ${f.name}`, largo: true,
+    titolo: `${testa ? "Cliente e cartellino da offerta Oracle" : "Censimento cartellino"} · ${f.name}`, largo: true,
     html: `<div class="row" style="flex-wrap:wrap;gap:8px 14px">
-        <label class="f grow" style="min-width:280px">Cliente (scegli dall'elenco o scrivi un nuovo cliente)<input id="cs-cli" list="cs-clis" value="${esc(ipotesi ? etich(ipotesi) : "")}" placeholder="Ragione sociale"></label>
-        <label class="f">Codice cliente (nuovo cliente)<input id="cs-cod" style="width:140px"></label>
-      </div><datalist id="cs-clis">${S.clienti.map((c) => `<option value="${esc(etich(c))}">`).join("")}</datalist>
+        <label class="f grow" style="min-width:280px">Cliente (scegli dall'elenco o scrivi un nuovo cliente)<input id="cs-cli" list="cs-clis" value="${esc(ipotesi ? etich(ipotesi) : testa?.ragione || "")}" placeholder="Ragione sociale"></label>
+        <label class="f">Codice cliente (nuovo cliente)<input id="cs-cod" style="width:140px" value="${esc(testa?.codiceCliente || "")}"></label>
+      </div>
+      ${testa ? `<div class="row small" style="flex-wrap:wrap;gap:4px 16px;margin-top:6px">
+        <span class="muted">Dal PDF Oracle${testa.numero ? ` n° ${esc(testa.numero)} del ${esc(testa.data)}` : ""}:</span>
+        <span>P.IVA/CF <b class="mono">${esc(testa.piva || "—")}</b></span>
+        <span>${esc(indPdf.via || "")}${indPdf.citta ? " – " + esc(indPdf.citta) : ""}</span></div>
+        ${trovati.diversi?.size ? `<div class="avviso warn small" style="margin-top:6px">Nel PDF lo stesso GMA ha sconti diversi su più righe (${[...trovati.diversi].map(esc).join(", ")}): uso la prima riga. Per un cartellino sicuro usa l'offerta di censimento.</div>` : ""}
+        ${!trovati.censimento ? `<div class="avviso info small" style="margin-top:6px">Non è un'offerta di censimento: prendo solo i GMA con uno sconto in riga (i GMA senza sconto e la tariffa dell'attività restano come sono).</div>` : ""}
+        ${!trovati.size ? `<div class="avviso warn small" style="margin-top:6px">Nelle righe non trovo articoli del database con uno sconto: si salva solo l'anagrafica del cliente.</div>` : ""}` : ""}<datalist id="cs-clis">${S.clienti.map((c) => `<option value="${esc(etich(c))}">`).join("")}</datalist>
       <p class="muted small" id="cs-stato" style="margin:6px 0 10px"></p>
       <div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th>GMA</th><th>Fornitore</th><th>Articolo</th><th>Sconti applicati da Oracle</th><th class="num">Cartellino attuale</th><th class="num">Nuovo</th></tr></thead>
         <tbody id="cs-righe"></tbody></table></div>
@@ -3464,19 +3512,21 @@ $("#cl-cens-file").addEventListener("change", async (e) => {
       const cli = S.clienti.find((c) => etich(c) === val || c.nome === val);
       const base = cli ? structuredClone(cli) : { nome: val, codice: $("#cs-cod", d).value.trim(), att: "", sconti: {} };
       const { id: _id, ...dati } = base;
+      // anagrafica dal PDF Oracle (non sovrascrive quella già scritta)
+      if (testa) { dati.piva ||= testa.piva || ""; dati.via ||= indPdf.via || ""; dati.citta ||= indPdf.citta || ""; if (!cli && testa.ragione && val === testa.ragione) dati.nome = testa.ragione; }
       dati.sconti ||= {}; dati.scontiTesto ||= {};
       for (const x of lista) {
         if (x.g === "ATT") { if (x.unit) dati.att = Math.round(x.unit * (1 - x.f) * 100) / 100; continue; }
         if (x.f) { dati.sconti[x.g] = x.f; if (x.testo && x.testo.includes("+")) dati.scontiTesto[x.g] = x.testo; else delete dati.scontiTesto[x.g]; }
         else { dati.sconti[x.g] = "NC"; delete dati.scontiTesto[x.g]; } // nessuno sconto da Oracle: non censito
       }
-      dati.censito = oggiIso();
+      if (lista.length) dati.censito = oggiIso();
       const id = cli?.id || slug(val) + "-" + db.nuovoId().slice(-4);
       try { await db.salva(COLL.cli, id, dati); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
-      toast(`Cartellino di ${dati.nome} salvato (${lista.length} GMA).`, 5000);
+      toast(lista.length ? `Cartellino di ${dati.nome} salvato (${lista.length} GMA).` : `Cliente ${dati.nome} salvato.`, 5000);
     },
   });
-});
+}
 
 /* ================= Importazione dal file Excel ================= */
 const drop = $("#drop-xlsx");

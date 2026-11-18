@@ -682,6 +682,9 @@ export function leggiOffertaOracle(pagine) {
   const labRif = etich(/^Rif\.? Cliente$/i);
   const rif = sotto(labRif, 22).map((i) => i.str.trim()).join("").replace(/\s+/g, "");
   const ragione = primo(/^Ragione Sociale$/i);
+  const codiceCliente = primo(/^Codice Cliente$/i);
+  // "IT05138980288 / 05138980288" o "/ 00228060166": si tiene la prima parte piena
+  const piva = primo(/^P\.?IVA\/CF$/i).split("/").map((x) => x.trim()).find(Boolean) || "";
   const indirizzo = primo(/^Indirizzo$/i);
   let valoreMerce = null, trasporto = null;
   const n = (s) => { const v = parseFloat(String(s).replace(/\./g, "").replace(",", ".")); return isNaN(v) ? null : v; };
@@ -693,7 +696,7 @@ export function leggiOffertaOracle(pagine) {
   }
   // "OF_" davanti al TE può mancare (scritto a mano in Oracle): basta TE + numero + sigla
   const m = rif.match(/([A-Z]{2}\d{6,})[_\s-]*([A-Z+]+)/i);
-  return { numero, data, rif, te: m ? m[1].toUpperCase() : "", sigla: m ? m[2].toUpperCase() : "", ragione, indirizzo, valoreMerce, trasporto };
+  return { numero, data, rif, te: m ? m[1].toUpperCase() : "", sigla: m ? m[2].toUpperCase() : "", ragione, codiceCliente, piva, indirizzo, valoreMerce, trasporto };
 }
 
 /* "VIA A. VOLTA, 4 Legnaro (PD) 35020 IT" -> { via: "VIA A. VOLTA, 4", citta: "35020 - LEGNARO ( PD )" } */
