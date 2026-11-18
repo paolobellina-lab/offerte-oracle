@@ -282,6 +282,7 @@
 
         <!-- PAGINA 3: ESPORTA PER ORACLE -->
         <div id="s-export" hidden>
+          <div class="export-griglia"><div class="export-sx">
           <div class="card">
             <h3 class="titolo-sez">Impostazioni dell'output per Oracle</h3>
             <div class="row" style="gap:18px;align-items:flex-end">
@@ -314,6 +315,13 @@
               <button class="btn verde" id="scarica-csv">⤓ Scarica CSV</button>
               <button class="btn verde" id="copia-righe">⧉ Copia righe</button>
             </div>
+          </div>
+          </div>
+          <div class="card no-print export-note">
+            <div class="row" style="align-items:center"><h3 class="titolo-sez grow" style="margin:0">Note per Oracle</h3>
+              <button class="btn verde" id="copia-note">⧉ Copia note</button></div>
+            <textarea id="export-note" spellcheck="false" title="Si compila col capitolo e il riferimento dell'offerta; puoi modificarla prima di copiarla"></textarea>
+          </div>
           </div>
           <div class="tbl-wrap"><table id="tab-export"></table></div>
         </div>

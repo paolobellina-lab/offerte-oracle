@@ -2320,6 +2320,24 @@ function disegnaGmv(c, rc) {
 
 /* --- Esportazione per Oracle (un foglio per capitolo) --- */
 const datiOracle = (c) => righeOracle(c, opzCap(c));
+/* Note da incollare nell'offerta Oracle: sigla del capitolo (come nell'informativa) e riferimento dell'offerta. */
+function noteOracle(c) {
+  const sigla = (infCap(c).sigla || c.nome).toUpperCase(), te = campiRif(S.off).rif || "TE…";
+  return `CAPITOLO: ${sigla}
+
+NOSTRO RIFERIMENTO TECNICO
+OF_${te}-${sigla}
+
+CONDIZIONE SPECIALE A VOI RISERVATA VALIDA ESCLUSIVAMENTE PER QUESTA FORNITURA IN RIFERIMENTO A TUTTE LE POSIZIONI E QUANTITÀ QUOTATE. I PREZZI NON SEGUONO IL LISTINO-SCONTO A VOI
+SOLITAMENTE RISERVATO.
+
+OFFERTA PRELIMINARE DA RIVEDERE IN FASE D'ORDINE.
+
+POSIZIONI DI COMPUTO:`;
+}
+$("#copia-note").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#export-note").value); toast("Note copiate.", 2000); } catch { $("#export-note").select(); document.execCommand("copy"); toast("Note copiate.", 2000); }
+});
 function disegnaExport(c) {
   // scelta dei capitolati da caricare in questa offerta Oracle
   const gruppi = [];
@@ -2359,6 +2377,7 @@ function disegnaExport(c) {
   if (senzaCap) av.push(`<div class="avviso bad"><b>Non tutte le righe hanno un capitolato:</b> ${senzaCap} ${senzaCap === 1 ? "riga è" : "righe sono"} senza capitolato${c.sottocapitoli ? " e in Oracle avranno “Nome Capitolato” vuoto" : ""}.</div>`);
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
+  $("#export-note").value = noteOracle(c);
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
     <tbody>${righe.map((r) => `<tr>${r.map((v, i) => `<td class="${typeof v === "number" ? "num" : i === 1 ? "mono" : ""}"${typeof v === "string" && v.length > 30 ? ` title="${esc(v)}"` : ""}>${esc(typeof v === "number" ? numIt(v) : v)}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }

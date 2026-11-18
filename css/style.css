@@ -980,3 +980,10 @@ label.cens-bottom input { height: 38px; box-sizing: border-box; }
 #cl-cens-noff { font-size: 1.05rem; letter-spacing: .03em; }
 
 .vers-vecchia { background: #fff3cd; color: #6b4e00; border: 1px solid #e6c870; border-radius: 6px; padding: 6px 10px; margin-top: 6px; }
+
+/* pagina Esporta: riquadri a sinistra, note per Oracle a destra alte quanto loro */
+.export-griglia { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 0 14px; align-items: stretch; }
+.export-sx { min-width: 0; }
+.export-note { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.export-note textarea { flex: 1; min-height: 220px; width: 100%; resize: vertical; font: 13px/1.45 ui-monospace, Consolas, monospace; padding: 8px; }
+@media (max-width: 900px) { .export-griglia { grid-template-columns: 1fr; } }
