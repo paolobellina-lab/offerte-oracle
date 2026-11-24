@@ -86,7 +86,7 @@
         <select id="filtro-cli-off" title="Filtra per cliente"><option value="">Tutti i clienti</option></select>
         <select id="filtro-stato-off" title="Filtra per stato">
           <option value="">Tutti gli stati</option><option value="lavorazione">In lavorazione</option><option value="consegnata">Consegnate</option></select>
-        <input id="cerca-offerte" type="search" placeholder="Cerca: riferimento, cliente, codice, articolo, capitolo…" style="min-width:340px"
+        <input id="cerca-offerte" type="search" autocomplete="off" placeholder="Cerca: riferimento, cliente, codice, articolo, capitolo…" style="min-width:340px"
           title="Più parole: devono esserci tutte. Cerca in riferimento, cliente e codice cliente, capitoli e capitolati, codici, n° di ordinazione e descrizioni degli articoli">
         <button class="btn verde forte" id="nuova-offerta">+ Nuova offerta</button>
       </div>
@@ -178,7 +178,7 @@
             <div class="row" style="margin-bottom:8px">
               <label class="f">Database<select id="a-db"></select></label>
               <label class="f">Sottocapitolo<select id="a-sotto"></select></label>
-              <label class="f grow">Cerca<input id="a-cerca" type="search" placeholder="codice, n° ordinazione o descrizione"></label>
+              <label class="f grow">Cerca<input id="a-cerca" type="search" autocomplete="off" placeholder="codice, n° ordinazione o descrizione"></label>
               <label class="f">Capitolato per le nuove righe<select id="a-cap"></select></label>
               <span class="gruppi-tutti"><button type="button" class="btn small" data-tutti="righe-picker" data-az="chiudi" title="Riduci tutti i gruppi">− Riduci tutti</button><button type="button" class="btn small" data-tutti="righe-picker" data-az="apri" title="Espandi tutti i gruppi">+ Espandi tutti</button></span>
             </div>
@@ -199,7 +199,7 @@
             <h3 class="titolo-sez">Biblioteca</h3>
             <div class="row" style="margin-bottom:8px">
               <label class="f">Fornitore<select id="rb-fornitore"></select></label>
-              <label class="f grow">Cerca<input id="rb-cerca" type="search" placeholder="codice, modello o descrizione"></label>
+              <label class="f grow">Cerca<input id="rb-cerca" type="search" autocomplete="off" placeholder="codice, modello o descrizione"></label>
             </div>
             <div class="tbl-wrap picker-wrap"><table>
               <thead><tr><th>Fornitore</th><th>Codice</th><th>Articolo</th><th>U.M.</th><th class="num">Listino</th><th>GMA</th><th class="num">Sconto acq.</th><th></th></tr></thead>
@@ -340,7 +340,7 @@
         <h2>Catalogo</h2>
         <select id="c-capitolo"></select>
         <select id="c-sotto" title="Sottocapitolo del database"></select>
-        <input id="c-cerca" type="search" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMA">
+        <input id="c-cerca" type="search" autocomplete="off" class="grow" placeholder="Cerca codice, n° ordinazione, descrizione o GMA">
         <button class="btn primary" id="c-nuovo">+ Nuovo articolo</button>
         <button class="btn" id="c-modifica" title="Abilita selezione, taglia, copia, incolla, incolla collegato ed elimina con il tasto destro">🔒 Modifica database</button>
       </div>
@@ -380,7 +380,7 @@
       <div class="row" style="margin-bottom:10px">
         <h2>Biblioteca</h2>
         <select id="b-fornitore"></select>
-        <input id="b-cerca" type="search" class="grow" placeholder="Cerca codice, modello, descrizione o famiglia">
+        <input id="b-cerca" type="search" autocomplete="off" class="grow" placeholder="Cerca codice, modello, descrizione o famiglia">
         <label class="row small"><input type="checkbox" id="b-decidere"> solo da decidere</label>
         <label class="row small" title="Articoli già nel database con listino, descrizione, modello, U.M. o GMA diversi"><input type="checkbox" id="b-diversi"> solo diversi dal database</label>
         <button class="btn" id="b-sconti">GMA e acquisti standard</button>
@@ -430,7 +430,7 @@
     <section id="v-clienti" hidden>
       <div class="row" style="margin-bottom:10px">
         <h2 class="grow">Clienti e cartellini</h2>
-        <input id="cl-cerca" type="search" placeholder="Cerca cliente">
+        <input id="cl-cerca" type="search" autocomplete="off" placeholder="Cerca cliente">
         <button class="btn primary" id="cl-nuovo">+ Nuovo cliente</button>
         <button class="btn verde" id="cl-da-pdf" title="Carica il PDF di un'offerta Oracle intestata al cliente: si prendono ragione sociale, codice, P.IVA, indirizzo e gli sconti di cartellino delle righe">⤒ Nuovo cliente da offerta Oracle (PDF)</button>
       </div>

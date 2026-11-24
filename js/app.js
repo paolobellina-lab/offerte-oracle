@@ -1869,7 +1869,10 @@ function disegnaPicker(c, reset = false) {
   const lista = nelDb.filter((a) => (!sottoSel.value || a.sottocapitolo === sottoSel.value) &&
     (!solo || conta.has(a.k)) &&
     (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
-  const vis = lista.slice(0, S.limitePick);
+  // con una ricerca, delle copie collegate (cloni) se ne mostra una sola
+  const visti = new Set();
+  const unici = q ? lista.filter((a) => { if (!a.clone) return true; if (visti.has(a.clone)) return false; visti.add(a.clone); return true; }) : lista;
+  const vis = unici.slice(0, S.limitePick);
   let sotto = null, html = "";
   for (const a of vis) {
     if ((a.sottocapitolo || "") !== sotto && !sottoSel.value) {
@@ -1905,7 +1908,7 @@ function disegnaPicker(c, reset = false) {
       applicaGruppi(tb);
     }
   }
-  $("#picker-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : "";
+  $("#picker-info").textContent = unici.length > vis.length ? `Mostrati ${vis.length} di ${unici.length}: affina la ricerca.` : "";
 }
 /* --- Selezione di più articoli del database e aggiunta in un colpo solo --- */
 function aggiornaPickSel() {
