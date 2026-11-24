@@ -1050,7 +1050,7 @@ const descrCapDb = (x) => x.descrizione || x.nome;
 async function copiaMail(oggetto, corpo) {
   try { await navigator.clipboard.writeText(corpo); }
   catch { const t = document.createElement("textarea"); t.value = corpo; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
-  toast(`Testo copiato: incollalo nella mail. Oggetto: ${oggetto}`, 7000);
+  toast(`Testo copiato: incollalo nella mail (anche in risposta). Oggetto: ${oggetto}`, 7000);
 }
 const oggettoMail = () => { const r = campiRif(S.off); return ["OF", r.rif, r.lavoro].filter(Boolean).join(" - "); };
 const elenco = (l) => l.map((x) => `- ${x}`).join("\n");
