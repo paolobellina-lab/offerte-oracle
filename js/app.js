@@ -3845,6 +3845,31 @@ function condBib(a) {
 // confronto biblioteca ↔ database: precodice + codice, senza badare a maiuscole e spazi
 const chiaveDb = (s) => String(s || "").toUpperCase().replace(/\s+/g, "");
 const codiceBib = (a) => `${a.precodice ?? profiloDi(a.fornitore).precodice ?? ""}${a.codice}`;
+/* Differenze tra un articolo della biblioteca e lo stesso articolo (precodice + codice) nel database. */
+const ntDb = (t) => String(t ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+function diffDb(a) {
+  const x = S.dbPerCodice?.get(chiaveDb(codiceBib(a))); if (!x) return null;
+  const ntd = (t) => ntDb(t).replace(/[^A-Z0-9À-Ý]+/g, " ").trim();
+  const c = [];
+  if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) c.push({ n: "Listino", db: euro(x.listinoAcquisto), li: euro(a.listino), su: num(a.listino) > num(x.listinoAcquisto) });
+  if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) c.push({ n: "Descrizione", db: x.descrizione || "—", li: a.descrizione });
+  if (a.nOrdine && ntDb(a.nOrdine) !== ntDb(x.nOrdine)) c.push({ n: "Modello", db: x.nOrdine || "—", li: a.nOrdine });
+  if (a.um && profiloDi(a.fornitore).mappa?.um && ntDb(a.um).replace(/\./g, "") !== ntDb(x.um).replace(/\./g, "")) c.push({ n: "U.M.", db: x.um || "—", li: a.um });
+  const g = condBib(a).gma; if (g && ntDb(g) !== ntDb(x.gmv)) c.push({ n: "GMA", db: x.gmv || "—", li: g });
+  return { x, campi: c };
+}
+const preparaDbPerCodice = () => { S.dbPerCodice = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) { const k = chiaveDb(codiceArticolo(x)); if (!S.dbPerCodice.has(k)) S.dbPerCodice.set(k, x); } };
+function mostraDiffDb(a) {
+  const d = diffDb(a); if (!d) return;
+  dialogo({ titolo: `${codiceBib(a)} · listino ${a.fornitore} e database`,
+    html: `<p class="muted small" style="margin-top:0">Nel database: capitolo <b>${esc(d.x.capitolo)}</b>${d.x.sottocapitolo ? " · " + esc(d.x.sottocapitolo) : ""}${d.x.dataAgg ? ` · aggiornato il ${esc(dataIt(d.x.dataAgg))}` : ""}</p>
+      <table><thead><tr><th>Campo</th><th>Nel database</th><th>Nel listino</th></tr></thead><tbody>
+      ${d.campi.map((c) => `<tr><td><b>${esc(c.n)}</b></td><td class="small">${esc(c.db)}</td><td class="small"><b>${esc(c.li)}</b>${c.n === "Listino" ? (c.su ? ' <span class="bad">▲</span>' : ' <span class="ok">▼</span>') : ""}</td></tr>`).join("")}</tbody></table>
+      <p class="muted small">Per portare il prezzo nuovo nel database usa “Aggiorna i prezzi” in Importa e aggiorna; gli altri campi si cambiano dalla scheda dell'articolo.</p>`,
+    pulsanti: [{ label: "Chiudi", value: "annulla" }, { label: "✎ Apri la scheda nel database", value: "ok", cls: "primary" }],
+    onConferma() { setTimeout(() => modificaArticolo(d.x), 50); },
+  });
+}
 function cercaBib(q, { forn = "", soloDecidere = false, escludiDb = false } = {}) {
   q = (q || "").trim().toLowerCase();
   const nelDb = escludiDb ? new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x)))) : null;
@@ -3865,7 +3890,9 @@ function rigaBibHtml(a, modo) {
     : a.decisione ? `<button type="button" class="btn small ghost" data-bib-dec="" data-k="${esc(a.k)}" title="Annulla la scelta">${a.decisione === "listino" ? "sconto del listino" : "sconto del GMA"} ✕</button>` : "";
   const nelDb = S.perKCodice?.has(chiaveDb(codiceBib(a)));
   const azione = modo === "pagina"
-    ? (nelDb ? '<span class="badge ok">nel database</span>' : `<button type="button" class="btn small" data-bib-db="${esc(a.k)}">Nel database…</button>`)
+    ? (nelDb ? (() => { const d = diffDb(a); return d?.campi.length
+        ? `<button type="button" class="btn small" data-bib-diff="${esc(a.k)}" title="${esc(d.campi.map((c) => `${c.n}: ${String(c.db).slice(0, 60)} → ${String(c.li).slice(0, 60)}`).join("\n"))}"><span class="badge warn">≠ database</span> ${esc(d.campi.map((c) => c.n).join(", "))}</button>`
+        : '<span class="badge ok">nel database ✓</span>'; })() : `<button type="button" class="btn small" data-bib-db="${esc(a.k)}">Nel database…</button>`)
     : `<button type="button" class="btn small primary" data-bib-add="${esc(a.k)}">Aggiungi…</button>`;
   const desc = `<td class="desc"><b>${esc(a.nOrdine || a.codice)}</b>${modo !== "pagina" ? ` <span class="badge info">${esc(a.fornitore)}</span>` : ""}<div class="d">${esc(a.descrizione)}</div>${a.sottocapitolo ? `<div class="muted small">${esc(a.sottocapitolo)}</div>` : ""}</td>`;
   if (modo === "picker") return `<tr class="bib" data-bib="${esc(a.k)}"><td></td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
@@ -3893,10 +3920,13 @@ function disegnaBiblioteca() {
         <button class="icon" data-forn-del="${esc(n)}" title="Togli il listino dalla biblioteca">✕</button></td></tr>`;
   }).join("") : `<tr><td colspan="6" class="vuoto">Nessun listino: caricane uno con “+ Carica listino”.</td></tr>`;
   const forn = $("#b-fornitore").value, q = $("#b-cerca").value, solo = $("#b-decidere").checked;
-  const lista = S.bibPronta ? cercaBib(q, { forn, soloDecidere: solo }) : [];
+  preparaDbPerCodice();
+  let lista = S.bibPronta ? cercaBib(q, { forn, soloDecidere: solo }) : [];
+  if ($("#b-diversi").checked) lista = lista.filter((a) => diffDb(a)?.campi.length);
   const vis = lista.slice(0, 300);
   $("#b-righe").innerHTML = vis.map((a) => rigaBibHtml(a, "pagina")).join("") ||
     `<tr><td colspan="8" class="vuoto">${S.bibPronta ? (S.bib.length ? "Nessun articolo trovato." : "La biblioteca è vuota.") : "Carico…"}</td></tr>`;
+  if (S.bibPronta) { const nd = (forn ? S.bib.filter((a) => a.fornitore === forn) : S.bib).filter((a) => diffDb(a)?.campi.length).length; $("#b-diversi").parentElement.lastChild.textContent = ` solo diversi dal database${nd ? ` (${nd})` : ""}`; }
   $("#b-info").textContent = lista.length > vis.length ? `Mostrati ${vis.length} di ${lista.length}: affina la ricerca.` : lista.length ? `${lista.length} articoli` : "";
   const dec = lista.filter((a) => condBib(a).daDecidere);
   $("#b-bulk").innerHTML = dec.length ? `<div class="avviso">${dec.length} articoli ${forn ? `di ${esc(forn)} ` : ""}hanno nel listino uno sconto o un GMA diverso da quello impostato: decidi voce per voce oppure
@@ -3916,6 +3946,7 @@ function disegnaBibRighe() {
 $("#b-fornitore").addEventListener("change", disegnaBiblioteca);
 $("#b-cerca").addEventListener("input", disegnaBiblioteca);
 $("#b-decidere").addEventListener("change", disegnaBiblioteca);
+$("#b-diversi").addEventListener("change", disegnaBiblioteca);
 $("#rb-fornitore").addEventListener("change", disegnaBibRighe);
 $("#rb-cerca").addEventListener("input", disegnaBibRighe);
 
@@ -3956,6 +3987,8 @@ document.addEventListener("click", (e) => {
   if (t) { decidiBib(S.bibDecVisibili || [], t.dataset.bibTutti); return; }
   const ad = e.target.closest("[data-bib-add]");
   if (ad) { const a = S.bibPerK.get(ad.dataset.bibAdd); if (a) aggiungiDaBib(a); return; }
+  const df = e.target.closest("[data-bib-diff]");
+  if (df) { const a = S.bibPerK.get(df.dataset.bibDiff); if (a) mostraDiffDb(a); return; }
   const dbb = e.target.closest("[data-bib-db]");
   if (dbb) { const a = S.bibPerK.get(dbb.dataset.bibDb); if (a) mettiNelDatabase(a); }
 });
