@@ -119,6 +119,11 @@ $("#dlg-form").addEventListener("submit", async (e) => {
 /* Le righe di intestazione (data-gruppo) hanno un − / + che nasconde o mostra le righe sottostanti,
    fino all'intestazione successiva o alla riga dei totali. Lo stato resta finché la pagina è aperta. */
 const chiusi = new Set();
+// gruppi chiusi all'inizio (si aprono a richiesta): i risultati dalla biblioteca
+const CHIUSI_DI_BASE = new Set(["__biblioteca"]);
+const aperti = new Set();
+const eChiuso = (k, g) => (CHIUSI_DI_BASE.has(g) ? !aperti.has(k) : chiusi.has(k));
+const cambiaGruppo = (k, g, chiudi) => { if (CHIUSI_DI_BASE.has(g)) chiudi ? aperti.delete(k) : aperti.add(k); else chiudi ? chiusi.add(k) : chiusi.delete(k); };
 const ambitoDi = (tb) => tb.id + (tb.id === "righe-offerta" || tb.id === "riepilogo-righe" ? "|" + (S.off?.id || "") + "|" + S.capAtt : "|" + (S.pickDb || $("#c-capitolo")?.value || ""));
 function applicaGruppi(tb) {
   if (!tb) return;
@@ -129,7 +134,7 @@ function applicaGruppi(tb) {
     if (tr.dataset.gruppo !== undefined) {
       chiudiConta();
       testa = tr; n = 0;
-      chiuso = chiusi.has(amb + "|" + tr.dataset.gruppo);
+      chiuso = eChiuso(amb + "|" + tr.dataset.gruppo, tr.dataset.gruppo);
       tr.classList.add("testa-gruppo");
       const td = tr.cells[0];
       if (!td.querySelector(".tg")) td.insertAdjacentHTML("afterbegin", `<button type="button" class="tg"></button>`);
@@ -151,7 +156,7 @@ document.addEventListener("click", (e) => {
   if (!tr || e.target.closest("input, select, a, .tg-ed")) return;
   const tb = tr.parentElement;
   const k = ambitoDi(tb) + "|" + tr.dataset.gruppo;
-  chiusi.has(k) ? chiusi.delete(k) : chiusi.add(k);
+  cambiaGruppo(k, tr.dataset.gruppo, !eChiuso(k, tr.dataset.gruppo));
   applicaGruppi(tb);
 });
 
@@ -160,8 +165,7 @@ document.addEventListener("click", (e) => {
   const tb = document.getElementById(b.dataset.tutti); if (!tb) return;
   const amb = ambitoDi(tb);
   for (const tr of tb.querySelectorAll("tr[data-gruppo]")) {
-    const k = amb + "|" + tr.dataset.gruppo;
-    if (b.dataset.az === "chiudi") chiusi.add(k); else chiusi.delete(k);
+    cambiaGruppo(amb + "|" + tr.dataset.gruppo, tr.dataset.gruppo, b.dataset.az === "chiudi");
   }
   applicaGruppi(tb);
 });
@@ -1900,10 +1904,10 @@ function disegnaPicker(c, reset = false) {
   if (q.length >= 2) {
     caricaBib();
     const tb = $("#righe-picker");
-    if (!S.bibPronta) tb.insertAdjacentHTML("beforeend", `<tr class="sotto"><td colspan="8" class="muted">Cerco anche nella biblioteca…</td></tr>`);
+    if (!S.bibPronta) tb.insertAdjacentHTML("beforeend", `<tr class="sotto"><td colspan="9" class="muted">Cerco anche nella biblioteca…</td></tr>`);
     else {
       const trovati = cercaBib(q, { escludiDb: true }).slice(0, 40);
-      if (trovati.length) tb.insertAdjacentHTML("beforeend", `<tr class="sotto bib-testa" data-gruppo="__biblioteca"><td colspan="8">Dalla biblioteca (listini fornitore, non nel database)</td></tr>` +
+      if (trovati.length) tb.insertAdjacentHTML("beforeend", `<tr class="sotto bib-testa" data-gruppo="__biblioteca"><td colspan="9">Dalla biblioteca (listini fornitore, non nel database)</td></tr>` +
         trovati.map((a) => rigaBibHtml(a, "picker")).join(""));
       applicaGruppi(tb);
     }
@@ -3957,7 +3961,7 @@ function rigaBibHtml(a, modo) {
         : '<span class="badge ok">nel database ✓</span>'; })() : `<button type="button" class="btn small" data-bib-db="${esc(a.k)}">Nel database…</button>`)
     : `<button type="button" class="btn small primary" data-bib-add="${esc(a.k)}">Aggiungi…</button>`;
   const desc = `<td class="desc"><b>${esc(a.nOrdine || a.codice)}</b>${modo !== "pagina" ? ` <span class="badge info">${esc(a.fornitore)}</span>` : ""}<div class="d">${esc(a.descrizione)}</div>${a.sottocapitolo ? `<div class="muted small">${esc(a.sottocapitolo)}</div>` : ""}</td>`;
-  if (modo === "picker") return `<tr class="bib" data-bib="${esc(a.k)}"><td></td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
+  if (modo === "picker") return `<tr class="bib" data-bib="${esc(a.k)}"><td></td><td class="mono nowrap">${esc(codiceBib(a))}</td><td class="img-cel"></td>${desc}<td>${esc(a.um)}</td>
     <td class="num">${euro(a.listino)}<div class="muted small">sc. ${sc}</div></td><td class="mono">${esc(k.gma)}</td><td>${decidi}</td><td class="num nowrap">${azione}</td></tr>`;
   return `<tr class="bib" data-bib="${esc(a.k)}"><td>${esc(a.fornitore)}</td><td class="mono nowrap">${esc(codiceBib(a))}</td>${desc}<td>${esc(a.um)}</td>
     <td class="num">${euro(a.listino)}</td><td class="mono small">${a.famiglia ? esc(a.famiglia) + " → " : ""}<b>${esc(k.gma || "—")}</b></td>
