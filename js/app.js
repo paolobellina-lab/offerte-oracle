@@ -3851,11 +3851,11 @@ function diffDb(a) {
   const x = S.dbPerCodice?.get(chiaveDb(codiceBib(a))); if (!x) return null;
   const ntd = (t) => ntDb(t).replace(/[^A-Z0-9À-Ý]+/g, " ").trim();
   const c = [];
-  if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) c.push({ n: "Listino", db: euro(x.listinoAcquisto), li: euro(a.listino), su: num(a.listino) > num(x.listinoAcquisto) });
-  if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) c.push({ n: "Descrizione", db: x.descrizione || "—", li: a.descrizione });
-  if (a.nOrdine && ntDb(a.nOrdine) !== ntDb(x.nOrdine)) c.push({ n: "Modello", db: x.nOrdine || "—", li: a.nOrdine });
-  if (a.um && profiloDi(a.fornitore).mappa?.um && ntDb(a.um).replace(/\./g, "") !== ntDb(x.um).replace(/\./g, "")) c.push({ n: "U.M.", db: x.um || "—", li: a.um });
-  const g = condBib(a).gma; if (g && ntDb(g) !== ntDb(x.gmv)) c.push({ n: "GMA", db: x.gmv || "—", li: g });
+  if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) c.push({ n: "Listino", f: "listinoAcquisto", v: num(a.listino), db: euro(x.listinoAcquisto), li: euro(a.listino), su: num(a.listino) > num(x.listinoAcquisto) });
+  if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) c.push({ n: "Descrizione", f: "descrizione", v: a.descrizione, db: x.descrizione || "—", li: a.descrizione });
+  if (a.nOrdine && ntDb(a.nOrdine) !== ntDb(x.nOrdine)) c.push({ n: "Modello", f: "nOrdine", v: a.nOrdine, db: x.nOrdine || "—", li: a.nOrdine });
+  if (a.um && profiloDi(a.fornitore).mappa?.um && ntDb(a.um).replace(/\./g, "") !== ntDb(x.um).replace(/\./g, "")) c.push({ n: "U.M.", f: "um", v: a.um, db: x.um || "—", li: a.um });
+  const g = condBib(a).gma; if (g && ntDb(g) !== ntDb(x.gmv)) c.push({ n: "GMA", f: "gmv", v: g, db: x.gmv || "—", li: g });
   return { x, campi: c };
 }
 const preparaDbPerCodice = () => { S.dbPerCodice = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) { const k = chiaveDb(codiceArticolo(x)); if (!S.dbPerCodice.has(k)) S.dbPerCodice.set(k, x); } };
@@ -3868,6 +3868,65 @@ function mostraDiffDb(a) {
       <p class="muted small">Per portare il prezzo nuovo nel database usa “Aggiorna i prezzi” in Importa e aggiorna; gli altri campi si cambiano dalla scheda dell'articolo.</p>`,
     pulsanti: [{ label: "Chiudi", value: "annulla" }, { label: "✎ Apri la scheda nel database", value: "ok", cls: "primary" }],
     onConferma() { setTimeout(() => modificaArticolo(d.x), 50); },
+  });
+}
+/* "Aggiorna database" di un fornitore: elenco delle differenze col database, si spuntano le celle da portare nel database. */
+function aggiornaDatabaseDaListino(forn) {
+  preparaDbPerCodice();
+  const lista = S.bib.filter((a) => a.fornitore === forn).map((a) => ({ a, d: diffDb(a) })).filter((o) => o.d?.campi.length);
+  if (!lista.length) return toast(`Nessuna differenza: gli articoli di ${forn} già nel database coincidono col listino.`, 5000);
+  const CAMPI = ["Listino", "Descrizione", "Modello", "U.M.", "GMA"].filter((n) => lista.some((o) => o.d.campi.some((c) => c.n === n)));
+  const conta = (n) => lista.filter((o) => o.d.campi.some((c) => c.n === n)).length;
+  const sel = new Set(); // "i|campo"
+  lista.forEach((o, i) => o.d.campi.forEach((c) => { if (c.n === "Listino") sel.add(`${i}|${c.n}`); }));
+  const cella = (o, i, n) => {
+    const c = o.d.campi.find((x) => x.n === n);
+    if (!c) return `<td class="muted small">=</td>`;
+    const lungo = n === "Descrizione";
+    return `<td class="small" style="${lungo ? "min-width:260px" : ""}"><label style="display:flex;flex-wrap:nowrap;align-items:flex-start;gap:6px;cursor:pointer"><input type="checkbox" style="flex:none;margin-top:2px" data-ad="${i}|${esc(n)}" ${sel.has(`${i}|${n}`) ? "checked" : ""}>
+      <span><span class="muted" style="text-decoration:line-through" title="${esc(c.db)}">${esc(String(c.db).slice(0, lungo ? 90 : 40))}${lungo && String(c.db).length > 90 ? "…" : ""}</span><br><b class="${n === "Listino" ? (c.su ? "bad" : "ok") : ""}" title="${esc(c.li)}">${esc(String(c.li).slice(0, lungo ? 90 : 40))}</b></span></label></td>`;
+  };
+  dialogo({
+    titolo: `Aggiorna database da listino ${forn}`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">${lista.length} articoli del database sono diversi dal listino. Spunta le celle da aggiornare
+        (sopra, barrato, il valore del database; sotto quello del listino). Le spunte nell'intestazione selezionano tutta la colonna.</p>
+      <div class="tbl-wrap" style="max-height:60vh"><table><thead><tr><th><input type="checkbox" id="ad-tutto" title="Seleziona tutto"></th><th>Codice</th><th>Capitolo</th>
+        ${CAMPI.map((n) => `<th class="nowrap"><label style="display:flex;flex-wrap:nowrap;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-ad-col="${esc(n)}" ${n === "Listino" ? "checked" : ""}> ${esc(n)} <span style="opacity:.75">(${conta(n)})</span></label></th>`).join("")}</tr></thead>
+        <tbody>${lista.map((o, i) => `<tr><td><input type="checkbox" data-ad-riga="${i}"></td><td class="mono small nowrap">${esc(codiceBib(o.a))}</td><td class="small">${esc(o.d.x.capitolo)}</td>${CAMPI.map((n) => cella(o, i, n)).join("")}</tr>`).join("")}</tbody></table></div>
+      <p class="small" id="ad-n" style="margin:6px 0 0"></p>
+      <p class="muted small" style="margin:2px 0 0">Gli articoli aggiornati prendono la data di oggi (se cambia il listino). Le offerte già fatte non cambiano: per riallinearle usa “Aggiorna prezzi dal database” nella pagina Righe.</p>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiorna il database", value: "ok", cls: "primary" }],
+    onApri(d) {
+      const conto = () => { const art = new Set([...sel].map((k) => k.split("|")[0])); $("#ad-n", d).innerHTML = `<b>${sel.size}</b> celle selezionate su <b>${art.size}</b> articoli.`; };
+      const imposta = (k, on) => { on ? sel.add(k) : sel.delete(k); const cb = $(`[data-ad="${CSS.escape(k)}"]`, d); if (cb) cb.checked = on; };
+      const tutteDi = (filtro) => lista.flatMap((o, i) => o.d.campi.filter((c) => filtro(i, c.n)).map((c) => `${i}|${c.n}`));
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.dataset.ad) { t.checked ? sel.add(t.dataset.ad) : sel.delete(t.dataset.ad); }
+        else if (t.dataset.adCol) tutteDi((i, n) => n === t.dataset.adCol).forEach((k) => imposta(k, t.checked));
+        else if (t.dataset.adRiga !== undefined) tutteDi((i) => String(i) === t.dataset.adRiga).forEach((k) => imposta(k, t.checked));
+        else if (t.id === "ad-tutto") { tutteDi(() => true).forEach((k) => imposta(k, t.checked)); $$("[data-ad-col],[data-ad-riga]", d).forEach((x) => { x.checked = t.checked; }); }
+        conto();
+      });
+      conto();
+    },
+    async onConferma() {
+      if (!sel.size) { toast("Non hai selezionato nessuna cella."); return false; }
+      const caps = new Set(), oggi = oggiIso(); let nArt = 0;
+      lista.forEach((o, i) => {
+        const campi = o.d.campi.filter((c) => sel.has(`${i}|${c.n}`)); if (!campi.length) return;
+        const art = o.d.x;
+        const auto = !num(art.listino) || Math.abs(num(art.listino) - listinoCalcolato(art)) < 0.005;
+        for (const c of campi) art[c.f] = c.v;
+        if (campi.some((c) => c.n === "Listino" || c.n === "GMA")) { if (auto) art.listino = listinoCalcolato(art); }
+        if (campi.some((c) => c.n === "Listino")) art.dataAgg = oggi;
+        caps.add(art.capitolo); for (const c of propagaClone(art)) caps.add(c);
+        nArt++;
+      });
+      try { await salvaCapitoli([...caps]); } catch (x) { errore(x, "Aggiornamento non riuscito"); return false; }
+      toast(`Database aggiornato: ${nArt} articoli in ${caps.size} capitoli.`, 5000);
+      disegnaBiblioteca();
+    },
   });
 }
 function cercaBib(q, { forn = "", soloDecidere = false, escludiDb = false } = {}) {
@@ -3916,6 +3975,7 @@ function disegnaBiblioteca() {
     return `<tr><td><b>${esc(n)}</b></td><td class="mono">${esc(p.precodice || "")}</td><td class="num">${x.n}</td>
       <td class="num">${x.dec ? `<span class="badge warn">${x.dec}</span>` : ""}</td><td class="small">${p.aggiornatoIl ? new Date(p.aggiornatoIl).toLocaleDateString("it-IT") : ""}</td>
       <td class="nowrap"><button class="btn small" data-forn-agg="${esc(n)}">Aggiorna listino</button>
+        <button class="btn small verde" data-forn-db="${esc(n)}" title="Porta nel database i dati di questo listino (scegli tu quali celle)">Aggiorna database</button>
         <button class="btn small" data-forn-imp="${esc(n)}">Impostazioni</button>
         <button class="icon" data-forn-del="${esc(n)}" title="Togli il listino dalla biblioteca">✕</button></td></tr>`;
   }).join("") : `<tr><td colspan="6" class="vuoto">Nessun listino: caricane uno con “+ Carica listino”.</td></tr>`;
@@ -4116,6 +4176,8 @@ $("#b-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.
 document.addEventListener("click", (e) => {
   const ag = e.target.closest("[data-forn-agg]");
   if (ag) { S.bibAtteso = ag.dataset.fornAgg; $("#b-file").click(); return; }
+  const fdb = e.target.closest("[data-forn-db]");
+  if (fdb) return aggiornaDatabaseDaListino(fdb.dataset.fornDb);
   const im = e.target.closest("[data-forn-imp]");
   if (im) return impostaFornitore(im.dataset.fornImp);
   const de = e.target.closest("[data-forn-del]");
