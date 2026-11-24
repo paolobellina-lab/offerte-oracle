@@ -1046,9 +1046,11 @@ $("#riepilogo-capitoli").addEventListener("click", (e) => {
 // nome completo del capitolo per le mail: descrizione del capitolo del database, altrimenti il nome
 const descrCap = (c) => S.capitoli.find((x) => x.nome === dbNome(c))?.descrizione || c.nome;
 const descrCapDb = (x) => x.descrizione || x.nome;
-function apriGmail(oggetto, corpo) {
-  const url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(oggetto)}&body=${encodeURIComponent(corpo)}`;
-  window.open(url, "_blank", "noopener");
+// copia negli appunti il testo della mail (da incollare in una mail nuova); l'oggetto lo si legge nel messaggio
+async function copiaMail(oggetto, corpo) {
+  try { await navigator.clipboard.writeText(corpo); }
+  catch { const t = document.createElement("textarea"); t.value = corpo; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  toast(`Testo copiato: incollalo nella mail. Oggetto: ${oggetto}`, 7000);
 }
 const oggettoMail = () => { const r = campiRif(S.off); return ["OF", r.rif, r.lavoro].filter(Boolean).join(" - "); };
 const elenco = (l) => l.map((x) => `- ${x}`).join("\n");
@@ -1074,7 +1076,7 @@ sarà possibile un'eventuale integrazione in fase 2
 
 resto a disposizione
 Cordiali saluti`;
-  apriGmail(oggettoMail(), corpo);
+  copiaMail(oggettoMail(), corpo);
 }
 const euroTondo = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " €";
 // costo per l'informativa: acquistato arrotondato per eccesso a 100 € (sotto 5.000), 500 € (sotto 50.000), 1.000 € (sopra)
@@ -1107,7 +1109,7 @@ sotto ti indico i costi dei capitoli :
 ${righe.join("\n")}
 ${frase}
 cordiali saluti`;
-  apriGmail(oggettoMail(), corpo);
+  copiaMail(oggettoMail(), corpo);
 }
 /* ================= Informativa commerciale (Word) ================= */
 // capitolo dell'informativa e sigla di un capitolo del database: quelli scritti nelle impostazioni, altrimenti dedotti dal nome
