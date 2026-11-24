@@ -3900,6 +3900,7 @@ function diffDb(a) {
   const c = [];
   if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) c.push({ n: "Listino", f: "listinoAcquisto", v: num(a.listino), db: euro(x.listinoAcquisto), li: euro(a.listino), su: num(a.listino) > num(x.listinoAcquisto) });
   if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) c.push({ n: "Descrizione", f: "descrizione", v: a.descrizione, db: x.descrizione || "—", li: a.descrizione });
+  if (a.descrEstesa && ntd(a.descrEstesa) !== ntd(x.descrEstesa)) c.push({ n: "Desc. estesa", f: "descrEstesa", v: a.descrEstesa, db: x.descrEstesa || "—", li: a.descrEstesa, vuoto: !x.descrEstesa });
   if (a.nOrdine && ntDb(a.nOrdine) !== ntDb(x.nOrdine)) c.push({ n: "Modello", f: "nOrdine", v: a.nOrdine, db: x.nOrdine || "—", li: a.nOrdine });
   if (a.um && profiloDi(a.fornitore).mappa?.um && ntDb(a.um).replace(/\./g, "") !== ntDb(x.um).replace(/\./g, "")) c.push({ n: "U.M.", f: "um", v: a.um, db: x.um || "—", li: a.um });
   const g = condBib(a).gma; if (g && ntDb(g) !== ntDb(x.gmv)) c.push({ n: "GMA", f: "gmv", v: g, db: x.gmv || "—", li: g });
@@ -3922,14 +3923,15 @@ function aggiornaDatabaseDaListino(forn) {
   preparaDbPerCodice();
   const lista = S.bib.filter((a) => a.fornitore === forn).map((a) => ({ a, d: diffDb(a) })).filter((o) => o.d?.campi.length);
   if (!lista.length) return toast(`Nessuna differenza: gli articoli di ${forn} già nel database coincidono col listino.`, 5000);
-  const CAMPI = ["Listino", "Descrizione", "Modello", "U.M.", "GMA"].filter((n) => lista.some((o) => o.d.campi.some((c) => c.n === n)));
+  const CAMPI = ["Listino", "Descrizione", "Desc. estesa", "Modello", "U.M.", "GMA"].filter((n) => lista.some((o) => o.d.campi.some((c) => c.n === n)));
   const conta = (n) => lista.filter((o) => o.d.campi.some((c) => c.n === n)).length;
   const sel = new Set(); // "i|campo"
-  lista.forEach((o, i) => o.d.campi.forEach((c) => { if (c.n === "Listino") sel.add(`${i}|${c.n}`); }));
+  // di base: i prezzi e le descrizioni estese che nel database mancano
+  lista.forEach((o, i) => o.d.campi.forEach((c) => { if (c.n === "Listino" || (c.n === "Desc. estesa" && c.vuoto)) sel.add(`${i}|${c.n}`); }));
   const cella = (o, i, n) => {
     const c = o.d.campi.find((x) => x.n === n);
     if (!c) return `<td class="muted small">=</td>`;
-    const lungo = n === "Descrizione";
+    const lungo = n === "Descrizione" || n === "Desc. estesa";
     return `<td class="small" style="${lungo ? "min-width:260px" : ""}"><label style="display:flex;flex-wrap:nowrap;align-items:flex-start;gap:6px;cursor:pointer"><input type="checkbox" style="flex:none;margin-top:2px" data-ad="${i}|${esc(n)}" ${sel.has(`${i}|${n}`) ? "checked" : ""}>
       <span><span class="muted" style="text-decoration:line-through" title="${esc(c.db)}">${esc(String(c.db).slice(0, lungo ? 90 : 40))}${lungo && String(c.db).length > 90 ? "…" : ""}</span><br><b class="${n === "Listino" ? (c.su ? "bad" : "ok") : ""}" title="${esc(c.li)}">${esc(String(c.li).slice(0, lungo ? 90 : 40))}</b></span></label></td>`;
   };
@@ -3938,7 +3940,7 @@ function aggiornaDatabaseDaListino(forn) {
     html: `<p class="muted small" style="margin-top:0">${lista.length} articoli del database sono diversi dal listino. Spunta le celle da aggiornare
         (sopra, barrato, il valore del database; sotto quello del listino). Le spunte nell'intestazione selezionano tutta la colonna.</p>
       <div class="tbl-wrap" style="max-height:60vh"><table><thead><tr><th><input type="checkbox" id="ad-tutto" title="Seleziona tutto"></th><th>Codice</th><th>Capitolo</th>
-        ${CAMPI.map((n) => `<th class="nowrap"><label style="display:flex;flex-wrap:nowrap;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-ad-col="${esc(n)}" ${n === "Listino" ? "checked" : ""}> ${esc(n)} <span style="opacity:.75">(${conta(n)})</span></label></th>`).join("")}</tr></thead>
+        ${CAMPI.map((n) => `<th class="nowrap"><label style="display:flex;flex-wrap:nowrap;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-ad-col="${esc(n)}" ${lista.filter((o) => o.d.campi.some((c) => c.n === n)).every((o, _, arr) => sel.has(`${lista.indexOf(o)}|${n}`)) ? "checked" : ""}> ${esc(n)} <span style="opacity:.75">(${conta(n)})</span></label></th>`).join("")}</tr></thead>
         <tbody>${lista.map((o, i) => `<tr><td><input type="checkbox" data-ad-riga="${i}"></td><td class="mono small nowrap">${esc(codiceBib(o.a))}</td><td class="small">${esc(o.d.x.capitolo)}</td>${CAMPI.map((n) => cella(o, i, n)).join("")}</tr>`).join("")}</tbody></table></div>
       <p class="small" id="ad-n" style="margin:6px 0 0"></p>
       <p class="muted small" style="margin:2px 0 0">Gli articoli aggiornati prendono la data di oggi (se cambia il listino). Le offerte già fatte non cambiano: per riallinearle usa “Aggiorna prezzi dal database” nella pagina Righe.</p>`,
@@ -4622,6 +4624,7 @@ async function apriListino(file, atteso = "") {
           // descrizione: diversa solo se quella del listino non è già contenuta in quella del database (spesso più lunga)
           const ntd = (t) => nt(t).replace(/[^A-Z0-9À-Ý]+/g, " ").trim();
           if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) campi.push(["Descrizione", x.descrizione || "—", a.descrizione]);
+          if (a.descrEstesa && ntd(a.descrEstesa) !== ntd(x.descrEstesa)) campi.push(["Desc. estesa", x.descrEstesa || "—", a.descrEstesa]);
           if (a.nOrdine && nt(a.nOrdine) !== nt(x.nOrdine)) campi.push(["Modello / n° ord.", x.nOrdine || "—", a.nOrdine]);
           if (st.mappa.um && a.um && nt(a.um).replace(/\./g, "") !== nt(x.um).replace(/\./g, "")) campi.push(["U.M.", x.um || "—", a.um]);
           if (gmaL && nt(gmaL) !== nt(x.gmv)) campi.push(["GMA", x.gmv || "—", gmaL]);
@@ -4629,7 +4632,7 @@ async function apriListino(file, atteso = "") {
         }
         const contaCampo = (n) => diff.filter((d) => d.campi.some((c) => c[0] === n)).length;
         st.nascondi ||= new Set();
-        const CAMPI_D = ["Listino", "Descrizione", "Modello / n° ord.", "U.M.", "GMA"];
+        const CAMPI_D = ["Listino", "Descrizione", "Desc. estesa", "Modello / n° ord.", "U.M.", "GMA"];
         const vis = diff.map((d) => ({ ...d, campi: d.campi.filter((c) => !st.nascondi.has(c[0])) })).filter((d) => d.campi.length)
           .sort((p, q) => (q.campi[0][0] === "Listino") - (p.campi[0][0] === "Listino"));
         const diffHtml = !diff.length ? (giaDb ? `<div class="avviso ok small" style="margin-top:8px">✓ I ${giaDb} articoli già nel database coincidono col listino (listino, descrizione, modello, U.M., GMA).</div>` : "")
