@@ -2360,7 +2360,41 @@ function statoNote(c) {
   $("#note-stato").className = mod ? "bad small" : "muted small";
   $("#salva-note").classList.toggle("primary", mod);
 }
-$("#export-note").addEventListener("input", () => { const c = capExport(); if (c) statoNote(c); });
+/* A capo come nel campo note di Oracle: larghezza fissa (Arial, ~17,8 volte il corpo), si va a capo dopo uno spazio o un punto
+   (non dopo "_"). Misurata sui PDF: "NP.IE.061_NP.IE.062_NP.IE.063_NP.IE." ci sta, "NP.IE.055_NP.IE.056A_NP.IE.056B_NP." no. */
+const LARGH_NOTE = 17.78;
+let ctxNote = null;
+function righeOracleNote(testo) {
+  ctxNote ||= document.createElement("canvas").getContext("2d");
+  ctxNote.font = "100px Arial, 'Liberation Sans', Helvetica, sans-serif";
+  const max = LARGH_NOTE * 100, w = (t) => ctxNote.measureText(t).width;
+  const out = [];
+  for (const riga of String(testo).split("\n")) {
+    let r = riga;
+    if (!r) { out.push(""); continue; }
+    while (w(r) > max) {
+      let fit = 0; while (fit < r.length && w(r.slice(0, fit + 1)) <= max) fit++;
+      let taglio = -1; for (let i = fit; i > 0; i--) if (/[ .]/.test(r[i - 1])) { taglio = i; break; }
+      if (taglio <= 0) taglio = Math.max(1, fit);
+      out.push(r.slice(0, taglio).replace(/ +$/, "")); r = r.slice(taglio).replace(/^ +/, "");
+    }
+    out.push(r);
+  }
+  return out;
+}
+function aggiornaNoteRighe() {
+  const righe = righeOracleNote($("#export-note").value);
+  $("#note-righe").textContent = `${righe.length} righe in Oracle`;
+  if (!$("#note-anteprima").hidden) $("#note-anteprima").textContent = righe.join("\n");
+}
+$("#note-vedi").addEventListener("click", () => {
+  const an = $("#note-anteprima"), ta = $("#export-note"), vedi = an.hidden;
+  an.hidden = !vedi; ta.hidden = vedi;
+  $("#note-vedi").textContent = vedi ? "✎ Modifica" : "👁 Come esce in Oracle";
+  aggiornaNoteRighe(); if (!vedi) ta.focus();
+});
+$("#note-anteprima").addEventListener("click", () => $("#note-vedi").click());
+$("#export-note").addEventListener("input", () => { const c = capExport(); if (c) statoNote(c); aggiornaNoteRighe(); });
 $("#salva-note").addEventListener("click", () => {
   const c = capExport(); if (!c) return;
   const t = $("#export-note").value;
@@ -2414,6 +2448,7 @@ function disegnaExport(c) {
   $("#export-avvisi").innerHTML = av.join("");
   $("#export-titolo").textContent = `Foglio per Oracle del capitolo ${c.nome} — ${righe.length} righe`;
   if (document.activeElement !== $("#export-note")) $("#export-note").value = c.noteOracle || noteOracle(c);
+  aggiornaNoteRighe();
   statoNote(c);
   $("#tab-export").innerHTML = `<thead><tr>${COLONNE_ORACLE.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
     <tbody>${righe.map((r) => `<tr>${r.map((v, i) => `<td class="${typeof v === "number" ? "num" : i === 1 ? "mono" : ""}"${typeof v === "string" && v.length > 30 ? ` title="${esc(v)}"` : ""}>${esc(typeof v === "number" ? numIt(v) : v)}</td>`).join("")}</tr>`).join("")}</tbody>`;

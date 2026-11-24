@@ -323,7 +323,11 @@
               <button class="btn" id="std-note" title="Torna al testo standard">↺ Standard</button>
               <button class="btn verde" id="copia-note">⧉ Copia note</button></div>
             <span class="muted small" id="note-stato"></span>
-            <textarea id="export-note" spellcheck="false" title="Si compila col capitolo e il riferimento dell'offerta; puoi modificarla prima di copiarla"></textarea>
+            <div class="note-zona">
+              <textarea id="export-note" spellcheck="false" title="Larga come il campo note di Oracle: le righe vanno a capo nello stesso punto"></textarea>
+              <div id="note-anteprima" class="note-anteprima" hidden title="Come esce nel PDF di Oracle (clic per tornare a modificare)"></div>
+            </div>
+            <div class="row small" style="align-items:center;gap:8px"><button class="btn small" id="note-vedi">👁 Come esce in Oracle</button><span class="muted" id="note-righe"></span></div>
           </div>
           </div>
           <div class="tbl-wrap"><table id="tab-export"></table></div>

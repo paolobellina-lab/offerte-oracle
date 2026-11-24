@@ -985,5 +985,9 @@ label.cens-bottom input { height: 38px; box-sizing: border-box; }
 .export-griglia { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 0 14px; align-items: stretch; }
 .export-sx { min-width: 0; }
 .export-note { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.export-note textarea { flex: 1; min-height: 220px; width: 100%; resize: vertical; font: 13px/1.45 ui-monospace, Consolas, monospace; padding: 8px; }
+/* larghezza del campo note di Oracle: ~17,8 volte la dimensione del carattere (Arial), le righe vanno a capo come in Oracle */
+.note-zona { flex: 1; display: flex; justify-content: center; min-height: 220px; }
+.export-note textarea, .note-anteprima { width: calc(13px * 17.78 + 16px + 18px); box-sizing: border-box; min-height: 220px; font: 13px/1.45 Arial, "Liberation Sans", Helvetica, sans-serif; padding: 8px; }
+.export-note textarea { resize: vertical; overflow-y: scroll; }
+.note-anteprima { text-align: center; white-space: pre; background: #fff; color: #111; border: 1px solid var(--bordo, #ccc); border-radius: 6px; overflow: auto; cursor: text; }
 @media (max-width: 900px) { .export-griglia { grid-template-columns: 1fr; } }
