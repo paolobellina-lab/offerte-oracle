@@ -1874,7 +1874,7 @@ function disegnaPicker(c, reset = false) {
   const conta = contaInOfferta(c);
   const lista = nelDb.filter((a) => (!sottoSel.value || a.sottocapitolo === sottoSel.value) &&
     (!solo || conta.has(a.k)) &&
-    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)));
+    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.descrEstesa || ""} ${a.gmv}`.toLowerCase().includes(q)));
   // con una ricerca, delle copie collegate (cloni) se ne mostra una sola
   const visti = new Set();
   const unici = q ? lista.filter((a) => { if (!a.clone) return true; if (visti.has(a.clone)) return false; visti.add(a.clone); return true; }) : lista;
@@ -2704,7 +2704,7 @@ function disegnaCatalogo() {
   const sotto = ss.value;
   const q = $("#c-cerca").value.trim().toLowerCase();
   const lista = S.catalogo.filter((a) => (!cap || a.capitolo === cap) && (!sotto || a.sottocapitolo === sotto) &&
-    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.gmv}`.toLowerCase().includes(q)) && passaFiltriCat(a));
+    (!q || `${codiceArticolo(a)} ${a.nOrdine} ${a.descrizione} ${a.descrEstesa || ""} ${a.gmv}`.toLowerCase().includes(q)) && passaFiltriCat(a));
   S.catListaFiltrata = lista;
   const dp = $("#cf-dop").value;
   const chiaveDop = (a) => (dp === "nord" || (dp === "tutti" && !doppioCod(a)) ? "N° ordinazione " + (a.nOrdine || "") : "Codice " + codiceArticolo(a));
@@ -2719,7 +2719,7 @@ function disegnaCatalogo() {
     html += `<tr class="cliccabile${S.catEdit && S.catSel.has(a.k) ? " sel" : ""}${S.catApp?.taglio && S.catApp.ks.includes(a.k) ? " taglio" : ""}" data-k="${esc(a.k)}">
       <td class="mono nowrap">${codiceVis(a)}</td>
       <td class="img-cel">${a.img ? `<img class="img-mini" data-img="${esc(a.img)}" alt="">` : ""}</td>
-      <td class="desc"><b>${esc(a.nOrdine)}</b>${a.clone && cloniDi(a).length > 1 ? ` <span class="badge info" title="Riga clonata: è collegata ad altre ${cloniDi(a).length - 1} copie nel database">🔗 ${cloniDi(a).length}</span>` : ""}${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
+      <td class="desc"><b>${esc(a.nOrdine)}</b>${a.clone && cloniDi(a).length > 1 ? ` <span class="badge info" title="Riga clonata: è collegata ad altre ${cloniDi(a).length - 1} copie nel database">🔗 ${cloniDi(a).length}</span>` : ""}${dp ? ` <span class="badge info">${esc(a.capitolo)} · ${esc(a.sottocapitolo || "—")}</span>` : ""}${a.descrEstesa ? ` <span class="badge info" title="${esc(a.descrEstesa.slice(0, 600))}">+ estesa</span>` : ""}<div class="d">${esc(a.descrizione)}</div></td>
       <td>${esc(a.um)}</td><td class="num">${euro(a.listinoAcquisto)}</td>
       ${(() => { const e = scontiEffettivi(a), c = e.daGma ? ' class="num std-gma" title="Acquisto standard del GMA"' : ' class="num"';
         return `<td${c}>${pctTxt(e.sc3)}</td><td${c}>${pctTxt(e.sc4)}</td><td${c}>${pctTxt(e.sc5)}</td><td${c}>${pctTxt(e.aum1)}</td>`; })()}<td class="mono">${esc(a.gmv)}</td>
@@ -3138,7 +3138,10 @@ function modificaArticolo(a) {
             <button type="button" class="btn small" id="m-img-togli" hidden>Togli</button></div>
           <span class="muted small">oppure incolla (Ctrl+V) o trascina qui</span>
         </div></div>
-      <label class="f" style="flex:1">Descrizione<textarea id="m-des" rows="5">${esc(a.descrizione)}</textarea></label>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <label class="f">Descrizione breve<textarea id="m-des" rows="3">${esc(a.descrizione)}</textarea></label>
+        <label class="f">Descrizione estesa<textarea id="m-dest" rows="5" placeholder="(vuota)">${esc(a.descrEstesa || "")}</textarea></label>
+      </div>
     </div>
     <div class="grid-set" style="margin-top:10px" id="m-note-box">
       <label class="f wide">Note pre-linea<textarea id="m-npre" rows="2">${esc(a.notePre)}</textarea></label>
@@ -3244,7 +3247,7 @@ function modificaArticolo(a) {
       nOrdine: g("#m-ord").trim(), um: g("#m-um").trim(), gmv: g("#m-gmv").trim(), fornitore: fornScelto($("#m-gmv", b), $("#m-forn", b)),
       listinoAcquisto: num(g("#m-la")), giorni: num(g("#m-gg")),
       sc3: daPct(g("#m-sc3")), sc4: daPct(g("#m-sc4")), sc5: daPct(g("#m-sc5")), aum1: daPct(g("#m-aum1")), riparam: num(a.riparam) || 0,
-      listino: num(g("#m-li")), dataAgg: g("#m-data"), descrizione: g("#m-des"), notePre: g("#m-npre"), notePost: g("#m-npost"),
+      listino: num(g("#m-li")), dataAgg: g("#m-data"), descrizione: g("#m-des"), descrEstesa: g("#m-dest").trim(), notePre: g("#m-npre"), notePost: g("#m-npost"),
       generico: $("#m-gen", b).checked,
     };
   }
@@ -4105,7 +4108,7 @@ function articoloDaBib(a, capitolo, sottocapitolo) {
   if (pos.length > 2) sc.push(1 - BIB.fattoreDi(pos.slice(2)));
   const art = {
     capitolo, sottocapitolo: sottocapitolo || "", rifCap: "", pos: "",
-    precodice: a.precodice ?? p.precodice ?? "", codice: a.codice, nOrdine: a.nOrdine || "", descrizione: a.descrizione || "", um: a.um || "n.",
+    precodice: a.precodice ?? p.precodice ?? "", codice: a.codice, nOrdine: a.nOrdine || "", descrizione: a.descrizione || "", descrEstesa: a.descrEstesa || "", um: a.um || "n.",
     listinoAcquisto: num(a.listino), giorni: 0, riparam: 0,
     // sconti uguali all'acquisto standard del GMA: l'articolo non li salva e segue lo standard
     ...(k.fonte === "gma" && standardGma(k.gma, (voceGma(k.gma, a.fornitore) || voceGma(k.gma))?.fornitore) ? { sc3: 0, sc4: 0, sc5: 0, aum1: 0 } : { sc3: sc[0] || 0, sc4: sc[1] || 0, sc5: sc[2] || 0, aum1: neg.length ? BIB.fattoreDi(neg) - 1 : 0 }),

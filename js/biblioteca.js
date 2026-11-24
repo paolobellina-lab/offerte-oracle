@@ -6,7 +6,8 @@ import { num } from "./calc.js";
 export const CAMPI = [
   { k: "codice", label: "Codice (va in Oracle)", obbl: true, chiavi: ["codice prodotto azienda", "codice ordinazione", "codice d'ordine", "codice articolo", "codice prodotto", "order code", "sen", "codici", "codice", "code", "articolo", "art."] },
   { k: "nOrdine", label: "Modello / n° ordinazione", chiavi: ["article type", "riferimento prodotto", "modello", "tipo", "type", "riferimento", "codice prodotto"] },
-  { k: "descrizione", label: "Descrizione", chiavi: ["descrizione prodotto", "descrizione breve", "short description", "descrizione", "description", "desc"] },
+  { k: "descrizione", label: "Descrizione breve", chiavi: ["descrizione breve", "short description", "descrizione prodotto", "descrizione", "description", "desc"] },
+  { k: "descrEstesa", label: "Descrizione estesa (se c'è)", chiavi: ["descrizione estesa", "descrizione lunga", "long description", "extended description", "descrizione completa", "testo esteso"] },
   { k: "prezzo", label: "Prezzo di listino", obbl: true, chiavi: ["prezzo al rivenditore", "prezzo di listino", "listino prezzi", "llp", "prezzo unitario", "prezzo listino", "listino", "list price", "prezzo", "price", "value"] },
   { k: "netto", label: "Prezzo netto (se c'è)", chiavi: ["prezzo netto", "netto", "net price", "net"] },
   { k: "sconto", label: "Sconto % (se c'è)", chiavi: ["sconto", "discount"] },
@@ -107,6 +108,7 @@ export function leggiListino(fogli, mappa, opz = {}) {
         codice: cod.replace(/\s+/g, " "),
         nOrdine: col.nOrdine !== undefined ? testo(r[col.nOrdine]) : "",
         descrizione: col.descrizione !== undefined ? testo(r[col.descrizione]).replace(/\s+/g, " ") : "",
+        descrEstesa: col.descrEstesa !== undefined ? testo(r[col.descrEstesa]).replace(/[ \t]+/g, " ").trim() : "",
         listino: Math.round(listino * 1e6) / 1e6,
         scListino: netto ? 1 - netto / prezzo : sconto || null,
         famiglia: col.famiglia !== undefined ? testo(r[col.famiglia]) : "",
