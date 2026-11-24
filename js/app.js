@@ -4468,12 +4468,43 @@ async function apriListino(file, atteso = "") {
         const giaDb = letti.articoli.filter((a) => dbFull.has(chiaveDb(st.precodice + a.codice))).length;
         const preDb = new Map(); for (const a of letti.articoli) { const p = dbCod.get(chiaveDb(a.codice)); if (p !== undefined && chiaveDb(p) !== chiaveDb(st.precodice)) preDb.set(p, (preDb.get(p) || 0) + 1); }
         const [preSugg, nSugg] = [...preDb.entries()].sort((x, y) => y[1] - x[1])[0] || [];
+        // differenze con gli articoli già nel database: listino, descrizione, modello, U.M., GMA
+        const dbPer = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) { const k = chiaveDb(codiceArticolo(x)); if (!dbPer.has(k)) dbPer.set(k, x); }
+        const nt = (t) => String(t ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+        const diff = [];
+        for (const a of letti.articoli) {
+          const x = dbPer.get(chiaveDb(st.precodice + a.codice)); if (!x) continue;
+          const gmaL = (a.famiglia ? st.famiglie[a.famiglia] : "") || a.gma || (!a.famiglia ? st.gmaDefault : "") || "";
+          const campi = [];
+          if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) campi.push(["Listino", euro(x.listinoAcquisto), euro(a.listino), num(a.listino) > num(x.listinoAcquisto) ? "su" : "giu"]);
+          // descrizione: diversa solo se quella del listino non è già contenuta in quella del database (spesso più lunga)
+          const ntd = (t) => nt(t).replace(/[^A-Z0-9À-Ý]+/g, " ").trim();
+          if (a.descrizione && !ntd(x.descrizione).includes(ntd(a.descrizione))) campi.push(["Descrizione", x.descrizione || "—", a.descrizione]);
+          if (a.nOrdine && nt(a.nOrdine) !== nt(x.nOrdine)) campi.push(["Modello / n° ord.", x.nOrdine || "—", a.nOrdine]);
+          if (st.mappa.um && a.um && nt(a.um).replace(/\./g, "") !== nt(x.um).replace(/\./g, "")) campi.push(["U.M.", x.um || "—", a.um]);
+          if (gmaL && nt(gmaL) !== nt(x.gmv)) campi.push(["GMA", x.gmv || "—", gmaL]);
+          if (campi.length) diff.push({ cod: codiceArticolo(x), cap: x.capitolo, campi });
+        }
+        const contaCampo = (n) => diff.filter((d) => d.campi.some((c) => c[0] === n)).length;
+        st.nascondi ||= new Set();
+        const CAMPI_D = ["Listino", "Descrizione", "Modello / n° ord.", "U.M.", "GMA"];
+        const vis = diff.map((d) => ({ ...d, campi: d.campi.filter((c) => !st.nascondi.has(c[0])) })).filter((d) => d.campi.length)
+          .sort((p, q) => (q.campi[0][0] === "Listino") - (p.campi[0][0] === "Listino"));
+        const diffHtml = !diff.length ? (giaDb ? `<div class="avviso ok small" style="margin-top:8px">✓ I ${giaDb} articoli già nel database coincidono col listino (listino, descrizione, modello, U.M., GMA).</div>` : "")
+          : `<details style="margin-top:8px" open><summary class="small" style="font-weight:600">⚠ ${diff.length} articoli del database diversi da questo listino:
+              ${CAMPI_D.map((n) => [n, contaCampo(n)]).filter(([, k]) => k).map(([n, k]) => `${esc(n)} ${k}`).join(" · ")}</summary>
+            <div class="row small" style="gap:4px 14px;flex-wrap:wrap;margin-top:4px"><span class="muted">Mostra:</span>${CAMPI_D.filter((n) => contaCampo(n)).map((n) => `<label class="row"><input type="checkbox" data-lg-diff="${esc(n)}" ${st.nascondi.has(n) ? "" : "checked"}> ${esc(n)}</label>`).join("")}</div>
+            <div class="tbl-wrap" style="max-height:260px;margin-top:6px"><table><thead><tr><th>Codice</th><th>Capitolo</th><th>Campo</th><th>Nel database</th><th>Nel listino</th></tr></thead><tbody>
+            ${vis.slice(0, 300).map((d) => d.campi.map((c, i) => `<tr>${i === 0 ? `<td class="mono small" rowspan="${d.campi.length}">${esc(d.cod)}</td><td class="small" rowspan="${d.campi.length}">${esc(d.cap)}</td>` : ""}
+              <td class="small"><b>${esc(c[0])}</b></td><td class="small" title="${esc(c[1])}">${esc(String(c[1]).slice(0, 140))}${String(c[1]).length > 140 ? "…" : ""}</td><td class="small ${c[3] === "su" ? "bad" : c[3] === "giu" ? "ok" : ""}" title="${esc(c[2])}"><b>${esc(String(c[2]).slice(0, 140))}</b></td></tr>`).join("")).join("")}
+            </tbody></table></div>
+            <p class="muted small" style="margin:4px 0 0">Il database non cambia caricando il listino: per aggiornare i prezzi usa “Aggiorna i prezzi” in Importa e aggiorna.</p></details>`;
         $("#lg-anteprima", d).innerHTML = `${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
             <button type="button" class="btn small primary" data-lg-usa-pre="${esc(preSugg)}">Usa il precodice ${esc(preSugg || "vuoto")}</button></div>` : ""}
           <span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""} · <span class="${giaDb ? "ok" : ""}">${giaDb} già nel database</span> (confronto per precodice + codice)</span>
           <div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Codice Oracle</th><th>Modello</th><th>Descrizione</th><th>U.M.</th><th class="num">Listino</th><th class="num">Sconto listino</th><th>Famiglia</th><th>Sottocapitolo</th></tr></thead><tbody>
           ${es.map((a) => `<tr><td class="mono">${esc(st.precodice + a.codice)}</td><td>${esc(a.nOrdine)}</td><td class="small">${esc(a.descrizione.slice(0, 80))}</td><td>${esc(a.um)}</td><td class="num">${euro(a.listino)}</td><td class="num">${a.scListino === null ? "" : pctTxt(a.scListino)}</td><td>${esc(a.famiglia)}</td><td class="small">${esc(a.sottocapitolo)}</td></tr>`).join("") || `<tr><td colspan="8" class="vuoto">Nessun articolo: controlla le colonne codice e prezzo.</td></tr>`}
-          </tbody></table></div>`;
+          </tbody></table></div>${diffHtml}`;
         // famiglie di sconto → GMA (con lo sconto standard del GMA)
         const fam = new Map();
         for (const a of letti.articoli) fam.set(a.famiglia || "", (fam.get(a.famiglia || "") || 0) + 1);
@@ -4500,6 +4531,7 @@ async function apriListino(file, atteso = "") {
         else if (t.dataset.lgCampo) { if (t.value) st.mappa[t.dataset.lgCampo] = t.value; else delete st.mappa[t.dataset.lgCampo]; }
         else if (t.dataset.lgFam !== undefined) { const f = t.dataset.lgFam, g = t.value.trim(); if (f) { if (g) st.famiglie[f] = g; else delete st.famiglie[f]; } else st.gmaDefault = g; }
         else if (t.dataset.lgSc !== undefined) { st.sconti[t.dataset.lgSc] = t.value.trim(); return; }
+        else if (t.dataset.lgDiff !== undefined) { t.checked ? st.nascondi.delete(t.dataset.lgDiff) : st.nascondi.add(t.dataset.lgDiff); }
         else return;
         aggiorna();
       });
