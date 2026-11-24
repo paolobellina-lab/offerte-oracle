@@ -3906,7 +3906,8 @@ function diffDb(a) {
   const g = condBib(a).gma; if (g && ntDb(g) !== ntDb(x.gmv)) c.push({ n: "GMA", f: "gmv", v: g, db: x.gmv || "—", li: g });
   return { x, campi: c };
 }
-const preparaDbPerCodice = () => { S.dbPerCodice = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) { const k = chiaveDb(codiceArticolo(x)); if (!S.dbPerCodice.has(k)) S.dbPerCodice.set(k, x); } };
+// (anche gli articoli trattati come generici: hanno comunque precodice e codice veri)
+const preparaDbPerCodice = () => { S.dbPerCodice = new Map(); for (const x of S.catalogo) { const k = chiaveDb(codiceArticolo(x)); if (!S.dbPerCodice.has(k)) S.dbPerCodice.set(k, x); } };
 function mostraDiffDb(a) {
   const d = diffDb(a); if (!d) return;
   dialogo({ titolo: `${codiceBib(a)} · listino ${a.fornitore} e database`,
@@ -3964,12 +3965,15 @@ function aggiornaDatabaseDaListino(forn) {
       const caps = new Set(), oggi = oggiIso(); let nArt = 0;
       lista.forEach((o, i) => {
         const campi = o.d.campi.filter((c) => sel.has(`${i}|${c.n}`)); if (!campi.length) return;
-        const art = o.d.x;
-        const auto = !num(art.listino) || Math.abs(num(art.listino) - listinoCalcolato(art)) < 0.005;
-        for (const c of campi) art[c.f] = c.v;
-        if (campi.some((c) => c.n === "Listino" || c.n === "GMA")) { if (auto) art.listino = listinoCalcolato(art); }
-        if (campi.some((c) => c.n === "Listino")) art.dataAgg = oggi;
-        caps.add(art.capitolo); for (const c of propagaClone(art)) caps.add(c);
+        // lo stesso articolo può essere nel database più volte (copie in capitoli diversi): si aggiornano tutte
+        const k = chiaveDb(codiceArticolo(o.d.x));
+        for (const art of S.catalogo.filter((y) => chiaveDb(codiceArticolo(y)) === k)) {
+          const auto = !num(art.listino) || Math.abs(num(art.listino) - listinoCalcolato(art)) < 0.005;
+          for (const c of campi) art[c.f] = c.v;
+          if (campi.some((c) => c.n === "Listino" || c.n === "GMA")) { if (auto) art.listino = listinoCalcolato(art); }
+          if (campi.some((c) => c.n === "Listino")) art.dataAgg = oggi;
+          caps.add(art.capitolo); for (const c of propagaClone(art)) caps.add(c);
+        }
         nArt++;
       });
       try { await salvaCapitoli([...caps]); } catch (x) { errore(x, "Aggiornamento non riuscito"); return false; }
@@ -4607,13 +4611,13 @@ async function apriListino(file, atteso = "") {
         for (const [n, x] of Object.entries(letti.perFoglio)) { const el = $(`[data-lg-n="${CSS.escape(n)}"]`, d); if (el) el.textContent = `(${x})`; }
         const es = letti.articoli.slice(0, 6);
         // articoli già nel database (precodice + codice); se il precodice è vuoto o diverso, si propone quello usato nel database
-        const dbCod = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) dbCod.set(chiaveDb(x.codice), x.precodice || "");
+        const dbCod = new Map(); for (const x of S.catalogo) dbCod.set(chiaveDb(x.codice), x.precodice || "");
         const dbFull = new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x))));
         const giaDb = letti.articoli.filter((a) => dbFull.has(chiaveDb(st.precodice + a.codice))).length;
         const preDb = new Map(); for (const a of letti.articoli) { const p = dbCod.get(chiaveDb(a.codice)); if (p !== undefined && chiaveDb(p) !== chiaveDb(st.precodice)) preDb.set(p, (preDb.get(p) || 0) + 1); }
         const [preSugg, nSugg] = [...preDb.entries()].sort((x, y) => y[1] - x[1])[0] || [];
         // differenze con gli articoli già nel database: listino, descrizione, modello, U.M., GMA
-        const dbPer = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) { const k = chiaveDb(codiceArticolo(x)); if (!dbPer.has(k)) dbPer.set(k, x); }
+        const dbPer = new Map(); for (const x of S.catalogo) { const k = chiaveDb(codiceArticolo(x)); if (!dbPer.has(k)) dbPer.set(k, x); }
         const nt = (t) => String(t ?? "").toUpperCase().replace(/\s+/g, " ").trim();
         const diff = [];
         for (const a of letti.articoli) {
