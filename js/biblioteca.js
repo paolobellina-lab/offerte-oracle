@@ -179,7 +179,102 @@ export function unisciListino(esistenti, letti, oggi) {
    - intestazioni e piè di pagina che si ripetono su più pagine si ignorano. */
 const RE_PREZZO = /^(?:€\s*)?\d{1,3}(?:\.\d{3})*,\d{2}\s*€?$|^(?:€\s*)?\d+[.,]\d{2}\s*€?$/;
 const pareParolaIntestazione = (t) => /\b(codic|prezz|descriz|listino|riferim|unitari|articol|code|price|description)/i.test(t);
+/* Listino con intestazione ripetuta su ogni pagina e due colonne di testo lungo (descrizione breve ed estesa, righe sfalsate):
+   le colonne si prendono dalle posizioni dell'intestazione di ogni pagina e ogni pezzo di testo va con la riga di prezzo più vicina. */
+function righeDaPdfConIntestazione(pagine) {
+  const out = [], eventi = [], globali = [];
+  let cols = null, nomi = null;
+  const eTesta = (i) => /^descrizione (estesa|breve)$/i.test(i.str.trim());
+  const perPag = pagine.map((items) => items.filter((i) => i.str.trim()));
+  // testi ripetuti su molte pagine sopra le intestazioni (titolo del documento): non sono titoli di sezione
+  const ripetuti = new Map();
+  perPag.forEach((items, p) => { for (const i of items) { const k = i.str.trim().toLowerCase(); if (!ripetuti.has(k)) ripetuti.set(k, new Set()); ripetuti.get(k).add(p); } });
+  const ripetuto = (i) => (ripetuti.get(i.str.trim().toLowerCase())?.size || 0) >= 3 && !RE_PREZZO.test(i.str.trim());
+  const ZONA_TITOLO = 55; // spazio sopra un'intestazione dove sta il titolo della sezione
+  perPag.forEach((items, p) => {
+    // una pagina può avere più tabelle, ognuna con la sua intestazione (e il suo titolo sopra)
+    const teste = [...new Set(items.filter(eTesta).map((i) => Math.round(i.y)))].sort((x, y) => y - x);
+    const bande = teste.length ? teste.map((y, k) => ({ y, sotto: k + 1 < teste.length ? teste[k + 1] + 3 : -Infinity })) : [{ y: Infinity, sotto: -Infinity }];
+    const prezzi = items.filter((i) => RE_PREZZO.test(i.str.trim())).map((i) => i.y);
+    // titolo di una sezione: sopra l'intestazione, lontano dai prezzi (non è una riga di prodotto)
+    const titoli = new Set(items.filter((i) => teste.some((y) => i.y > y + 3 && i.y <= y + ZONA_TITOLO) && !ripetuto(i) && !prezzi.some((py) => Math.abs(py - i.y) < 22)));
+    for (const banda of bande) {
+      if (banda.y !== Infinity) {
+        const testa = items.filter((i) => Math.abs(i.y - banda.y) < 3).sort((a, b) => a.x - b.x);
+        // inizio di ogni colonna: a metà tra la fine dell'intestazione precedente e l'inizio della sua (vale per colonne centrate e allineate a sinistra)
+        cols = testa.map((i, k) => ({ x: i.x, da: k ? (testa[k - 1].x + testa[k - 1].w + i.x) / 2 : -Infinity }));
+        // nomi uguali per tutte le pagine: un nome nuovo nella stessa posizione di una colonna già vista (es. "Network Switch" al posto di "Riferimento Prodotto") prende quel nome
+        nomi = testa.map((i) => {
+          const n = i.str.trim(), noto = globali.find((g) => g.n.toLowerCase() === n.toLowerCase());
+          if (noto) return noto.n;
+          const vicino = globali.find((g) => Math.abs(g.x - i.x) < 15 && !testa.some((t) => t.str.trim().toLowerCase() === g.n.toLowerCase()));
+          if (vicino) return vicino.n;
+          globali.push({ n, x: i.x }); return n;
+        });
+        const sez = items.filter((i) => titoli.has(i) && i.y > banda.y + 3 && i.y <= banda.y + ZONA_TITOLO).sort((a, b) => b.y - a.y || a.x - b.x);
+        if (sez.length) eventi.push({ p, y: banda.y + 1, sez: sez.map((i) => i.str.trim()).join(" ") });
+      }
+      if (!cols) continue;
+      // colonna: quella che inizia dove inizia il testo (colonne allineate a sinistra), altrimenti il centro d'intestazione più vicino (colonne centrate)
+      const iPrezzo = nomi.findIndex((n) => /listino|prezzo|price/i.test(n));
+      // i prezzi vanno nella colonna del listino; il testo nella colonna dove inizia (mai in quella del listino: una riga lunga della
+      // descrizione estesa può finire sotto l'intestazione "Listino"); le colonne dopo il listino solo se il testo parte lì
+      const colDi = (i) => {
+        if (RE_PREZZO.test(i.str.trim()) && iPrezzo >= 0 && i.x > cols[iPrezzo].da - 60) return iPrezzo;
+        // posizione del testo: il centro per i testi corti (colonne centrate), poco dopo l'inizio per quelli lunghi
+        const pos = Math.min(i.x + (i.w || 0) / 2, i.x + 40);
+        let c = cols.findIndex((k, j) => j !== iPrezzo && !/^immagine|^foto|^image/i.test(nomi[j])); if (c < 0) c = 0;
+        cols.forEach((k, j) => { if (j === iPrezzo || /^immagine|^foto|^image/i.test(nomi[j])) return; if (j > iPrezzo && iPrezzo >= 0 ? i.x >= k.x - 20 : pos >= k.da) c = j; });
+        return c;
+      };
+      // (i testi ripetuti su molte pagine si scartano solo in cima alla pagina: dentro la tabella sono descrizioni uguali di prodotti simili)
+      const cima = teste.length ? teste[0] : Infinity;
+      const corpo = items.filter((i) => i.y < banda.y - 3 && i.y > banda.sotto && !titoli.has(i) && !(i.y > cima && ripetuto(i)) && !/^pagina \d+ di \d+$/i.test(i.str.trim()));
+      // righe di prodotto: un prezzo, oppure un testo nella colonna del listino ("SU RICHIESTA") sulla stessa riga di un codice
+      const iCod = nomi.findIndex((n) => /^codice/i.test(n));
+      const inListino = (i) => iPrezzo >= 0 && i.x >= cols[iPrezzo].x - 15 && (iPrezzo + 1 >= cols.length || i.x < cols[iPrezzo + 1].x - 20);
+      const conCodice = (i) => iCod >= 0 && corpo.some((j) => j !== i && Math.abs(j.y - i.y) < 2 && colDi(j) === iCod);
+      const ancore = corpo.filter((i) => (RE_PREZZO.test(i.str.trim()) && colDi(i) === iPrezzo) || (!RE_PREZZO.test(i.str.trim()) && inListino(i) && conCodice(i))).map((i) => ({ y: i.y, it: i, celle: nomi.map(() => []) }));
+      if (!ancore.length) continue;
+      // il testo di una colonna si raggruppa in blocchi (righe vicine): un blocco va col prodotto che ha il prezzo alla sua altezza;
+      // se ce ne sono più di uno (prodotti vicini), ogni riga va col più vicino; se nessuno, col più vicino al centro del blocco
+      const vicino = (y, tra = ancore) => { let best = null, d = Infinity; for (const a of tra) { const dd = Math.abs(a.y - y); if (dd < d) { d = dd; best = a; } } return [best, d]; };
+      const perCol = new Map();
+      for (const i of corpo) {
+        const a0 = ancore.find((a) => a.it === i); if (a0) { a0.celle[iPrezzo].push(i); continue; }
+        const c = colDi(i); if (!perCol.has(c)) perCol.set(c, []); perCol.get(c).push(i);
+      }
+      for (const [c, its] of perCol) {
+        its.sort((a, b) => b.y - a.y);
+        const blocchi = [];
+        for (const i of its) { const b = blocchi[blocchi.length - 1]; if (b && b[b.length - 1].y - i.y <= 18) b.push(i); else blocchi.push([i]); }
+        for (const b of blocchi) {
+          const top = b[0].y, bot = b[b.length - 1].y;
+          const dentro = ancore.filter((a) => a.y <= top + 8 && a.y >= bot - 8);
+          if (dentro.length === 1) { for (const i of b) dentro[0].celle[c].push(i); continue; }
+          for (const i of b) { const [best, d] = dentro.length ? vicino(i.y, dentro) : vicino((top + bot) / 2); if (best && (dentro.length || d < 140)) best.celle[c].push(i); }
+        }
+      }
+      for (const a of ancore) {
+        const riga = {};
+        a.celle.forEach((cs, k) => { riga[nomi[k]] = cs.sort((x, y) => (Math.abs(x.y - y.y) < 2 ? x.x - y.x : y.y - x.y)).map((i) => i.str.trim()).join(" ").replace(/\s+/g, " ").trim(); });
+        eventi.push({ p, y: a.y, riga });
+      }
+    }
+  });
+  if (!globali.length) return [];
+  const tieni = globali.map((g) => g.n).filter((n) => !/^immagine|^foto|^image/i.test(n));
+  out.push(tieni);
+  eventi.sort((a, b) => a.p - b.p || b.y - a.y);
+  for (const e of eventi) out.push(e.sez ? [e.sez] : tieni.map((n) => e.riga[n] || ""));
+  return [{ nome: "PDF", righe: out }];
+}
+
 export function righeDaPdf(pagine) {
+  if (pagine.some((items) => items.some((i) => /^descrizione estesa$/i.test(i.str.trim())) && items.some((i) => /^descrizione breve$/i.test(i.str.trim())))) {
+    const r = righeDaPdfConIntestazione(pagine);
+    if (r.length && r[0].righe.length > 1) return r;
+  }
   // 1. righe di ogni pagina, con le celle (pezzi di testo vicini uniti)
   const tutte = [];
   pagine.forEach((items, p) => {
