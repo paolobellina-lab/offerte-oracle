@@ -4427,7 +4427,7 @@ async function apriListino(file, atteso = "") {
     nomeForn = file.name.replace(/\.[^.]+$/, "").split(/[_\s.-]+/).find((x) => x.length > 2 && !vuote.test(x)) || "";
   }
   const st = {
-    fornitore: nomeForn, precodice: prof?.precodice ?? (metel ? nomeForn : ""),
+    fornitore: fornitoreEsistente(nomeForn) || nomeForn, precodice: prof?.precodice ?? (metel ? nomeForn : ""),
     mappa: prof?.mappa && tutteInt.includes(prof.mappa.codice) ? { ...prof.mappa } : metel ? { ...BIB.MAPPA_METEL } : BIB.indovinaMappa(conInt[0].int.celle),
     fogli: new Set((prof?.fogli && conInt.some((f) => prof.fogli.includes(f.nome)) ? conInt.filter((f) => prof.fogli.includes(f.nome)) : conInt).map((f) => f.nome)),
     sottoFoglio: prof?.sottoFoglio ?? conInt.length > 1,
@@ -4436,11 +4436,12 @@ async function apriListino(file, atteso = "") {
   const opzCol = (v) => `<option value="">— nessuna —</option>` + tutteInt.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
   let letti = { articoli: [], scartate: 0, perFoglio: {} };
   const leggi = () => { letti = BIB.leggiListino(conInt.filter((f) => st.fogli.has(f.nome)), st.mappa, { sottoFoglio: st.sottoFoglio }); };
+  const campoLg = (c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-lg-campo="${c.k}">${opzCol(st.mappa[c.k])}</select></label>`;
   const gmaList = `<datalist id="lg-gma">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>`;
   dialogo({
     titolo: `Carica listino · ${file.name}`, largo: true,
     html: `<div class="row">
-        <label class="f">Fornitore<input id="lg-forn" list="lg-forns" value="${esc(st.fornitore)}"><datalist id="lg-forns">${S.fornitori.map((f) => `<option value="${esc(f.nome)}">`).join("")}</datalist></label>
+        <label class="f">Fornitore<input id="lg-forn" list="lg-forns" value="${esc(st.fornitore)}" title="Scegli un fornitore che esiste già (biblioteca, GMA, database) per non creare doppioni"><datalist id="lg-forns">${tuttiFornitori().map((f) => `<option value="${esc(f)}">`).join("")}</datalist></label>
         <label class="f">Precodice per Oracle<input id="lg-pre" value="${esc(st.precodice)}" style="width:110px" placeholder="es. SIE"></label>
         ${metel ? '<span class="badge ok" style="align-self:flex-end">formato METEL riconosciuto</span>' : ""}
       </div>
@@ -4448,7 +4449,9 @@ async function apriListino(file, atteso = "") {
         <div class="row" style="flex-wrap:wrap;gap:4px 14px;margin-top:4px">${conInt.map((f) => `<label class="row small"><input type="checkbox" data-lg-foglio="${esc(f.nome)}" ${st.fogli.has(f.nome) ? "checked" : ""}> ${esc(f.nome)} <span class="muted" data-lg-n="${esc(f.nome)}"></span></label>`).join("")}</div>
         <label class="row small" style="margin-top:6px"><input type="checkbox" id="lg-sottofoglio" ${st.sottoFoglio ? "checked" : ""}> il nome del foglio diventa il sottocapitolo</label></div>` : ""}
       <div style="margin-top:12px"><span class="muted small" style="font-weight:600">Colonne del listino</span>
-        <div class="lg-mappa">${BIB.CAMPI.map((c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-lg-campo="${c.k}">${opzCol(st.mappa[c.k])}</select></label>`).join("")}</div></div>
+        <div class="lg-mappa">${BIB.CAMPI.filter((c) => !EXTRA_LG.has(c.k)).map(campoLg).join("")}</div>
+        <details style="margin-top:6px" ${[...EXTRA_LG].some((k) => st.mappa[k]) ? "open" : ""}><summary class="small muted">Altre colonne (facoltative): prezzo netto, sconto %, GMA, moltiplicatore</summary>
+          <div class="lg-mappa" style="margin-top:6px">${BIB.CAMPI.filter((c) => EXTRA_LG.has(c.k)).map(campoLg).join("")}</div></details></div>
       <div id="lg-anteprima" style="margin-top:12px"></div>
       <div id="lg-famiglie" style="margin-top:12px"></div>${gmaList}`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Carica nella biblioteca", value: "ok", cls: "primary" }],
@@ -4479,7 +4482,7 @@ async function apriListino(file, atteso = "") {
       };
       d.addEventListener("change", (e) => {
         const t = e.target;
-        if (t.id === "lg-forn") st.fornitore = t.value.trim();
+        if (t.id === "lg-forn") { const es = fornitoreEsistente(t.value); if (es && es !== t.value.trim()) { t.value = es; toast(`Uso il fornitore esistente “${es}”.`, 2500); } st.fornitore = t.value.trim(); }
         else if (t.id === "lg-pre") st.precodice = t.value.trim();
         else if (t.id === "lg-sottofoglio") st.sottoFoglio = t.checked;
         else if (t.dataset.lgFoglio !== undefined) { t.checked ? st.fogli.add(t.dataset.lgFoglio) : st.fogli.delete(t.dataset.lgFoglio); }
@@ -4530,6 +4533,16 @@ async function salvaListino(st, letti, nomeFile) {
         <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(codiceArticolo(x)).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
   }), 300);
 }
+// colonne del listino che non servono alla scheda articolo (si usano solo se ci sono): in un riquadro chiuso
+const EXTRA_LG = new Set(["netto", "sconto", "gma", "molt"]);
+// tutti i fornitori che l'app conosce: biblioteca, GMA, database
+const tuttiFornitori = () => {
+  const m = new Map();
+  for (const f of [...S.fornitori.map((x) => x.nome), ...fornitoriGma(), ...S.catalogo.map((a) => fornitoreDi(a))]) { const k = String(f || "").trim(); if (k && !m.has(k.toUpperCase())) m.set(k.toUpperCase(), k); }
+  return [...m.values()].sort((a, b) => a.localeCompare(b));
+};
+// stesso fornitore scritto con maiuscole, spazi o punteggiatura diversi ("Eelectron" = "EELECTRON")
+const fornitoreEsistente = (v) => { const k = String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); return k ? tuttiFornitori().find((f) => f.toUpperCase().replace(/[^A-Z0-9]/g, "") === k) : null; };
 /* Impostazioni di un fornitore: precodice, GMA senza famiglia, famiglie → GMA. */
 function impostaFornitore(nome) {
   const p = profiloDi(nome);
