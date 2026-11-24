@@ -3842,14 +3842,16 @@ function condBib(a) {
   return { gma, gmaFam, gmaListino, stdTxt, scL, diffGma, diffSc, daDecidere: (diffGma || diffSc) && !a.decisione, termini,
     fonte: usaListino ? "listino" : "gma", sconto: 1 - BIB.fattoreDi(termini) };
 }
+// confronto biblioteca ↔ database: precodice + codice, senza badare a maiuscole e spazi
+const chiaveDb = (s) => String(s || "").toUpperCase().replace(/\s+/g, "");
 const codiceBib = (a) => `${a.precodice ?? profiloDi(a.fornitore).precodice ?? ""}${a.codice}`;
 function cercaBib(q, { forn = "", soloDecidere = false, escludiDb = false } = {}) {
   q = (q || "").trim().toLowerCase();
-  const nelDb = escludiDb ? new Set(S.catalogo.map(codiceArticolo)) : null;
+  const nelDb = escludiDb ? new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x)))) : null;
   const parole = q.split(/\s+/).filter(Boolean);
   return S.bib.filter((a) => (!forn || a.fornitore === forn) &&
     (!parole.length || parole.every((p) => `${codiceBib(a)} ${a.codice} ${a.nOrdine} ${a.descrizione} ${a.famiglia} ${a.fornitore}`.toLowerCase().includes(p))) &&
-    (!nelDb || !nelDb.has(codiceBib(a))) && (!soloDecidere || condBib(a).daDecidere));
+    (!nelDb || !nelDb.has(chiaveDb(codiceBib(a)))) && (!soloDecidere || condBib(a).daDecidere));
 }
 /* Una riga della biblioteca: nella ricerca della pagina Righe ("picker"), nella vista Biblioteca dell'offerta ("offerta")
    o nella pagina Biblioteca ("pagina"). */
@@ -3861,7 +3863,7 @@ function rigaBibHtml(a, modo) {
        <button type="button" class="btn small" data-bib-dec="gma" data-k="${esc(a.k)}" title="Usa lo sconto standard del GMA">GMA ${esc(k.stdTxt ? k.stdTxt + "%" : "—")}</button>
        <button type="button" class="btn small" data-bib-dec="listino" data-k="${esc(a.k)}" title="Usa lo sconto indicato dal listino">listino ${esc(pctTxt(k.scL) || "0%")}</button>`
     : a.decisione ? `<button type="button" class="btn small ghost" data-bib-dec="" data-k="${esc(a.k)}" title="Annulla la scelta">${a.decisione === "listino" ? "sconto del listino" : "sconto del GMA"} ✕</button>` : "";
-  const nelDb = S.perKCodice?.has(codiceBib(a));
+  const nelDb = S.perKCodice?.has(chiaveDb(codiceBib(a)));
   const azione = modo === "pagina"
     ? (nelDb ? '<span class="badge ok">nel database</span>' : `<button type="button" class="btn small" data-bib-db="${esc(a.k)}">Nel database…</button>`)
     : `<button type="button" class="btn small primary" data-bib-add="${esc(a.k)}">Aggiungi…</button>`;
@@ -3877,7 +3879,7 @@ function opzioniFornitori(sel, valore) {
   sel.innerHTML = `<option value="">Tutti i fornitori</option>` + nomi.map((n) => `<option ${n === valore ? "selected" : ""}>${esc(n)}</option>`).join("");
 }
 function disegnaBiblioteca() {
-  S.perKCodice = new Set(S.catalogo.map(codiceArticolo));
+  S.perKCodice = new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x))));
   opzioniFornitori($("#b-fornitore"), $("#b-fornitore").value);
   const conta = new Map();
   for (const a of S.bib) { const x = conta.get(a.fornitore) || { n: 0, dec: 0 }; x.n++; if (condBib(a).daDecidere) x.dec++; conta.set(a.fornitore, x); }
@@ -3904,7 +3906,7 @@ function disegnaBiblioteca() {
 function disegnaBibRighe() {
   const sel = $("#rb-fornitore");
   opzioniFornitori(sel, sel.value);
-  S.perKCodice = new Set(S.catalogo.map(codiceArticolo));
+  S.perKCodice = new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x))));
   const lista = S.bibPronta ? cercaBib($("#rb-cerca").value, { forn: sel.value }) : [];
   const vis = lista.slice(0, 200);
   $("#rb-righe").innerHTML = vis.map((a) => rigaBibHtml(a, "offerta")).join("") ||
@@ -4460,7 +4462,15 @@ async function apriListino(file, atteso = "") {
         leggi();
         for (const [n, x] of Object.entries(letti.perFoglio)) { const el = $(`[data-lg-n="${CSS.escape(n)}"]`, d); if (el) el.textContent = `(${x})`; }
         const es = letti.articoli.slice(0, 6);
-        $("#lg-anteprima", d).innerHTML = `<span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""}</span>
+        // articoli già nel database (precodice + codice); se il precodice è vuoto o diverso, si propone quello usato nel database
+        const dbCod = new Map(); for (const x of S.catalogo) if (!isGenerico(x)) dbCod.set(chiaveDb(x.codice), x.precodice || "");
+        const dbFull = new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x))));
+        const giaDb = letti.articoli.filter((a) => dbFull.has(chiaveDb(st.precodice + a.codice))).length;
+        const preDb = new Map(); for (const a of letti.articoli) { const p = dbCod.get(chiaveDb(a.codice)); if (p !== undefined && chiaveDb(p) !== chiaveDb(st.precodice)) preDb.set(p, (preDb.get(p) || 0) + 1); }
+        const [preSugg, nSugg] = [...preDb.entries()].sort((x, y) => y[1] - x[1])[0] || [];
+        $("#lg-anteprima", d).innerHTML = `${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
+            <button type="button" class="btn small primary" data-lg-usa-pre="${esc(preSugg)}">Usa il precodice ${esc(preSugg || "vuoto")}</button></div>` : ""}
+          <span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""} · <span class="${giaDb ? "ok" : ""}">${giaDb} già nel database</span> (confronto per precodice + codice)</span>
           <div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Codice Oracle</th><th>Modello</th><th>Descrizione</th><th>U.M.</th><th class="num">Listino</th><th class="num">Sconto listino</th><th>Famiglia</th><th>Sottocapitolo</th></tr></thead><tbody>
           ${es.map((a) => `<tr><td class="mono">${esc(st.precodice + a.codice)}</td><td>${esc(a.nOrdine)}</td><td class="small">${esc(a.descrizione.slice(0, 80))}</td><td>${esc(a.um)}</td><td class="num">${euro(a.listino)}</td><td class="num">${a.scListino === null ? "" : pctTxt(a.scListino)}</td><td>${esc(a.famiglia)}</td><td class="small">${esc(a.sottocapitolo)}</td></tr>`).join("") || `<tr><td colspan="8" class="vuoto">Nessun articolo: controlla le colonne codice e prezzo.</td></tr>`}
           </tbody></table></div>`;
@@ -4480,6 +4490,7 @@ async function apriListino(file, atteso = "") {
           <div class="tbl-wrap" style="max-height:240px"><table><thead><tr><th>Famiglia</th><th class="num">Articoli</th><th>GMA</th><th>Sconto standard %</th></tr></thead>
           <tbody>${righe.slice(0, 200).map(([f, n]) => riga(f, n)).join("")}</tbody></table></div>`;
       };
+      d.addEventListener("click", (e) => { const b = e.target.closest("[data-lg-usa-pre]"); if (!b) return; st.precodice = b.dataset.lgUsaPre; $("#lg-pre", d).value = st.precodice; aggiorna(); });
       d.addEventListener("change", (e) => {
         const t = e.target;
         if (t.id === "lg-forn") { const es = fornitoreEsistente(t.value); if (es && es !== t.value.trim()) { t.value = es; toast(`Uso il fornitore esistente “${es}”.`, 2500); } st.fornitore = t.value.trim(); }
@@ -4523,14 +4534,14 @@ async function salvaListino(st, letti, nomeFile) {
   ops.push({ tipo: "set", coll: COLL.cfg, id: "gmv", data: { lista: [...gm.values()] } });
   try { await db.scrivi(ops); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
   // articoli già nel database con un prezzo diverso: si segnalano (l'aggiornamento del database è un passo a parte)
-  const perCod = new Map(articoli.map((a) => [`${a.precodice}${a.codice}`, a]));
-  const diversi = S.catalogo.filter((x) => { const a = perCod.get(codiceArticolo(x)); return a && Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004; });
+  const perCod = new Map(articoli.map((a) => [chiaveDb(`${a.precodice}${a.codice}`), a]));
+  const diversi = S.catalogo.filter((x) => { const a = perCod.get(chiaveDb(codiceArticolo(x))); return a && Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004; });
   setTimeout(() => dialogo({
     titolo: `Listino ${st.fornitore} caricato`,
     html: `<ul class="riep"><li><b>${u.nuovi}</b> articoli nuovi</li><li><b>${u.aggiornati.length}</b> con il prezzo cambiato</li><li>${u.invariati} invariati</li>
       ${u.tolti.length ? `<li><b>${u.tolti.length}</b> non più nel listino (tolti dalla biblioteca)</li>` : ""}</ul>
       ${diversi.length ? `<div class="avviso"><b>${diversi.length} articoli del tuo database</b> hanno un prezzo diverso da questo listino.
-        <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(codiceArticolo(x)).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
+        <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(chiaveDb(codiceArticolo(x))).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
   }), 300);
 }
 // colonne del listino che non servono alla scheda articolo (si usano solo se ci sono): in un riquadro chiuso
