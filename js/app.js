@@ -4582,10 +4582,24 @@ async function apriListino(file, atteso = "") {
     fogli: new Set((prof?.fogli && conInt.some((f) => prof.fogli.includes(f.nome)) ? conInt.filter((f) => prof.fogli.includes(f.nome)) : conInt).map((f) => f.nome)),
     sottoFoglio: prof?.sottoFoglio ?? conInt.length > 1,
     famiglie: { ...(prof?.famiglie || {}) }, gmaDefault: prof?.gmaDefault || "", sconti: {},
+    famDaSconto: prof?.famDaSconto,
   };
+  // senza colonna famiglia ma con il prezzo netto (o lo sconto): la famiglia si ricava dallo sconto, arrotondato all'1%
+  if (st.famDaSconto === undefined) st.famDaSconto = !st.mappa.famiglia && !!(st.mappa.netto || st.mappa.sconto);
+  const famSc = (sc) => `SC ${Math.round(sc * 100)}%`;
+  // sconto totale di un GMA del fornitore (es. "50+10" → 55%)
+  const totGma = (g) => { const t = String(scontoGmaTxt(g.codice, st.fornitore) || "").split("+").map((x) => num(x)).filter((x) => x > 0); return t.length ? 1 - t.reduce((a, x) => a * (1 - (x > 1 ? x / 100 : x)), 1) : null; };
+  const gmaConSconto = (pct) => S.gmv.filter((g) => ntDb(g.fornitore) === ntDb(st.fornitore) && totGma(g) !== null && Math.abs(totGma(g) * 100 - pct) < 0.6).map((g) => g.codice);
   const opzCol = (v) => `<option value="">— nessuna —</option>` + tutteInt.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
   let letti = { articoli: [], scartate: 0, perFoglio: {} };
-  const leggi = () => { letti = BIB.leggiListino(conInt.filter((f) => st.fogli.has(f.nome)), st.mappa, { sottoFoglio: st.sottoFoglio }); };
+  const leggi = () => {
+    letti = BIB.leggiListino(conInt.filter((f) => st.fogli.has(f.nome)), st.mappa, { sottoFoglio: st.sottoFoglio });
+    if (st.famDaSconto) for (const a of letti.articoli) if (!a.famiglia && a.scListino !== null && a.scListino !== undefined) {
+      a.famiglia = famSc(a.scListino);
+      // GMA proposto: quello del fornitore con lo stesso sconto standard, se è uno solo
+      if (st.famiglie[a.famiglia] === undefined) { const c = gmaConSconto(Math.round(a.scListino * 100)); if (c.length === 1) st.famiglie[a.famiglia] = c[0]; }
+    }
+  };
   const campoLg = (c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-lg-campo="${c.k}">${opzCol(st.mappa[c.k])}</select></label>`;
   const gmaList = `<datalist id="lg-gma">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>`;
   dialogo({
@@ -4662,12 +4676,14 @@ async function apriListino(file, atteso = "") {
           const g = f ? st.famiglie[f] || "" : st.gmaDefault;
           return `<tr><td>${f ? `<b class="mono">${esc(f)}</b>` : "<i>senza famiglia</i>"}</td><td class="num">${n}</td>
             <td><input class="cond" data-lg-fam="${esc(f)}" list="lg-gma" value="${esc(g)}" placeholder="GMA" style="width:130px"></td>
-            <td><input class="cond" data-lg-sc="${esc(g)}" value="${esc(st.sconti[g] ?? scontoGmaTxt(g))}" placeholder="es. 50+10" style="width:110px" ${g ? "" : "disabled"}></td></tr>`;
+            <td><input class="cond" data-lg-sc="${esc(g)}" value="${esc(st.sconti[g] ?? scontoGmaTxt(g))}" placeholder="es. 50+10" style="width:110px" ${g ? "" : "disabled"}></td>
+            <td class="small muted">${(() => { const m = /^SC (\d+)%$/.exec(f); if (!m) return ""; const c = gmaConSconto(+m[1]); return c.length > 1 ? `GMA con questo sconto: ${c.map(esc).join(", ")}` : !c.length ? "nessun GMA con questo sconto" : g === c[0] ? "proposto dallo sconto" : ""; })()}</td></tr>`;
         };
         $("#lg-famiglie", d).innerHTML = `<span class="muted small" style="font-weight:600">Famiglie di sconto → GMA</span>
           <p class="muted small" style="margin:2px 0 6px">Abbina ogni famiglia a un GMA e scrivi lo sconto standard del GMA (vale per tutti i suoi articoli; più sconti in cascata con il +).
             Se il listino indica per un articolo uno sconto diverso, lo trovi “da decidere” nella biblioteca.</p>
-          <div class="tbl-wrap" style="max-height:240px"><table><thead><tr><th>Famiglia</th><th class="num">Articoli</th><th>GMA</th><th>Sconto standard %</th></tr></thead>
+          ${st.mappa.netto || st.mappa.sconto ? `<label class="row small" style="margin:0 0 6px"><input type="checkbox" id="lg-famsc" ${st.famDaSconto ? "checked" : ""}> ricava la famiglia dallo sconto del prezzo netto (arrotondato all'1%), per i listini senza famiglie</label>` : ""}
+          <div class="tbl-wrap" style="max-height:240px"><table><thead><tr><th>Famiglia</th><th class="num">Articoli</th><th>GMA</th><th>Sconto standard %</th><th></th></tr></thead>
           <tbody>${righe.slice(0, 200).map(([f, n]) => riga(f, n)).join("")}</tbody></table></div>`;
       };
       d.addEventListener("click", (e) => { const b = e.target.closest("[data-lg-usa-pre]"); if (!b) return; st.precodice = b.dataset.lgUsaPre; $("#lg-pre", d).value = st.precodice; aggiorna(); });
@@ -4677,6 +4693,7 @@ async function apriListino(file, atteso = "") {
         else if (t.id === "lg-pre") st.precodice = t.value.trim();
         else if (t.id === "lg-sottofoglio") st.sottoFoglio = t.checked;
         else if (t.dataset.lgFoglio !== undefined) { t.checked ? st.fogli.add(t.dataset.lgFoglio) : st.fogli.delete(t.dataset.lgFoglio); }
+        else if (t.id === "lg-famsc") { st.famDaSconto = t.checked; }
         else if (t.dataset.lgCampo) { if (t.value) st.mappa[t.dataset.lgCampo] = t.value; else delete st.mappa[t.dataset.lgCampo]; }
         else if (t.dataset.lgFam !== undefined) { const f = t.dataset.lgFam, g = t.value.trim(); if (f) { if (g) st.famiglie[f] = g; else delete st.famiglie[f]; } else st.gmaDefault = g; }
         else if (t.dataset.lgSc !== undefined) { st.sconti[t.dataset.lgSc] = t.value.trim(); return; }
@@ -4705,7 +4722,7 @@ async function salvaListino(st, letti, nomeFile) {
   const ops = opsBib(st.fornitore, articoli);
   // profilo del fornitore: la prossima volta il listino si legge da solo
   const prof = { nome: st.fornitore, precodice: st.precodice, mappa: st.mappa, fogli: [...st.fogli], sottoFoglio: st.sottoFoglio,
-    famiglie: st.famiglie, gmaDefault: st.gmaDefault, file: (nomeFile.toLowerCase().match(/[a-z]{4,}/) || [""])[0], aggiornatoIl: Date.now(), articoli: articoli.length };
+    famiglie: st.famiglie, gmaDefault: st.gmaDefault, famDaSconto: !!st.famDaSconto, file: (nomeFile.toLowerCase().match(/[a-z]{4,}/) || [""])[0], aggiornatoIl: Date.now(), articoli: articoli.length };
   ops.push({ tipo: "set", coll: COLL.cfg, id: "fornitori", data: { lista: [...S.fornitori.filter((f) => f.nome !== st.fornitore), prof] } });
   // GMA nuovi e sconti standard
   const gm = new Map(S.gmv.map((g) => [g.codice, { ...g }]));
