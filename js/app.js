@@ -2124,7 +2124,7 @@ function modificaRigaOfferta(c, r) {
         <label class="row"><input type="checkbox" id="mr-db"> <b>Salva anche nel database</b> ${att ? "come attività tecnica PITATT.TEC" : "(precodice + codice, con la spunta “generico” scelta qui sopra)"}</label>
         <div class="grid-set" id="mr-db-box" hidden style="margin-top:6px">
           <label class="f">Capitolo del database<select id="mr-cap">${S.capitoli.map((x) => `<option ${x.nome === capDb ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>
-          <label class="f wide">Sottocapitolo<input id="mr-sotto" value="${esc(r.capitolato || r.sottocapitolo || "")}"></label>
+          <label class="f wide">Sottocapitolo${campoSotto("mr-sotto", r.sottocapitolo || "", sottoDelCap(capDb))}</label>
         </div></div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(d) {
@@ -2132,6 +2132,8 @@ function modificaRigaOfferta(c, r) {
       $("#mr-pre", d)?.addEventListener("input", (e) => { e.target.dataset.toccato = "1"; });
       $("#mr-gmv", d).innerHTML = $("#mr-gmv", d).innerHTML.replace(/<option value="__nuovo">.*?<\/option>/, "");
       $("#mr-db", d).addEventListener("change", (e) => { $("#mr-db-box", d).hidden = !e.target.checked; });
+      legaSotto("mr-sotto", d);
+      $("#mr-cap", d).addEventListener("change", (e) => aggiornaSotto("mr-sotto", d, sottoDelCap(e.target.value)));
     },
     async onConferma(v, d) {
       const cod = $("#mr-cod", d).value.trim(), des = $("#mr-des", d).value.trim();
@@ -2151,7 +2153,7 @@ function modificaRigaOfferta(c, r) {
       n.fornitore = fornScelto($("#mr-gmv", d), $("#mr-forn", d));
       n.listino = listinoCalcolato(n);
       if ($("#mr-db", d).checked) {
-        const art = { ...n, capitolo: $("#mr-cap", d).value, sottocapitolo: $("#mr-sotto", d).value.trim(), rifCap: "", dataAgg: oggiIso() };
+        const art = { ...n, capitolo: $("#mr-cap", d).value, sottocapitolo: valSotto("mr-sotto", d), rifCap: "", dataAgg: oggiIso() };
         delete art.id; delete art.qta; delete art.capitolato; delete art.daOfferta; delete art.k; delete art.notaPreAgg; delete art.notaPostAgg;
         if (att) { art.nOrdine = cod; art.descrizione = des; art.notePre = ""; art.notePost = ""; }
         else {
