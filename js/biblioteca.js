@@ -89,20 +89,6 @@ export function leggiListino(fogli, mappa, opz = {}) {
       const celle = r.map(norm);
       // intestazione (anche ripetuta più volte nel foglio, come nei listini a sezioni)
       if (mappa.codice && mappa.prezzo && celle.includes(mappa.codice) && celle.includes(mappa.prezzo)) { col = colDi(celle); continue; }
-      // intestazione scritta in modo un po' diverso in un altro foglio ("Listino Prezzi" senza €, "Prezzo netto €", "Listino Prezzi Netti €"):
-      // stessa colonna del codice, il prezzo si riconosce dal nome; se c'è solo il netto, il netto fa da listino
-      if (mappa.codice && celle.includes(mappa.codice) && !celle.includes(mappa.prezzo)) {
-        const g = indovinaMappa(celle);
-        const iPr = g.prezzo ? celle.indexOf(g.prezzo) : g.netto ? celle.indexOf(g.netto) : celle.findIndex((c) => /prezz|listino|price/.test(c));
-        if (iPr >= 0) {
-          col = colDi(celle);
-          for (const k of Object.keys(mappa)) if (col[k] === undefined && g[k] && k !== "prezzo") col[k] = celle.indexOf(g[k]);
-          col.prezzo = iPr;
-          // solo prezzo netto (es. "Prezzo netto €", "Listino Prezzi Netti €"): è anche il netto, cioè nessuno sconto su quel prezzo
-          if (!g.prezzo || /nett/.test(celle[iPr])) col.netto = iPr;
-          continue;
-        }
-      }
       if (!col) continue;
       const piene = r.map(testo).filter(Boolean);
       const cod = testo(r[col.codice]);
