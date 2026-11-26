@@ -1442,14 +1442,100 @@ window.addEventListener("keydown", (e) => {
   if (cerano) disegnaOfferta();
 }, true);
 
+/* ---- Filtri sulle colonne delle righe (clic sull'intestazione: elenco dei valori da spuntare, come in Excel) ---- */
+const filtriRighe = new Map(); // "offerta|capitolo" → { colonna: Set(valori ammessi) }
+const chiaveFiltri = (c) => `${S.off?.id}|${c.nome}`;
+function valoreColonna(col, r, c, x, linee) {
+  switch (col) {
+    case "linea": return String(linee.get(r.id) ?? "");
+    case "codice": return codiceArticolo(r) || "";
+    case "articolo": return String(r.nOrdine || r.descrizione || "").trim();
+    case "um": return r.um || "";
+    case "qta": return numIt(r.qta);
+    case "giorni": return isAttivita(r) ? numIt(r.giorni) : "";
+    case "unitario": return euro(x.unitario);
+    case "totale": return euro(num(r.qta) ? x.totale : 0);
+    case "capitolato": return r.capitolato || "";
+    case "notePre": return notePreRiga(r) || "";
+    case "notePost": return notePostRiga(r) || "";
+  }
+  return "";
+}
+function righeFiltrate(c) {
+  const f = filtriRighe.get(chiaveFiltri(c)); if (!f || !Object.keys(f).length) return null;
+  const linee = lineeOracle(c), opz = opzCap(c), vis = new Set();
+  for (const r of c.righe) { const x = calcolaRiga(r, c, opz.ricarichi); if (Object.entries(f).every(([col, ok]) => ok.has(valoreColonna(col, r, c, x, linee)))) vis.add(r.id); }
+  return vis;
+}
+let fltPop = null;
+function apriFiltro(th) {
+  const c = capAtt(); if (!c) return;
+  const col = th.dataset.filtro, k = chiaveFiltri(c);
+  const f = filtriRighe.get(k) || {};
+  // valori della colonna, contando solo le righe che passano gli altri filtri
+  const linee = lineeOracle(c), opz = opzCap(c), conta = new Map();
+  for (const r of c.righe) {
+    const x = calcolaRiga(r, c, opz.ricarichi);
+    if (!Object.entries(f).every(([cc, ok]) => cc === col || ok.has(valoreColonna(cc, r, c, x, linee)))) continue;
+    const v = valoreColonna(col, r, c, x, linee); conta.set(v, (conta.get(v) || 0) + 1);
+  }
+  const numerica = ["linea", "qta", "giorni", "unitario", "totale"].includes(col);
+  const valori = [...conta.keys()].sort((a, b) => (a === "") - (b === "") || (numerica ? num(String(a).replace(/[€\s]/g, "")) - num(String(b).replace(/[€\s]/g, "")) : a.localeCompare(b, "it", { numeric: true })));
+  const sel = new Set(f[col] ? valori.filter((v) => f[col].has(v)) : valori);
+  fltPop?.remove();
+  fltPop = document.createElement("div"); fltPop.className = "flt-pop";
+  fltPop.innerHTML = `<input type="search" placeholder="Cerca in ${esc(th.textContent.trim())}…" autocomplete="off">
+    <label class="row small" style="margin:2px 4px 4px"><input type="checkbox" data-flt-tutti> <b>(Seleziona tutto)</b></label>
+    <div class="flt-lista"></div>
+    <div class="flt-piede"><button type="button" class="btn small" data-flt="togli">Togli filtro</button><button type="button" class="btn small" data-flt="annulla">Annulla</button><button type="button" class="btn small primary" data-flt="ok">OK</button></div>`;
+  document.body.appendChild(fltPop);
+  const r0 = th.getBoundingClientRect();
+  fltPop.style.left = Math.max(4, Math.min(r0.left, innerWidth - 310)) + "px"; fltPop.style.top = Math.min(r0.bottom + 2, innerHeight - 420) + "px";
+  const lista = $(".flt-lista", fltPop), cerca = $("input[type=search]", fltPop), tutti = $("[data-flt-tutti]", fltPop);
+  const visibili = () => { const q = cerca.value.trim().toLowerCase(); return valori.filter((v) => !q || v.toLowerCase().includes(q)); };
+  const disegna = () => {
+    const vv = visibili();
+    lista.innerHTML = vv.map((v) => `<label><input type="checkbox" data-v="${esc(v)}" ${sel.has(v) ? "checked" : ""}><span>${v === "" ? '<i class="muted">(vuote)</i>' : esc(v.length > 90 ? v.slice(0, 90) + "…" : v)} <span class="muted">(${conta.get(v)})</span></span></label>`).join("") || '<div class="muted small" style="padding:4px">Nessun valore</div>';
+    tutti.checked = vv.length > 0 && vv.every((v) => sel.has(v)); tutti.indeterminate = !tutti.checked && vv.some((v) => sel.has(v));
+  };
+  disegna(); setTimeout(() => cerca.focus(), 30);
+  cerca.addEventListener("input", disegna);
+  cerca.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $('[data-flt="ok"]', fltPop).click(); } if (e.key === "Escape") fltPop.remove(); });
+  fltPop.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.v !== undefined) { t.checked ? sel.add(t.dataset.v) : sel.delete(t.dataset.v); disegna(); }
+    else if (t.matches("[data-flt-tutti]")) { for (const v of visibili()) t.checked ? sel.add(v) : sel.delete(v); disegna(); }
+  });
+  fltPop.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-flt]"); if (!b) return;
+    const ff = { ...(filtriRighe.get(k) || {}) };
+    if (b.dataset.flt === "togli") delete ff[col];
+    else if (b.dataset.flt === "ok") {
+      // con una ricerca, OK tiene solo i valori trovati e spuntati (come Excel)
+      const scelti = cerca.value.trim() ? visibili().filter((v) => sel.has(v)) : [...sel];
+      if (scelti.length === valori.length) delete ff[col]; else ff[col] = new Set(scelti);
+    } else { fltPop.remove(); fltPop = null; return; }
+    if (Object.keys(ff).length) filtriRighe.set(k, ff); else filtriRighe.delete(k);
+    fltPop.remove(); fltPop = null;
+    disegnaRighe(c);
+  });
+}
+document.addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-filtro]");
+  if (th && th.closest("table")?.querySelector("#righe-offerta")) { e.stopPropagation(); return apriFiltro(th); }
+  if (fltPop && !fltPop.contains(e.target)) { fltPop.remove(); fltPop = null; }
+}, true);
+
 function disegnaRighe(c) {
   applicaVistaRighe(c);
+  const vis = righeFiltrate(c), ff = filtriRighe.get(chiaveFiltri(c)) || {};
+  for (const th of $$("th[data-filtro]")) if (th.closest("table")?.querySelector("#righe-offerta")) { th.classList.toggle("filtrato", !!ff[th.dataset.filtro]); th.title = ff[th.dataset.filtro] ? "Colonna filtrata: clic per cambiare il filtro" : "Clic per filtrare"; }
   const tb = $("#righe-offerta");
   const sel = S.sel;
   for (const id of [...sel]) if (!c.righe.some((r) => r.id === id)) sel.delete(id);
   $("#bulk-n").textContent = !sel.size ? "Nessuna riga selezionata" : sel.size === 1 ? "1 riga selezionata" : `${sel.size} righe selezionate`;
   $("#bulk").classList.toggle("attiva", sel.size > 0);
-  $("#sel-tutte").checked = c.righe.length > 0 && sel.size === c.righe.length;
+  $("#sel-tutte").checked = c.righe.length > 0 && sel.size === (vis ? vis.size : c.righe.length) && sel.size > 0;
   if (!c.righe.length) {
     tb.innerHTML = `<tr><td colspan="13" class="vuoto">Nessuna riga: cerca gli articoli qui sopra e scrivi le quantità.</td></tr>`;
     return;
@@ -1458,7 +1544,8 @@ function disegnaRighe(c) {
   const opz = opzCap(c);
   let tot = 0, capPrec = null;
   const opzioniCap = (v) => `<option value="">—</option>` + c.capitolati.map((n) => `<option ${n === v ? "selected" : ""}>${esc(n)}</option>`).join("");
-  tb.innerHTML = c.righe.map((r, i) => {
+  tb.innerHTML = (vis ? `<tr class="sotto"><td colspan="13" class="small">Filtro attivo: ${vis.size} righe su ${c.righe.length}. <button type="button" class="btn small" data-togli-filtri>✕ Togli tutti i filtri</button></td></tr>` : "") + c.righe.map((r, i) => {
+    if (vis && !vis.has(r.id)) return "";
     const x = calcolaRiga(r, c, opz.ricarichi);
     if (num(r.qta) !== 0) tot += x.totale;
     const att = isAttivita(r);
@@ -1489,7 +1576,7 @@ function disegnaRighe(c) {
            <td><span class="nota-auto" title="Articolo generico: la nota post-linea è la descrizione più quello che scrivi qui">auto: descrizione +</span><input class="nota" data-campo="notaPostAgg" value="${esc(r.notaPostAgg || "")}" placeholder="aggiungi alla nota post-linea"></td>`
         : `<td><input class="nota" data-campo="notePre" value="${esc(r.notePre)}" placeholder="nota pre-linea"></td>
            <td><input class="nota" data-campo="notePost" value="${esc(r.notePost)}" placeholder="nota post-linea"></td>`}</tr>`;
-  }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
+  }).join("") + `<tr class="sotto"><td colspan="9" class="num">Totale ${esc(c.nome)}${vis ? " (solo righe filtrate)" : ""}</td><td class="num">${euro(tot)}</td><td colspan="3"></td></tr>`;
   applicaGruppi(tb);
   caricaMiniature(tb);
   // casella del capitolato spuntata se tutte le sue righe sono selezionate
@@ -1500,6 +1587,7 @@ function disegnaRighe(c) {
   }
 }
 
+document.addEventListener("click", (e) => { if (!e.target.closest("[data-togli-filtri]")) return; const c = capAtt(); if (c) { filtriRighe.delete(chiaveFiltri(c)); disegnaRighe(c); } });
 /* Pagina 2: riepilogo delle righe con sconti e ricarico applicati (come la vista di controllo dell'Excel). */
 function disegnaRiepilogoRighe(c) {
   const tb = $("#riepilogo-righe");
@@ -1754,7 +1842,8 @@ function modificaNoteRiga(r) {
 }
 $("#sel-tutte").addEventListener("change", (e) => {
   const c = capAtt(); if (!c) return;
-  S.sel = e.target.checked ? new Set(c.righe.map((r) => r.id)) : new Set();
+  const vis = righeFiltrate(c); // con un filtro attivo si selezionano solo le righe visibili
+  S.sel = e.target.checked ? new Set(c.righe.filter((r) => !vis || vis.has(r.id)).map((r) => r.id)) : new Set();
   disegnaOfferta();
 });
 /* Azioni sulle righe selezionate (menu del tasto destro). opz = { cap, nota } */

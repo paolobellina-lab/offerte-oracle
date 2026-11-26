@@ -991,3 +991,16 @@ label.cens-bottom input { height: 38px; box-sizing: border-box; }
 .export-note textarea { resize: vertical; overflow-y: scroll; }
 .note-anteprima { text-align: center; white-space: pre; background: #fff; color: #111; border: 1px solid var(--bordo, #ccc); border-radius: 6px; overflow: auto; cursor: text; }
 @media (max-width: 900px) { .export-griglia { grid-template-columns: 1fr; } }
+
+/* filtri sulle colonne delle righe (come i filtri di Excel) */
+th[data-filtro] { cursor: pointer; user-select: none; white-space: nowrap; }
+th[data-filtro]::after { content: " ▾"; opacity: .55; font-size: .85em; }
+th[data-filtro].filtrato { background: #2f5f9e !important; }
+th[data-filtro].filtrato::after { content: " ▼"; opacity: 1; color: #ffd76a; }
+.flt-pop { position: fixed; z-index: 3000; background: #fff; color: #111; border: 1px solid #9aa7b8; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  width: 300px; padding: 8px; font-size: 13px; }
+.flt-pop input[type=search] { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+.flt-lista { max-height: 280px; overflow: auto; border: 1px solid #e2e6ec; border-radius: 6px; padding: 4px; }
+.flt-lista label { display: flex; gap: 6px; align-items: flex-start; padding: 2px 4px; cursor: pointer; color: #111; }
+.flt-lista label:hover { background: #eef3fa; }
+.flt-piede { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
