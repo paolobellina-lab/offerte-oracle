@@ -4599,7 +4599,14 @@ async function apriListino(file, atteso = "") {
     const out = [];
     for (const c of BIB.CAMPI) {
       const h = st.mappa[c.k]; if (!h) continue;
-      const manca = conInt.filter((f) => st.fogli.has(f.nome) && !intDi.get(f.nome).has(h)).map((f) => f.nome);
+      let manca = conInt.filter((f) => st.fogli.has(f.nome) && !intDi.get(f.nome).has(h)).map((f) => f.nome);
+      // listino assente ma prezzo netto presente: si usa il netto come listino
+      if (c.k === "prezzo" && st.mappa.netto) {
+        const conNetto = manca.filter((n) => intDi.get(n).has(st.mappa.netto));
+        if (conNetto.length) out.push(`ℹ<b>Prezzo di listino</b> = “${esc(h)}” non c'è in ${conNetto.map(esc).join(", ")}: lì uso il <b>prezzo netto</b> “${esc(st.mappa.netto)}” come listino (sconto 0)`);
+        manca = manca.filter((n) => !conNetto.includes(n));
+      }
+      if (c.k === "netto") manca = manca.filter((n) => intDi.get(n).has(st.mappa.prezzo));
       if (manca.length) out.push(`<b>${esc(c.label)}</b> = “${esc(h)}” non c'è in ${manca.length === [...st.fogli].length ? "nessuno dei fogli scelti" : `${manca.length} fogli: ${manca.slice(0, 6).map(esc).join(", ")}${manca.length > 6 ? "…" : ""}`}${c.obbl ? " — <b>da quei fogli non si legge nessuna riga</b>" : ""}`);
     }
     return out;
@@ -4677,7 +4684,8 @@ async function apriListino(file, atteso = "") {
               <td class="small"><b>${esc(c[0])}</b></td><td class="small" title="${esc(c[1])}">${esc(String(c[1]).slice(0, 140))}${String(c[1]).length > 140 ? "…" : ""}</td><td class="small ${c[3] === "su" ? "bad" : c[3] === "giu" ? "ok" : ""}" title="${esc(c[2])}"><b>${esc(String(c[2]).slice(0, 140))}</b></td></tr>`).join("")).join("")}
             </tbody></table></div>
             <p class="muted small" style="margin:4px 0 0">Il database non cambia caricando il listino: per aggiornare i prezzi usa “Aggiorna i prezzi” in Importa e aggiorna.</p></details>`;
-        $("#lg-anteprima", d).innerHTML = `${avv.length ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ Colonne scelte che mancano in alcuni fogli spuntati:<br>${avv.join("<br>")}<br><span class="muted">Togli la spunta a quei fogli e caricali con un'importazione separata, scegliendo le loro colonne.</span></div>` : ""}${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
+        const avvW = avv.filter((x) => !x.startsWith("ℹ")), avvI = avv.filter((x) => x.startsWith("ℹ")).map((x) => x.slice(1));
+        $("#lg-anteprima", d).innerHTML = `${avvW.length ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ Colonne scelte che mancano in alcuni fogli spuntati:<br>${avvW.join("<br>")}<br><span class="muted">Togli la spunta a quei fogli e caricali con un'importazione separata, scegliendo le loro colonne.</span></div>` : ""}${avvI.length ? `<div class="avviso info small" style="margin:0 0 8px">${avvI.join("<br>")}</div>` : ""}${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
             <button type="button" class="btn small primary" data-lg-usa-pre="${esc(preSugg)}">Usa il precodice ${esc(preSugg || "vuoto")}</button></div>` : ""}
           <span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""} · <span class="${giaDb ? "ok" : ""}">${giaDb} già nel database</span> (confronto per precodice + codice)</span>
           <div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Codice Oracle</th><th>Modello</th><th>Descrizione</th><th>U.M.</th><th class="num">Listino</th><th class="num">Sconto listino</th><th>Famiglia</th><th>Sottocapitolo</th></tr></thead><tbody>

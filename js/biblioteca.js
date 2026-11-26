@@ -96,6 +96,8 @@ export function leggiListino(fogli, mappa, opz = {}) {
       const celle = r.map(norm);
       // intestazione (anche ripetuta più volte nel foglio, come nei listini a sezioni)
       if (mappa.codice && mappa.prezzo && celle.includes(mappa.codice) && celle.includes(mappa.prezzo)) { col = colDi(celle); continue; }
+      // foglio con il solo prezzo netto (la colonna scelta come "prezzo netto"): il netto fa anche da listino (nessuno sconto)
+      if (mappa.codice && mappa.netto && celle.includes(mappa.codice) && celle.includes(mappa.netto) && !(mappa.prezzo && celle.includes(mappa.prezzo))) { col = colDi(celle); col.prezzo = col.netto; continue; }
       if (!col) continue;
       const piene = r.map(testo).filter(Boolean);
       const cod = testo(r[col.codice]);
