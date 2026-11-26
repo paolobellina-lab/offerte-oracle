@@ -2088,6 +2088,12 @@ function modificaMultipla(c) {
 }
 /* Righe che non sono nel database (es. importate da un'offerta fornitore): si modificano nella riga stessa,
    e volendo si salvano anche nel database come articolo nuovo. */
+// precodice di un fornitore: quello delle impostazioni del listino, altrimenti il più usato dai suoi articoli nel database
+function precodiceDi(forn) {
+  const p = S.fornitori.find((f) => ntDb(f.nome) === ntDb(forn))?.precodice; if (p) return p;
+  const n = new Map(); for (const a of S.catalogo) if (ntDb(fornitoreDi(a)) === ntDb(forn) && a.precodice && !isGenerico(a) && a.precodice !== "P000") n.set(a.precodice, (n.get(a.precodice) || 0) + 1);
+  return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
 function modificaRigaOfferta(c, r) {
   const att = isAttivita(r);
   const codF = att ? (r.notePre || r.nOrdine || "") : (r.nOrdine || "");
@@ -2107,14 +2113,18 @@ function modificaRigaOfferta(c, r) {
       </div>
       <label class="f" style="margin-top:10px">Descrizione<textarea id="mr-des" rows="4">${esc(desF)}</textarea></label>
       <div class="card" style="margin-top:10px">
-        <label class="row"><input type="checkbox" id="mr-db"> <b>Salva anche nel database</b> come ${att ? "attività tecnica PITATT.TEC" : "articolo generico P000 ARTICOLO_GEN"}</label>
+        <label class="row"><input type="checkbox" id="mr-db"> <b>Salva anche nel database</b> ${att ? "come attività tecnica PITATT.TEC" : "come articolo del fornitore (precodice + codice)"}</label>
         <div class="grid-set" id="mr-db-box" hidden style="margin-top:6px">
           <label class="f">Capitolo del database<select id="mr-cap">${S.capitoli.map((x) => `<option ${x.nome === capDb ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</select></label>
           <label class="f wide">Sottocapitolo<input id="mr-sotto" value="${esc(r.capitolato || "")}"></label>
+          ${att ? "" : `<label class="f">Precodice<input id="mr-pre" value="${esc(precodiceDi(fornitoreDi(r)))}" placeholder="es. SIE" style="width:110px"></label>
+          <label class="f">Codice<input id="mr-dbcod" value="${esc(codF)}" placeholder="vuoto = codice fornitore"></label>
+          <label class="row small" style="align-self:end"><input type="checkbox" id="mr-gen"> tratta come articolo generico (P000 ARTICOLO_GEN in Oracle)</label>`}
         </div></div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     onApri(d) {
-      $("#mr-forn", d).addEventListener("change", (e) => { const g = $("#mr-gmv", d).value, f = e.target.value; $("#mr-gmv", d).innerHTML = opzioniGma(f, !f || voceGma(g, f) ? g : "").replace(/<option value="__nuovo">.*?<\/option>/, ""); });
+      $("#mr-forn", d).addEventListener("change", (e) => { const g = $("#mr-gmv", d).value, f = e.target.value; $("#mr-gmv", d).innerHTML = opzioniGma(f, !f || voceGma(g, f) ? g : "").replace(/<option value="__nuovo">.*?<\/option>/, ""); const pre = $("#mr-pre", d); if (pre && !pre.dataset.toccato) pre.value = precodiceDi(f); });
+      $("#mr-pre", d)?.addEventListener("input", (e) => { e.target.dataset.toccato = "1"; });
       $("#mr-gmv", d).innerHTML = $("#mr-gmv", d).innerHTML.replace(/<option value="__nuovo">.*?<\/option>/, "");
       $("#mr-db", d).addEventListener("change", (e) => { $("#mr-db-box", d).hidden = !e.target.checked; });
     },
@@ -2129,13 +2139,30 @@ function modificaRigaOfferta(c, r) {
         const art = { ...n, capitolo: $("#mr-cap", d).value, sottocapitolo: $("#mr-sotto", d).value.trim(), rifCap: "", dataAgg: oggiIso() };
         delete art.id; delete art.qta; delete art.capitolato; delete art.daOfferta;
         if (att) { art.nOrdine = cod; art.descrizione = des; art.notePre = ""; art.notePost = ""; }
+        else {
+          // articolo vero del fornitore: precodice + codice; generico solo se lo chiedi (lo puoi cambiare poi nel database)
+          art.precodice = $("#mr-pre", d).value.trim(); art.codice = $("#mr-dbcod", d).value.trim() || cod; art.nOrdine = cod;
+          art.generico = $("#mr-gen", d).checked;
+          if (!art.codice) { toast("Scrivi il codice dell'articolo."); return false; }
+          // già nel database: niente doppione, la riga usa l'articolo che c'è
+          const dopp = S.catalogo.find((y) => chiaveDb(codiceArticolo(y)) === chiaveDb(codiceArticolo(art)));
+          if (dopp) {
+            Object.assign(r, rigaDaArticolo(dopp), { id: r.id, qta: r.qta, capitolato: r.capitolato || "", k: dopp.k }); delete r.daOfferta;
+            modificata(); disegnaOfferta();
+            toast(`${codiceArticolo(dopp)} era già nel database (capitolo ${dopp.capitolo}): la riga ora usa quell'articolo, con i suoi prezzi.`, 6000);
+            return;
+          }
+        }
         const stessi = S.catalogo.filter((y) => y.capitolo === art.capitolo);
         art.ordine = (stessi.length ? Math.max(...stessi.map((y) => num(y.ordine))) : 0) + 1;
         art.k = `${art.capitolo}||${codiceArticolo(art)}|${art.nOrdine}|${db.nuovoId()}`;
         try { await scriviNelDatabase(art); } catch (e) { errore(e, "Salvataggio nel database non riuscito"); return false; }
         n.k = art.k; delete n.daOfferta;
+        // la riga dell'offerta diventa l'articolo del database (quantità e capitolato restano)
+        if (!att) Object.assign(n, rigaDaArticolo(art), { id: r.id, qta: r.qta, capitolato: r.capitolato || "", k: art.k });
       }
       Object.assign(r, n);
+      if (!isGenerico(r) && !att) { delete r.daOfferta; }
       modificata(); disegnaOfferta();
       toast($("#mr-db", d).checked ? "Riga modificata e articolo salvato nel database." : "Riga modificata.");
     },
@@ -5178,4 +5205,4 @@ $("#file-backup").addEventListener("change", async (e) => {
 });
 
 // per i test automatici
-window.__app = { S, calcolaOfferta, opzCap, BIB };
+window.__app = { S, calcolaOfferta, opzCap, BIB, modificaRigaOfferta };
