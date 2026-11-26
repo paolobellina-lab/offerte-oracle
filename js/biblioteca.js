@@ -125,6 +125,7 @@ export function leggiListino(fogli, mappa, opz = {}) {
         um: col.um !== undefined ? unita(r[col.um]) : "n.",
         sottocapitolo: [opz.sottoFoglio ? nome : "", col.sottocapitolo !== undefined ? testo(r[col.sottocapitolo]) : sezione].filter(Boolean).join(" · "),
         _sez: !!sezione || col.sottocapitolo !== undefined,
+        foglio: nome, // foglio da cui viene: ricaricando solo alcuni fogli, gli altri articoli restano
       };
       if (a.scListino !== null) a.scListino = Math.round(a.scListino * 1e6) / 1e6;
       // lo stesso codice in più fogli (es. "All Parts" e il foglio della linea): vale il primo, ma si tiene la sezione
@@ -160,7 +161,10 @@ export const fattoreDi = (termini) => termini.reduce((f, x) => f * (1 - x), 1);
 /* Unione con quello che c'è già in biblioteca per quel fornitore (abbinamento per codice).
    Restituisce { articoli, nuovi, aggiornati, invariati, tolti: [...] }. La decisione voce per voce resta
    se lo sconto del listino non è cambiato. */
-export function unisciListino(esistenti, letti, oggi) {
+// opz.fogli = fogli letti in questa importazione: gli articoli già in biblioteca che non sono nel listino si tolgono
+// solo se venivano da uno di quei fogli (un'importazione di alcuni fogli non cancella quelli caricati da altri fogli).
+// opz.tutti = importati tutti i fogli del file: si tolgono anche quelli caricati prima senza il nome del foglio.
+export function unisciListino(esistenti, letti, oggi, opz = {}) {
   const perCod = new Map(esistenti.map((a) => [a.codice, a]));
   const articoli = [], aggiornati = [];
   let nuovi = 0, invariati = 0;
@@ -176,7 +180,12 @@ export function unisciListino(esistenti, letti, oggi) {
     else invariati++;
     articoli.push(a);
   }
-  return { articoli, nuovi, aggiornati, invariati, tolti: [...perCod.values()] };
+  const tolti = [];
+  for (const e of perCod.values()) {
+    const via = !opz.fogli || (e.foglio ? opz.fogli.has(e.foglio) : opz.tutti);
+    if (via) tolti.push(e); else articoli.push(e);
+  }
+  return { articoli, nuovi, aggiornati, invariati, tolti };
 }
 
 /* ================= Listini in PDF =================

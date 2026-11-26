@@ -4733,6 +4733,7 @@ async function apriListino(file, atteso = "") {
       if (!letti.articoli.length) { toast("Nessun articolo letto: controlla le colonne."); return false; }
       const errSc = Object.entries(st.sconti).find(([, t]) => t && !testoValido(t));
       if (errSc) { toast(`Sconto standard non valido per ${errSc[0]}: scrivi per esempio 50 oppure 50+10.`); return false; }
+      st.tuttiFogli = conInt.every((f) => st.fogli.has(f.nome));
       return salvaListino(st, letti, file.name);
     },
   });
@@ -4740,7 +4741,7 @@ async function apriListino(file, atteso = "") {
 async function salvaListino(st, letti, nomeFile) {
   const oggi = oggiIso();
   const esistenti = S.bib.filter((a) => a.fornitore === st.fornitore);
-  const u = BIB.unisciListino(esistenti, letti.articoli, oggi);
+  const u = BIB.unisciListino(esistenti, letti.articoli, oggi, { fogli: st.fogli, tutti: st.tuttiFogli });
   const articoli = u.articoli.map((a) => ({ ...a, fornitore: st.fornitore, precodice: st.precodice, k: `${slug(st.fornitore)}|${a.codice}` }));
   const ops = opsBib(st.fornitore, articoli);
   // profilo del fornitore: la prossima volta il listino si legge da solo
@@ -4760,7 +4761,8 @@ async function salvaListino(st, letti, nomeFile) {
   setTimeout(() => dialogo({
     titolo: `Listino ${st.fornitore} caricato`,
     html: `<ul class="riep"><li><b>${u.nuovi}</b> articoli nuovi</li><li><b>${u.aggiornati.length}</b> con il prezzo cambiato</li><li>${u.invariati} invariati</li>
-      ${u.tolti.length ? `<li><b>${u.tolti.length}</b> non più nel listino (tolti dalla biblioteca)</li>` : ""}</ul>
+      ${u.tolti.length ? `<li><b>${u.tolti.length}</b> non più nel listino (tolti dalla biblioteca)</li>` : ""}
+      ${(() => { const altri = u.articoli.length - letti.articoli.length; return altri > 0 ? `<li><b>${altri}</b> caricati prima da altri fogli: lasciati come sono</li>` : ""; })()}</ul>
       ${diversi.length ? `<div class="avviso"><b>${diversi.length} articoli del tuo database</b> hanno un prezzo diverso da questo listino.
         <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(chiaveDb(codiceArticolo(x))).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
   }), 300);
