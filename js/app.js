@@ -4529,6 +4529,140 @@ async function controllaAcquisti(file) {
 }
 $("#sb-ctrl-acq").addEventListener("click", () => $("#ctrl-acq-file").click());
 $("#ctrl-acq-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); controllaAcquisti(f); } });
+/* ================= Importa elenco articoli (codici e quantità da Excel o PDF) =================
+   Ogni riga dell'elenco si cerca nel database (precodice + codice, poi solo codice, poi n° di ordinazione):
+   se c'è, entra come riga normale con i prezzi del database; se no, a scelta come articolo generico col prezzo del file. */
+const CAMPI_ELENCO = [
+  { k: "precodice", label: "Precodice", chiavi: ["precodice"] },
+  { k: "codice", label: "Codice", chiavi: ["codice", "codice articolo", "codice prodotto", "articolo", "cod"] },
+  { k: "nOrdine", label: "N° di ordinazione / modello", chiavi: ["numero di ordinazione", "n° di ordinazione", "n. ordinazione", "nr ordinazione", "modello", "riferimento prodotto", "riferimento"] },
+  { k: "qta", label: "Quantità *", chiavi: ["q.ta", "q.tà", "qta", "quantita", "quantità", "qty", "q.ty", "pezzi"] },
+  { k: "giorni", label: "Giorni (attività)", chiavi: ["n° giorni per calcolo attivita", "giorni", "n. giorni"] },
+  { k: "capitolato", label: "Capitolato", chiavi: ["capitolato", "nome capitolato", "capitolo"] },
+  { k: "notePre", label: "Nota pre-linea", chiavi: ["note prelinea", "nota pre-linea", "nota prelinea", "note pre linea"] },
+  { k: "notePost", label: "Nota post-linea", chiavi: ["note postlinea", "nota post-linea", "nota postlinea", "note post linea"] },
+  { k: "descrizione", label: "Descrizione (per i non trovati)", chiavi: ["descrizione", "descrizione prodotto", "descrizione breve", "description"] },
+  { k: "prezzo", label: "Prezzo unitario (per i non trovati)", chiavi: ["prezzo di listino in euro", "prezzo di listino", "listino acquisto", "prezzo unitario", "unitario", "prezzo", "listino"] },
+];
+const normInt = (v) => String(v ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[€()\[\]\n]/g, " ").replace(/\s+/g, " ").trim();
+function indovinaColonneElenco(celle) {
+  const m = {}, usate = new Set();
+  for (const c of CAMPI_ELENCO) {
+    let i = celle.findIndex((h, j) => !usate.has(j) && h && c.chiavi.includes(h));
+    if (i < 0) i = celle.findIndex((h, j) => !usate.has(j) && h && c.chiavi.some((k) => k.length > 3 && h.startsWith(k)));
+    if (i >= 0) { m[c.k] = i; usate.add(i); }
+  }
+  return m;
+}
+async function importaElenco(file) {
+  const c = capAtt(); if (!c) return toast("Apri prima un capitolo dell'offerta.");
+  let fogli = [];
+  try {
+    if (/\.pdf$/i.test(file.name)) fogli = BIB.righeDaPdf(await testoPdf(file));
+    else { const wb = await leggiExcel(await file.arrayBuffer()); for (const n of wb.nomi) fogli.push({ nome: n, righe: (await wb.foglio(n)) || [] }); }
+  } catch (x) { return errore(x, "File non leggibile"); }
+  // intestazione: la prima riga con una colonna codice (o n° di ordinazione) e una quantità
+  const trovaInt = (righe) => { for (let i = 0; i < Math.min(righe.length, 60); i++) { const h = (righe[i] || []).map(normInt); const m = indovinaColonneElenco(h); if ((m.codice !== undefined || m.nOrdine !== undefined) && m.qta !== undefined) return { i, h, m }; } return null; };
+  fogli = fogli.map((f) => ({ ...f, int: trovaInt(f.righe) })).filter((f) => f.int);
+  if (!fogli.length) return toast("Nel file non trovo una tabella con le colonne codice e quantità.", 6000);
+  const pref = fogli.find((f) => normInt(f.nome) === normInt(dbNome(c)) || normInt(f.nome) === normInt(c.nome)) || fogli[0];
+  const st = { foglio: pref.nome, m: { ...pref.int.m }, gen: true, escl: new Set() };
+  // database: precodice+codice, codice, n° di ordinazione (prima gli articoli del database del capitolo)
+  const ord = [...S.catalogo].sort((a, b) => (a.capitolo !== dbNome(c)) - (b.capitolo !== dbNome(c)));
+  const perPC = new Map(), perC = new Map(), perN = new Map();
+  for (const a of ord) {
+    const pc = chiaveDb(codiceArticolo(a)), co = chiaveDb(a.codice), no = chiaveDb(a.nOrdine);
+    if (pc && !perPC.has(pc)) perPC.set(pc, a);
+    if (co && co !== "ARTICOLO_GEN") { if (!perC.has(co)) perC.set(co, []); perC.get(co).push(a); }
+    if (no && !perN.has(no)) perN.set(no, a);
+  }
+  const cerca = (x) => {
+    if (/ARTICOLO_?GEN/i.test(x.codice)) return null;
+    const pc = chiaveDb(x.precodice + x.codice), co = chiaveDb(x.codice), no = chiaveDb(x.nOrdine);
+    if (x.precodice && perPC.has(pc)) return { a: perPC.get(pc), come: "precodice + codice" };
+    if (co && perPC.has(co)) return { a: perPC.get(co), come: "codice" };
+    if (co && perC.get(co)?.length) return { a: perC.get(co)[0], come: perC.get(co).length > 1 ? `codice (${perC.get(co).length} nel database, preso il primo)` : "codice senza precodice" };
+    if (no && perN.has(no)) return { a: perN.get(no), come: "n° di ordinazione" };
+    if (no && perC.get(no)?.length) return { a: perC.get(no)[0], come: "n° di ordinazione = codice" };
+    return null;
+  };
+  let righe = [];
+  const leggi = () => {
+    const f = fogli.find((x) => x.nome === st.foglio), m = st.m, v = (r, k) => (m[k] === undefined ? "" : String(r[m[k]] ?? "").trim());
+    righe = [];
+    let senzaQ = 0;
+    for (const r of f.righe.slice(f.int.i + 1)) {
+      if (!r) continue;
+      const x = { precodice: v(r, "precodice"), codice: v(r, "codice"), nOrdine: v(r, "nOrdine"), qta: num(v(r, "qta")), giorni: num(v(r, "giorni")), capitolato: v(r, "capitolato"),
+        notePre: v(r, "notePre"), notePost: v(r, "notePost"), descrizione: v(r, "descrizione"), prezzo: num(v(r, "prezzo")) };
+      if (!x.codice && !x.nOrdine) continue;
+      if (!x.qta) { senzaQ++; continue; }
+      x.t = cerca(x); righe.push(x);
+    }
+    righe.senzaQ = senzaQ;
+  };
+  const disegna = (d) => {
+    leggi();
+    const f = fogli.find((x) => x.nome === st.foglio);
+    const opz = (k) => `<option value="">— nessuna —</option>` + f.int.h.map((h, i) => (h ? `<option value="${i}" ${st.m[k] === i ? "selected" : ""}>${esc(h)}</option>` : "")).join("");
+    const trov = righe.filter((x) => x.t).length, gen = righe.filter((x) => !x.t).length;
+    const capNuovi = [...new Set(righe.map((x) => x.capitolato).filter((n) => n && !c.capitolati.includes(n)))];
+    $("#el-col", d).innerHTML = CAMPI_ELENCO.map((cc) => `<label class="f">${esc(cc.label)}<select data-el="${cc.k}">${opz(cc.k)}</select></label>`).join("");
+    $("#el-riep", d).innerHTML = `<b>${righe.length}</b> righe: <span class="ok"><b>${trov}</b> trovate nel database</span> · <span class="${gen ? "bad" : ""}"><b>${gen}</b> non trovate</span>${righe.senzaQ ? ` · ${righe.senzaQ} senza quantità (saltate)` : ""}${capNuovi.length ? ` · capitolati nuovi: ${capNuovi.map(esc).join(", ")}` : ""}`;
+    $("#el-righe", d).innerHTML = righe.slice(0, 500).map((x, i) => `<tr${x.t ? "" : ' style="background:#fff3cd"'}>
+      <td><input type="checkbox" data-el-r="${i}" ${st.escl.has(i) ? "" : "checked"}></td>
+      <td class="mono small nowrap">${esc([x.precodice, x.codice].filter(Boolean).join(" ") || x.nOrdine)}</td><td class="num">${fNum.format(x.qta)}</td><td class="small">${esc(x.capitolato)}</td>
+      <td class="small">${x.t ? `<span class="mono"><b>${esc(codiceArticolo(x.t.a))}</b></span> ${esc((x.t.a.descrizione || "").slice(0, 70))}<br><span class="muted">${esc(x.t.a.capitolo)} · ${euro(x.t.a.listinoAcquisto)} · per ${esc(x.t.come)}</span>`
+        : `<span class="bad">non trovato</span>${st.gen ? ` → generico: ${esc((x.descrizione || x.notePost || "").slice(0, 60))} · ${euro(x.prezzo)}` : " → saltato"}`}</td></tr>`).join("");
+  };
+  dialogo({
+    titolo: `Importa elenco articoli · ${file.name}`, largo: true,
+    html: `<p class="muted small" style="margin-top:0">Le righe vanno nel capitolo <b>${esc(c.nome)}</b>. Ogni codice si cerca nel database (precodice + codice, poi solo codice, poi n° di ordinazione): se c'è, la riga prende i dati e i prezzi del database.</p>
+      <div class="row" style="gap:10px;align-items:end;flex-wrap:wrap">
+        ${fogli.length > 1 ? `<label class="f">Foglio<select id="el-foglio">${fogli.map((f) => `<option ${f.nome === st.foglio ? "selected" : ""}>${esc(f.nome)}</option>`).join("")}</select></label>` : ""}
+        <label class="row small"><input type="checkbox" id="el-gen" checked> aggiungi i non trovati come articoli generici (descrizione e prezzo del file)</label>
+      </div>
+      <details style="margin-top:8px"><summary class="small muted">Colonne del file</summary><div class="lg-mappa" id="el-col" style="margin-top:6px"></div></details>
+      <p class="small" id="el-riep" style="margin:8px 0"></p>
+      <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th></th><th>Codice nel file</th><th class="num">Q.tà</th><th>Capitolato</th><th>Nel database</th></tr></thead><tbody id="el-righe"></tbody></table></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiungi le righe", value: "ok", cls: "primary" }],
+    onApri(d) {
+      disegna(d);
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.id === "el-foglio") { st.foglio = t.value; st.m = { ...fogli.find((f) => f.nome === t.value).int.m }; st.escl.clear(); }
+        else if (t.id === "el-gen") st.gen = t.checked;
+        else if (t.dataset.el) { if (t.value === "") delete st.m[t.dataset.el]; else st.m[t.dataset.el] = +t.value; st.escl.clear(); }
+        else if (t.dataset.elR !== undefined) { t.checked ? st.escl.delete(+t.dataset.elR) : st.escl.add(+t.dataset.elR); return; }
+        else return;
+        disegna(d);
+      });
+    },
+    onConferma() {
+      const nuove = []; let dalDb = 0;
+      righe.forEach((x, i) => {
+        if (st.escl.has(i)) return;
+        if (x.capitolato && !c.capitolati.includes(x.capitolato)) aggiungiCapitolato(c, x.capitolato);
+        if (x.t) {
+          const r = { ...rigaDaArticolo(x.t.a), id: db.nuovoId(), qta: x.qta, capitolato: x.capitolato };
+          if (isAttivita(r) && x.giorni) r.giorni = x.giorni;
+          if (!isGenerico(r)) { if (x.notePre) r.notePre = x.notePre; if (x.notePost) r.notePost = x.notePost; }
+          nuove.push(r); dalDb++;
+        } else if (st.gen) {
+          const r = rigaDaOffertaForn({ codice: x.nOrdine || (/ARTICOLO_?GEN/i.test(x.codice) ? "" : [x.precodice, x.codice].filter(Boolean).join(" ")), descrizione: x.notePost && x.descrizione && x.notePost.includes(x.descrizione) ? x.notePost : x.descrizione || x.notePost, um: "n.", qta: x.qta, unitario: x.prezzo }, false, `elenco ${file.name}`, c.nome);
+          r.capitolato = x.capitolato; delete r.daOfferta;
+          nuove.push(r);
+        }
+      });
+      if (!nuove.length) { toast("Nessuna riga da aggiungere."); return false; }
+      c.righe.push(...nuove);
+      modificata(); disegnaOfferta();
+      toast(`Aggiunte ${nuove.length} righe al capitolo ${c.nome} (${dalDb} dal database, ${nuove.length - dalDb} generiche).`, 5000);
+    },
+  });
+}
+$("#sb-imp-elenco").addEventListener("click", () => { if (!capAtt()) return toast("Apri prima un capitolo dell'offerta."); $("#imp-elenco-file").click(); });
+$("#imp-elenco-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); importaElenco(f); } });
 $("#sb-imp-off").addEventListener("click", () => $("#imp-off-file").click());
 $("#imp-off-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { menuAperto(false); importaOffertaFornitore(f); } });
 
