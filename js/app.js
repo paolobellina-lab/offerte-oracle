@@ -4621,7 +4621,7 @@ async function apriListino(file, atteso = "") {
     }
   };
   const campoLg = (c) => `<label class="f">${esc(c.label)}${c.obbl ? " *" : ""}<select data-lg-campo="${c.k}">${opzCol(st.mappa[c.k])}</select></label>`;
-  const gmaList = `<datalist id="lg-gma">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>`;
+  const gmaList = `<datalist id="lg-gma">${opzioniGmaPerFornitore(st.fornitore)}</datalist>`;
   dialogo({
     titolo: `Carica listino · ${file.name}`, largo: true,
     html: `<div class="row">
@@ -4712,7 +4712,7 @@ async function apriListino(file, atteso = "") {
       d.addEventListener("click", (e) => { const b = e.target.closest("[data-lg-usa-pre]"); if (!b) return; st.precodice = b.dataset.lgUsaPre; $("#lg-pre", d).value = st.precodice; aggiorna(); });
       d.addEventListener("change", (e) => {
         const t = e.target;
-        if (t.id === "lg-forn") { const es = fornitoreEsistente(t.value); if (es && es !== t.value.trim()) { t.value = es; toast(`Uso il fornitore esistente “${es}”.`, 2500); } st.fornitore = t.value.trim(); }
+        if (t.id === "lg-forn") { const es = fornitoreEsistente(t.value); if (es && es !== t.value.trim()) { t.value = es; toast(`Uso il fornitore esistente “${es}”.`, 2500); } st.fornitore = t.value.trim(); const dl = $("#lg-gma", d); if (dl) dl.innerHTML = opzioniGmaPerFornitore(st.fornitore); }
         else if (t.id === "lg-pre") st.precodice = t.value.trim();
         else if (t.id === "lg-sottofoglio") st.sottoFoglio = t.checked;
         else if (t.dataset.lgFoglio !== undefined) { t.checked ? st.fogli.add(t.dataset.lgFoglio) : st.fogli.delete(t.dataset.lgFoglio); }
@@ -4765,6 +4765,12 @@ async function salvaListino(st, letti, nomeFile) {
         <details><summary>vedi</summary><ul class="riep">${diversi.slice(0, 200).map((x) => `<li class="mono small">${esc(codiceArticolo(x))} ${esc(x.nOrdine)}: ${euro(x.listinoAcquisto)} → ${euro(perCod.get(chiaveDb(codiceArticolo(x))).listino)}</li>`).join("")}</ul></details></div>` : ""}`,
   }), 300);
 }
+// GMA ordinati per fornitore (prima quelli del fornitore indicato), poi per codice
+function opzioniGmaPerFornitore(primo) {
+  const k = ntDb(primo);
+  return [...S.gmv].sort((a, b) => (ntDb(a.fornitore) !== k) - (ntDb(b.fornitore) !== k) || String(a.fornitore || "").localeCompare(String(b.fornitore || "")) || String(a.codice).localeCompare(String(b.codice)))
+    .map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("");
+}
 // colonne del listino che non servono alla scheda articolo (si usano solo se ci sono): in un riquadro chiuso
 const EXTRA_LG = new Set(["netto", "sconto", "gma", "molt"]);
 // tutti i fornitori che l'app conosce: biblioteca, GMA, database
@@ -4785,7 +4791,7 @@ function impostaFornitore(nome) {
       <label class="f">GMA degli articoli senza famiglia<input id="fi-gma" list="fi-gmas" value="${esc(p.gmaDefault || "")}" style="width:140px"></label></div>
       ${fam.length ? `<div class="tbl-wrap" style="max-height:300px;margin-top:10px"><table><thead><tr><th>Famiglia</th><th>GMA</th></tr></thead><tbody>
         ${fam.map((f) => `<tr><td class="mono">${esc(f)}</td><td><input class="cond" data-fi-fam="${esc(f)}" list="fi-gmas" value="${esc(p.famiglie?.[f] || "")}" style="width:140px"></td></tr>`).join("")}</tbody></table></div>` : ""}
-      <datalist id="fi-gmas">${S.gmv.map((g) => `<option value="${esc(g.codice)}">${esc(g.fornitore || "")}</option>`).join("")}</datalist>
+      <datalist id="fi-gmas">${opzioniGmaPerFornitore(p.nome)}</datalist>
       <p class="muted small">Il precodice cambia il codice Oracle degli articoli della biblioteca. Gli sconti standard si impostano in “GMA e acquisti standard”.</p>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Salva", value: "ok", cls: "primary" }],
     async onConferma(v, d) {
