@@ -36,6 +36,13 @@ export function trovaIntestazione(righe) {
   return null;
 }
 
+/* Tutte le intestazioni di un foglio (anche le tabelle successive, con intestazioni scritte diversamente). */
+export function intestazioniFoglio(righe) {
+  const out = new Set();
+  for (const r0 of righe) { const r = (r0 || []).map(norm); if (r.filter(Boolean).length >= 2 && r.some(pareCodice) && r.some(parePrezzo)) for (const c of r) if (c) out.add(c); }
+  return out;
+}
+
 export const isMetel = (celle) => ["codice prodotto azienda", "prezzo al rivenditore", "moltiplicatore prezzo"].every((x) => celle.includes(x));
 
 /* Prima ipotesi: per ogni campo la colonna con l'intestazione più somigliante. Restituisce { campo: intestazione }. */

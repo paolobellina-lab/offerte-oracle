@@ -4590,7 +4590,20 @@ async function apriListino(file, atteso = "") {
   // sconto totale di un GMA del fornitore (es. "50+10" → 55%)
   const totGma = (g) => { const t = String(scontoGmaTxt(g.codice, st.fornitore) || "").split("+").map((x) => num(x)).filter((x) => x > 0); return t.length ? 1 - t.reduce((a, x) => a * (1 - (x > 1 ? x / 100 : x)), 1) : null; };
   const gmaConSconto = (pct) => S.gmv.filter((g) => ntDb(g.fornitore) === ntDb(st.fornitore) && totGma(g) !== null && Math.abs(totGma(g) * 100 - pct) < 0.6).map((g) => g.codice);
-  const opzCol = (v) => `<option value="">— nessuna —</option>` + tutteInt.map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}</option>`).join("");
+  // intestazioni di ogni foglio: nelle tendine solo quelle dei fogli spuntati
+  const intDi = new Map(conInt.map((f) => [f.nome, BIB.intestazioniFoglio(f.righe)]));
+  const intSel = () => { const u = []; for (const f of conInt) if (st.fogli.has(f.nome)) for (const h of intDi.get(f.nome)) if (!u.includes(h)) u.push(h); return u; };
+  const opzCol = (v) => `<option value="">— nessuna —</option>` + [...new Set([...intSel(), ...(v ? [v] : [])])].map((h) => `<option ${h === v ? "selected" : ""}>${esc(h)}${h === v && !intSel().includes(h) ? " (non nei fogli scelti)" : ""}</option>`).join("");
+  // colonne scelte che mancano in qualche foglio spuntato
+  const avvisiColonne = () => {
+    const out = [];
+    for (const c of BIB.CAMPI) {
+      const h = st.mappa[c.k]; if (!h) continue;
+      const manca = conInt.filter((f) => st.fogli.has(f.nome) && !intDi.get(f.nome).has(h)).map((f) => f.nome);
+      if (manca.length) out.push(`<b>${esc(c.label)}</b> = “${esc(h)}” non c'è in ${manca.length === [...st.fogli].length ? "nessuno dei fogli scelti" : `${manca.length} fogli: ${manca.slice(0, 6).map(esc).join(", ")}${manca.length > 6 ? "…" : ""}`}${c.obbl ? " — <b>da quei fogli non si legge nessuna riga</b>" : ""}`);
+    }
+    return out;
+  };
   let letti = { articoli: [], scartate: 0, perFoglio: {} };
   const leggi = () => {
     letti = BIB.leggiListino(conInt.filter((f) => st.fogli.has(f.nome)), st.mappa, { sottoFoglio: st.sottoFoglio });
@@ -4622,6 +4635,8 @@ async function apriListino(file, atteso = "") {
     onApri(d) {
       const aggiorna = () => {
         leggi();
+        $$("[data-lg-campo]", d).forEach((sel) => { if (document.activeElement !== sel) sel.innerHTML = opzCol(st.mappa[sel.dataset.lgCampo]); });
+        const avv = avvisiColonne();
         for (const [n, x] of Object.entries(letti.perFoglio)) { const el = $(`[data-lg-n="${CSS.escape(n)}"]`, d); if (el) el.textContent = `(${x})`; }
         const es = letti.articoli.slice(0, 6);
         // articoli già nel database (precodice + codice); se il precodice è vuoto o diverso, si propone quello usato nel database
@@ -4662,7 +4677,7 @@ async function apriListino(file, atteso = "") {
               <td class="small"><b>${esc(c[0])}</b></td><td class="small" title="${esc(c[1])}">${esc(String(c[1]).slice(0, 140))}${String(c[1]).length > 140 ? "…" : ""}</td><td class="small ${c[3] === "su" ? "bad" : c[3] === "giu" ? "ok" : ""}" title="${esc(c[2])}"><b>${esc(String(c[2]).slice(0, 140))}</b></td></tr>`).join("")).join("")}
             </tbody></table></div>
             <p class="muted small" style="margin:4px 0 0">Il database non cambia caricando il listino: per aggiornare i prezzi usa “Aggiorna i prezzi” in Importa e aggiorna.</p></details>`;
-        $("#lg-anteprima", d).innerHTML = `${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
+        $("#lg-anteprima", d).innerHTML = `${avv.length ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ Colonne scelte che mancano in alcuni fogli spuntati:<br>${avv.join("<br>")}<br><span class="muted">Togli la spunta a quei fogli e caricali con un'importazione separata, scegliendo le loro colonne.</span></div>` : ""}${nSugg && nSugg > giaDb ? `<div class="avviso warn small" style="margin:0 0 8px">⚠ ${nSugg} codici di questo listino sono già nel database col precodice <b class="mono">${esc(preSugg || "(vuoto)")}</b>, ma qui il precodice è <b class="mono">${esc(st.precodice || "(vuoto)")}</b>: così risulterebbero articoli diversi (doppioni).
             <button type="button" class="btn small primary" data-lg-usa-pre="${esc(preSugg)}">Usa il precodice ${esc(preSugg || "vuoto")}</button></div>` : ""}
           <span class="muted small" style="font-weight:600">Anteprima: ${letti.articoli.length} articoli letti${letti.scartate ? `, ${letti.scartate} righe saltate (senza codice o prezzo)` : ""} · <span class="${giaDb ? "ok" : ""}">${giaDb} già nel database</span> (confronto per precodice + codice)</span>
           <div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Codice Oracle</th><th>Modello</th><th>Descrizione</th><th>U.M.</th><th class="num">Listino</th><th class="num">Sconto listino</th><th>Famiglia</th><th>Sottocapitolo</th></tr></thead><tbody>
