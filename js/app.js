@@ -1452,7 +1452,7 @@ function valoreColonna(col, r, c, x, linee) {
     case "articolo": return String(r.nOrdine || r.descrizione || "").trim();
     case "um": return r.um || "";
     case "qta": return numIt(r.qta);
-    case "giorni": return isAttivita(r) ? numIt(r.giorni) : "";
+    case "giorni": return isAttivita(r) ? (r.aCorpo ? "a corpo" : numIt(r.giorni)) : "";
     case "unitario": return euro(x.unitario);
     case "totale": return euro(num(r.qta) ? x.totale : 0);
     case "capitolato": return r.capitolato || "";
@@ -1550,7 +1550,8 @@ function disegnaRighe(c) {
     if (num(r.qta) !== 0) tot += x.totale;
     const att = isAttivita(r);
     // "a giornate": la quantità mostrata è il numero di giorni e la colonna Giorni mostra la quantità (i campi si invertono)
-    const scambio = att && r.aGiornate, cQ = scambio ? "giorni" : "qta", cG = scambio ? "qta" : "giorni";
+    const corpo = att && !!r.aCorpo;
+    const scambio = att && r.aGiornate && !corpo, cQ = scambio ? "giorni" : "qta", cG = scambio ? "qta" : "giorni";
     let testa = "";
     if ((r.capitolato || "") !== capPrec) {
       capPrec = r.capitolato || "";
@@ -1566,9 +1567,12 @@ function disegnaRighe(c) {
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome && r.capitolo !== dbNome(c) && !r.daOfferta ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
       <td class="num"><input class="qta${num(r[cQ]) >= 1000 ? " qta-alta" : ""}" data-campo="${cQ}" inputmode="decimal" value="${esc(numIt(r[cQ]))}"${num(r[cQ]) >= 1000 ? ' title="Quantità molto alta: controlla che sia giusta"' : ""}>${num(x.qta) !== num(r[cQ]) && num(r.qta) && !scambio ? `<div class="muted small nowrap" title="Quantità che va in Oracle">Oracle: ${esc(numIt(x.qta))}</div>` : ""}</td>
-      <td class="num nowrap">${att ? `<input class="qta" data-campo="${cG}" inputmode="decimal" value="${esc(numIt(r[cG]))}" title="${scambio ? "A giornate: qui il numero di volte (la quantità è il numero di giorni)" : "Numero di giorni"}">
+      <td class="num nowrap">${corpo ? `<label class="giornate" title="Attività a corpo: costo e vendita complessivi solo per questa offerta (senza giorni e senza arrotondamento)"><input type="checkbox" data-campo="aCorpo" checked> a corpo</label>
+        <div class="corpo"><label title="Costo di acquisto complessivo (per quantità 1)">costo <input class="qta" data-campo="corpoAcq" inputmode="decimal" value="${esc(numIt(r.corpoAcq))}"></label>
+        <label title="Prezzo di vendita complessivo (per quantità 1). Vuoto = calcolato dal costo con le regole del capitolo">vendita <input class="qta" data-campo="corpoVen" inputmode="decimal" value="${num(r.corpoVen) ? esc(numIt(r.corpoVen)) : ""}" placeholder="${esc(numIt(Math.round(x.unitario * 100) / 100))}"></label></div>` : att ? `<input class="qta" data-campo="${cG}" inputmode="decimal" value="${esc(numIt(r[cG]))}" title="${scambio ? "A giornate: qui il numero di volte (la quantità è il numero di giorni)" : "Numero di giorni"}">
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
-          <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} > a giornate</label>` : ""}</td>
+          <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} > a giornate</label>
+        <label class="giornate" title="Attività a corpo: costo e vendita complessivi scritti a mano, solo per questa offerta"><input type="checkbox" data-campo="aCorpo"> a corpo</label>` : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       ${isGenerico(r)
@@ -1608,16 +1612,17 @@ function disegnaRiepilogoRighe(c) {
       capPrec = r.capitolato || "";
       testa = `<tr class="gruppo" data-gruppo="${esc(capPrec)}"><td colspan="12">${capPrec ? esc(capPrec) : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
-    const scAcq = 1 - x.acq.fattore, fonte = { gma: "dal GMA", generale: "generale", standard: "standard del database", automatico: "automatico del capitolo" };
+    const scAcq = 1 - x.acq.fattore, fonte = { gma: "dal GMA", generale: "generale", standard: "standard del database", automatico: "automatico del capitolo", corpo: "a corpo, scritto nella riga" };
+    const pg = att && !r.aCorpo ? '<span class="muted small">/g</span>' : att ? '<span class="muted small"> a corpo</span>' : "";
     return testa + `<tr data-id="${esc(r.id)}"${isAttivita(r) ? ' class="riga-att"' : ""}>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
       <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b><div class="d">${esc(r.descrizione)}</div></td>
       <td class="num">${esc(numIt(x.qta))}</td>
-      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo del generico: se lo cambi si aggiorna anche nel database con la data di oggi">` : euro(r.listinoAcquisto)}${att ? '<span class="muted small">/g</span>' : ""}</td>
-      <td class="num" title="${esc(fonte[x.acq.fonte])}">${att && x.acq.fonte === "standard" ? "" : pctTxt(scAcq) || "0%"}${x.acq.fonte !== "standard" ? ' <span class="fonte">●</span>' : ""}</td>
-      <td class="num">${euro(x.acq.unitario)}${att ? '<span class="muted small">/g</span>' : ""}</td>
-      <td class="num" title="${esc(fonte[x.fonteVen])}">${lisM ? pctTxt(x.scLis) || "0%" : ricarico ? pctTxt(x.ric) || "0%" : att ? "" : pctTxt(1 - x.fVen) || "0%"}${x.fonteVen === "gma" || x.fonteVen === "generale" ? ' <span class="fonte">●</span>' : ""}</td>
+      <td class="num">${isGenerico(r) ? `<input class="qta prezzo" data-campo="prezzoGen" inputmode="decimal" value="${esc(numIt(r.listinoAcquisto))}" title="Prezzo del generico: se lo cambi si aggiorna anche nel database con la data di oggi">` : euro(r.aCorpo && att ? r.corpoAcq : r.listinoAcquisto)}${pg}</td>
+      <td class="num" title="${esc(fonte[x.acq.fonte])}">${att && (x.acq.fonte === "standard" || x.acq.fonte === "corpo") ? "" : pctTxt(scAcq) || "0%"}${x.acq.fonte !== "standard" && x.acq.fonte !== "corpo" ? ' <span class="fonte">●</span>' : ""}</td>
+      <td class="num">${euro(x.acq.unitario)}${pg}</td>
+      <td class="num" title="${esc(fonte[x.fonteVen])}">${x.fonteVen === "corpo" ? '<span class="muted small">a corpo</span>' : lisM ? pctTxt(x.scLis) || "0%" : ricarico ? pctTxt(x.ric) || "0%" : att ? "" : pctTxt(1 - x.fVen) || "0%"}${x.fonteVen === "gma" || x.fonteVen === "generale" ? ' <span class="fonte">●</span>' : ""}</td>
       <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(x.totale)}</td>
       <td class="num">${x.scontoListino === null || (isGenerico(r) && (r.daOfferta || gmaGenerico(r.gmv, r.fornitore))) ? "" : pctTxt(x.scontoListino) || "0%"}</td>
       <td class="mono">${esc(r.gmv)}</td></tr>`;
@@ -1648,6 +1653,15 @@ function cambioRiga(e) {
   if (campo === "notaPreAgg" || campo === "notaPostAgg") { r[campo] = inp.value.trim(); modificata(); return; }
   if (campo === "capitolato") { r.capitolato = inp.value; modificata(); return ridisegnaOfferta(); }
   if (campo === "aGiornate") { r.aGiornate = inp.checked; modificata(); return ridisegnaOfferta(); }
+  if (campo === "aCorpo") {
+    if (inp.checked) {
+      // si parte dal costo attuale dell'attività (tutti i giorni); la vendita resta calcolata finché non la scrivi
+      if (!num(r.corpoAcq)) { const x = calcolaRiga(r, c, opzCap(c).ricarichi); r.corpoAcq = Math.round(x.acq.totale / (num(r.qta) || 1) * 100) / 100; }
+      r.aCorpo = true;
+    } else delete r.aCorpo;
+    modificata(); return ridisegnaOfferta();
+  }
+  if (campo === "corpoVen" && !inp.value.trim()) { delete r.corpoVen; modificata(); return ridisegnaOfferta(); }
   if (campo === "prezzoGen") {
     const p = num(inp.value);
     if (!p || Math.abs(p - num(r.listinoAcquisto)) < 0.0001) return ridisegnaOfferta();
@@ -1929,6 +1943,7 @@ $("#aggiorna-da-catalogo").addEventListener("click", () => {
     const out = { ...nuovo, id: r.id, qta: r.qta, giorni: isAttivita(r) ? r.giorni : a.giorni, notePre: r.notePre, notePost: r.notePost, capitolato: r.capitolato || "" };
     if (r.notaPreAgg) out.notaPreAgg = r.notaPreAgg; if (r.notaPostAgg) out.notaPostAgg = r.notaPostAgg;
     if (r.aGiornate) out.aGiornate = r.aGiornate; else delete out.aGiornate;
+    for (const f of ["aCorpo", "corpoAcq", "corpoVen"]) if (r[f] !== undefined) out[f] = r[f]; else delete out[f];
     return out;
   });
   modificata(); disegnaOfferta();
@@ -4404,7 +4419,8 @@ function rigaDaOffertaForn(x, att, fonte, capNome) {
 /* Riga generica ↔ attività (tasto destro sulle righe). */
 function convertiRiga(r, inAttivita) {
   const x = isAttivita(r)
-    ? { codice: r.notePre || r.nOrdine, descrizione: r.notePost || r.descrizione, um: r.um, qta: num(r.qta) * (num(r.giorni) || 1), unitario: num(r.listinoAcquisto) }
+    ? (r.aCorpo ? { codice: r.notePre || r.nOrdine, descrizione: r.notePost || r.descrizione, um: r.um, qta: num(r.qta), unitario: num(r.corpoAcq) }
+      : { codice: r.notePre || r.nOrdine, descrizione: r.notePost || r.descrizione, um: r.um, qta: num(r.qta) * (num(r.giorni) || 1), unitario: num(r.listinoAcquisto) })
     : { codice: r.nOrdine, descrizione: r.descrizione, um: r.um, qta: num(r.qta), unitario: num(r.listinoAcquisto) * fattoreStandard(r) };
   const n = rigaDaOffertaForn(x, inAttivita, r.daOfferta || "", r.capitolo);
   return { ...n, id: r.id, capitolato: r.capitolato || "" };

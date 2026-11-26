@@ -218,7 +218,10 @@ export function migraCondizioni(cap) {
 
 /* Attività "a giornate": in vendita il prezzo dell'attività è complessivo (quantità 1);
    con questa scelta va in Oracle come valore giornaliero × numero di giorni. In acquisto è sempre così. */
-export const aGiornate = (r) => isAttivita(r) && !!r.aGiornate && num(r.giorni) > 0;
+export const aGiornate = (r) => isAttivita(r) && !aCorpo(r) && !!r.aGiornate && num(r.giorni) > 0;
+/* Attività "a corpo" (solo nella riga dell'offerta): costo e vendita complessivi scritti a mano, senza giorni e senza arrotondamento.
+   Se la vendita a corpo è vuota, si calcola dal costo con le regole del capitolo. */
+export const aCorpo = (r) => isAttivita(r) && !!r.aCorpo;
 
 /* Fattore di acquisto di una riga: standard del database o condizioni della pagina Prezzi. */
 export function fattoreAcquisto(r, k) {
@@ -233,11 +236,12 @@ export function fattoreAcquisto(r, k) {
    Restituisce i valori di vendita (unitario, qta, totale) e quelli di acquisto in "acq". */
 export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const att = isAttivita(r), g = r.gmv || "";
-  const gg = num(r.giorni), la = num(r.listinoAcquisto);
+  const corpo = aCorpo(r);
+  const gg = corpo ? 0 : num(r.giorni), la = num(r.listinoAcquisto);
   const f0 = fattoreStandard(r);
   // acquisto: standard del database, oppure le condizioni scritte nella pagina Prezzi (del GMA o generali)
-  const { f: fAcq, fonte: fonteAcq } = fattoreAcquisto(r, k);
-  const acqUnit = la * fAcq; // per l'attività: al giorno
+  const { f: fAcq, fonte: fonteAcq } = corpo ? { f: 1, fonte: "corpo" } : fattoreAcquisto(r, k);
+  const acqUnit = corpo ? num(r.corpoAcq) : la * fAcq; // per l'attività: al giorno (a corpo: complessivo)
   const acqQta = att && gg > 0 ? gg * num(r.qta) : num(r.qta);
   const acq = { unitario: acqUnit, qta: acqQta, totale: acqUnit * acqQta, fattore: fAcq, fonte: fonteAcq };
   // vendita: ricarico sull'acquisto, oppure sconto sul listino
@@ -263,12 +267,13 @@ export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
     baseVen = acqUnit * (att && gg > 0 ? gg : 1);
     perPezzo = baseVen * (1 + ric);
   } else {
-    baseVen = att ? prezzoListino(r) : la; // attività: il prezzo di listino di tutti i giorni
+    baseVen = corpo ? acqUnit / (f0 || 1) : att ? prezzoListino(r) : la; // attività: il prezzo di listino di tutti i giorni
     const spG = valido(leggiSconti(k.ven.scGma[g])), spC = generalePer(att, k.ven.scGen);
     fVen = spG ? applica(spG, f0) : spC ? applica(spC, f0) : f0;
     fonteVen = spG ? "gma" : spC ? "generale" : "standard";
     perPezzo = baseVen * fVen;
   }
+  if (corpo && num(r.corpoVen) > 0) { perPezzo = num(r.corpoVen); fonteVen = "corpo"; }
   const giornate = aGiornate(r);
   const unitario = giornate ? perPezzo / gg : perPezzo;
   const qta = giornate ? gg * num(r.qta) : num(r.qta);
