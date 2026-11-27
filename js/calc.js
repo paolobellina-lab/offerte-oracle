@@ -234,7 +234,43 @@ export function fattoreAcquisto(r, k) {
 
 /* Calcolo completo di una riga. ricarichi = { NOME_CAPITOLO_DATABASE: 0.28, ... } (ricarico automatico).
    Restituisce i valori di vendita (unitario, qta, totale) e quelli di acquisto in "acq". */
+/* Voce "spalmata" (solo nella riga dell'offerta): il suo costo di acquisto si ripartisce sulle righe scelte
+   (r.spalma = { su: [id delle righe], modo: "prezzo" | "qta" }). La voce non ha più importo e non va in Oracle;
+   le righe di destinazione aumentano il costo e la vendita sale con lo stesso rapporto vendita/acquisto della riga
+   (col ricarico: il ricarico del capitolo). Il database non cambia. */
+export const isSpalmata = (r) => !!r?.spalma?.su?.length;
+export function destinazioniSpalma(v, righe) {
+  const su = new Set(v.spalma?.su || []);
+  return (righe || []).filter((t) => t !== v && su.has(t.id) && num(t.qta) !== 0 && !isSpalmata(t));
+}
+// quote di una voce: Map(id riga → costo di acquisto aggiunto)
+export function quoteSpalma(v, cap, ricarichi = {}, k = condizioni(cap)) {
+  const righe = cap?.tutteRighe || cap?.righe || [];
+  const dest = destinazioniSpalma(v, righe), out = new Map();
+  if (!dest.length || num(v.qta) === 0) return out;
+  const importo = calcolaRigaBase(v, cap, ricarichi, k).acq.totale;
+  const pesi = dest.map((t) => { const b = calcolaRigaBase(t, cap, ricarichi, k); return v.spalma.modo === "qta" ? Math.abs(b.acq.qta) : Math.abs(b.acq.totale); });
+  const somma = pesi.reduce((x, y) => x + y, 0);
+  dest.forEach((t, i) => out.set(t.id, importo * (somma > 0 ? pesi[i] / somma : 1 / dest.length)));
+  return out;
+}
 export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
+  const base = calcolaRigaBase(r, cap, ricarichi, k);
+  if (isSpalmata(r)) return { ...base, totale: 0, acq: { ...base.acq, totale: 0 }, spalmata: { acq: base.acq.totale, ven: base.totale } };
+  const righe = cap?.tutteRighe || cap?.righe || [];
+  let extra = 0;
+  for (const v of righe) if (v !== r && isSpalmata(v) && v.spalma.su.includes(r.id)) extra += quoteSpalma(v, cap, ricarichi, k).get(r.id) || 0;
+  if (!extra) return base;
+  // la vendita sale con lo stesso rapporto vendita/acquisto della riga (col ricarico: 1 + ricarico)
+  const rapporto = base.acq.totale > 0 ? base.totale / base.acq.totale : base.ric !== null ? 1 + base.ric : 1;
+  const extraVen = extra * rapporto;
+  const acqTot = base.acq.totale + extra, venTot = base.totale + extraVen;
+  const unitario = base.qta ? venTot / base.qta : base.unitario;
+  const la = num(r.listinoAcquisto);
+  return { ...base, unitario, totale: venTot, acq: { ...base.acq, totale: acqTot, unitario: base.acq.qta ? acqTot / base.acq.qta : base.acq.unitario },
+    scontoListino: !isAttivita(r) && la ? 1 - unitario / la : base.scontoListino, spalmato: { acq: extra, ven: extraVen } };
+}
+export function calcolaRigaBase(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const att = isAttivita(r), g = r.gmv || "";
   const corpo = aCorpo(r);
   const gg = corpo ? 0 : num(r.giorni), la = num(r.listinoAcquisto);
@@ -300,8 +336,10 @@ export function ordinaRighe(righe, ordineCapitoli = []) {
    "off" è un capitolo dell'offerta: { acq, ven, out, righe, ... }. */
 export function calcolaOfferta(off, { ricarichi = {} } = {}) {
   const k = condizioni(off);
-  const righe = (off.righe || []).filter((r) => num(r.qta) !== 0)
-    .map((r) => ({ riga: r, c: calcolaRiga(r, off, ricarichi, k) }));
+  const cap = off.tutteRighe ? off : { ...off, tutteRighe: off.righe || [] };
+  // le voci spalmate non hanno importo: il loro costo è già nelle righe di destinazione
+  const righe = (off.righe || []).filter((r) => num(r.qta) !== 0 && !isSpalmata(r))
+    .map((r) => ({ riga: r, c: calcolaRiga(r, cap, ricarichi, k) }));
   const totale = righe.reduce((s, x) => s + x.c.totale, 0);
   return { righe, totale };
 }
@@ -312,7 +350,7 @@ export const esclusoDaExport = (r, off) => (off.esclusiExport || []).includes(r.
 
 export function righeOracle(off, opz = {}) {
   // solo i capitolati spuntati; le linee ripartono dal n° di partenza
-  const { righe } = calcolaOfferta({ ...off, righe: (off.righe || []).filter((r) => !esclusoDaExport(r, off)) }, opz);
+  const { righe } = calcolaOfferta({ ...off, tutteRighe: off.righe || [], righe: (off.righe || []).filter((r) => !esclusoDaExport(r, off)) }, opz);
   const k = condizioni(off);
   const start = num(off.lineaPartenza) || 10;
   const out = [], avvisi = [];

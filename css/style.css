@@ -1007,3 +1007,7 @@ th[data-filtro].filtrato::after { content: " ▼"; opacity: 1; color: #ffd76a; }
 .flt-lista label { display: flex; gap: 6px; align-items: flex-start; padding: 2px 4px; cursor: pointer; color: #111; }
 .flt-lista label:hover { background: #eef3fa; }
 .flt-piede { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+/* Spalma su righe */
+tr.spalmata td { background: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(0,0,0,.025) 6px 12px); }
+tr.spalmata .desc, tr.spalmata .desc .d { color: var(--muted); }
+button.spalma-b { cursor: pointer; border: 0; font: inherit; font-size: .72rem; margin-top: 2px; }

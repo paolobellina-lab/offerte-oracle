@@ -5,7 +5,10 @@ import {
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
   fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma, gmaGenerico, gmaOracle,
+  isSpalmata, calcolaRigaBase,
 } from "./calc.js";
+// una copia di riga non porta con sé la spalmatura (altrimenti il costo si spalmerebbe due volte)
+const senzaSpalma = (r) => { const { spalma, ...x } = r; return x; };
 import { analizzaFile, leggiAggiornamentoListino, righeDaTestoIncollato, leggiExcel, slug } from "./importa.js";
 import { scriviExcel, scriviExcelStile } from "./xlsx-lite.js";
 import * as BIB from "./biblioteca.js";
@@ -433,7 +436,8 @@ function duplicaCapitolo(c) {
       if (S.off.capitoli.some((x) => x.nome === nome)) { toast("C'è già un capitolo con questo nome."); return false; }
       const k = structuredClone(c);
       k.nome = nome; k.base = dbNome(c); if (k.base === nome) delete k.base;
-      k.righe = (k.righe || []).map((r) => ({ ...r, id: db.nuovoId() }));
+      const nuoviId = new Map((k.righe || []).map((r) => [r.id, db.nuovoId()]));
+      k.righe = (k.righe || []).map((r) => ({ ...r, id: nuoviId.get(r.id), ...(r.spalma ? { spalma: { ...r.spalma, su: r.spalma.su.map((x) => nuoviId.get(x)).filter(Boolean) } } : {}) }));
       S.off.capitoli.splice(S.off.capitoli.indexOf(c) + 1, 0, k);
       S.capAtt = nome; S.sel = new Set();
       modificata(); disegnaOfferta(true);
@@ -1279,7 +1283,7 @@ function lineeOracle(c) {
   // numero di linea Oracle di ogni riga (le righe senza codice o a quantità 0 non hanno linea)
   const m = new Map();
   let l = num(c.lineaPartenza) || 10;
-  for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r) && !esclusoDaExport(r, c)) { m.set(r.id, l); l += 10; }
+  for (const r of c.righe) if (num(r.qta) !== 0 && codiceOracle(r) && !esclusoDaExport(r, c) && !isSpalmata(r)) { m.set(r.id, l); l += 10; }
   return m;
 }
 function aggiungiCapitolato(c, nome) {
@@ -1576,10 +1580,13 @@ function disegnaRighe(c) {
         ? `${esc(capPrec)}<button type="button" class="tg-ed" data-rinomina="${esc(capPrec)}" title="Rinomina il capitolato">✎</button><button type="button" class="tg-ed" data-capsposta="-1" title="Sposta il capitolato prima">▲</button><button type="button" class="tg-ed" data-capsposta="1" title="Sposta il capitolato dopo">▼</button>`
         : '<span style="font-weight:500">senza capitolato</span>'}</td></tr>`;
     }
-    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${att ? " riga-att" : ""}${num(r.qta) ? "" : " qta-zero"}${S.appunti?.taglio && S.appunti.ids.has(r.id) ? " tagliata" : ""}">
+    const spV = isSpalmata(r), dest = spV ? new Set(r.spalma.su) : null;
+    const nDest = spV ? c.righe.filter((t) => dest.has(t.id) && num(t.qta) !== 0 && !isSpalmata(t)).length : 0;
+    const daVoci = x.spalmato ? c.righe.filter((v) => isSpalmata(v) && v.spalma.su.includes(r.id)) : [];
+    return testa + `<tr data-id="${esc(r.id)}" class="${sel.has(r.id) ? "sel" : ""}${att ? " riga-att" : ""}${spV ? " spalmata" : ""}${num(r.qta) ? "" : " qta-zero"}${S.appunti?.taglio && S.appunti.ids.has(r.id) ? " tagliata" : ""}">
       <td><input type="checkbox" data-sel ${sel.has(r.id) ? "checked" : ""}></td>
       <td class="num muted small">${linee.get(r.id) ?? ""}</td>
-      <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}</td>
+      <td class="mono nowrap">${codiceArticolo(r) ? codiceVis(r) : '<span class="badge bad">senza codice</span>'} ${statoRiga(r)}${spV ? `<br><button type="button" class="badge warn spalma-b" data-spalma="${esc(r.id)}" title="Voce spalmata: il suo costo (${euro(x.spalmata.acq)}) è ripartito ${r.spalma.modo === "qta" ? "in proporzione alle quantità" : "in proporzione al prezzo"} sulle righe scelte; non va in Oracle. Clic per modificare o annullare">⇢ spalmata su ${nDest} righe</button>` : ""}</td>
       <td class="img-cel">${(() => { const im = r.img || S.perK.get(r.k)?.img; return im ? `<img class="img-mini" data-img="${esc(im)}" alt="">` : ""; })()}</td>
       <td class="desc"><b>${esc(r.nOrdine)}</b>${r.capitolo !== c.nome && r.capitolo !== dbNome(c) && !r.daOfferta ? ` <span class="badge info" title="Articolo preso da un altro database">${esc(r.capitolo)}</span>` : ""}<div class="d">${esc(r.descrizione)}</div></td>
       <td>${esc(r.um)}</td>
@@ -1590,7 +1597,7 @@ function disegnaRighe(c) {
         <label class="giornate" title="In vendita e a listino: in Oracle quantità = giorni e prezzo = valore giornaliero (invece di un valore complessivo con quantità 1)">
           <input type="checkbox" data-campo="aGiornate" ${r.aGiornate ? "checked" : ""} > a giornate</label>
         <label class="giornate" title="Attività a corpo: costo e vendita complessivi scritti a mano, solo per questa offerta"><input type="checkbox" data-campo="aCorpo"> a corpo</label>` : ""}</td>
-      <td class="num"><b>${euro(x.unitario)}</b></td><td class="num">${euro(num(r.qta) ? x.totale : 0)}</td>
+      <td class="num">${spV ? `<s class="muted">${euro(x.unitario)}</s>` : `<b>${euro(x.unitario)}</b>`}${x.spalmato ? `<div><button type="button" class="badge info spalma-b" data-spalma="${esc(daVoci[0]?.id || "")}" title="Comprende costi spalmati da: ${esc(daVoci.map((v) => v.nOrdine || v.descrizione || codiceArticolo(v)).join(", "))}. Acquisto +${euro(x.spalmato.acq)}, vendita +${euro(x.spalmato.ven)}">+${euro(x.spalmato.ven)} spalm.</button></div>` : ""}</td><td class="num">${spV ? `<span class="muted small" title="Importo ripartito sulle altre righe">${euro(x.spalmata.ven)} ⇢</span>` : euro(num(r.qta) ? x.totale : 0)}</td>
       <td><select class="capsel" data-campo="capitolato">${opzioniCap(r.capitolato)}</select></td>
       ${isGenerico(r)
         ? `<td><span class="nota-auto" title="Articolo generico: la nota pre-linea è ${esc(r.nOrdine)} più quello che scrivi qui">auto: ${esc(r.nOrdine)} +</span><input class="nota" data-campo="notaPreAgg" value="${esc(r.notaPreAgg || "")}" placeholder="aggiungi alla nota pre-linea"></td>
@@ -1673,7 +1680,7 @@ function cambioRiga(e) {
   if (campo === "aCorpo") {
     if (inp.checked) {
       // si parte dal costo attuale dell'attività (tutti i giorni); la vendita resta calcolata finché non la scrivi
-      if (!num(r.corpoAcq)) { const x = calcolaRiga(r, c, opzCap(c).ricarichi); r.corpoAcq = Math.round(x.acq.totale / (num(r.qta) || 1) * 100) / 100; }
+      if (!num(r.corpoAcq)) { const x = calcolaRigaBase(r, c, opzCap(c).ricarichi); r.corpoAcq = Math.round(x.acq.totale / (num(r.qta) || 1) * 100) / 100; }
       r.aCorpo = true;
     } else delete r.aCorpo;
     modificata(); return ridisegnaOfferta();
@@ -1729,6 +1736,7 @@ function apriMenuDx(x, y) {
     ${n > 1 ? `<button type="button" data-dx="modmulti">✎ Modifica le ${n} righe selezionate…</button>` : ""}
     ${n === 1 ? (nelDb ? `<button type="button" data-dx="moddb">✎ Modifica nel database</button>` : `<button type="button" data-dx="modriga">✎ Modifica articolo${selR[0]?.daOfferta ? " (da offerta fornitore)" : ""}…</button>`) : ""}
     <button type="button" data-dx="nota">Applica la nota post-linea…</button>
+    <button type="button" data-dx="spalma">⇢ ${selR.some(isSpalmata) && n === 1 ? "Modifica la spalmatura…" : n > 1 ? "Spalma una voce sulle altre selezionate…" : "Spalma questa voce su altre righe…"}</button>
     ${convertibili.gen ? `<button type="button" data-dx="inatt">⇄ Trasforma in attività (PITATT)${convertibili.gen > 1 ? ` · ${convertibili.gen}` : ""}</button>` : ""}
     ${convertibili.att ? `<button type="button" data-dx="ingen">⇄ Trasforma in articolo generico (P000)${convertibili.att > 1 ? ` · ${convertibili.att}` : ""}</button>` : ""}
     <hr>
@@ -1744,6 +1752,7 @@ $("#righe-offerta").addEventListener("contextmenu", (e) => {
   const tr = e.target.closest("tr[data-id]"); if (!tr) return;
   e.preventDefault();
   if (!S.sel.has(tr.dataset.id)) { S.sel = new Set([tr.dataset.id]); S.ultimoSel = tr.dataset.id; disegnaOfferta(); }
+  S.rigaDx = tr.dataset.id; // la riga del clic destro: per "Spalma" è la voce da spalmare
   apriMenuDx(e.clientX, e.clientY);
 });
 document.addEventListener("click", (e) => { if (!e.target.closest("#menu-dx")) chiudiMenuDx(); });
@@ -1769,6 +1778,7 @@ $("#menu-dx").addEventListener("click", (e) => {
     return toast(az === "inatt" ? `${n} righe trasformate in attività tecnica (PITATT).` : `${n} righe trasformate in articoli generici (P000 ARTICOLO_GEN).`);
   }
   if (az === "modmulti") return modificaMultipla(c);
+  if (az === "spalma") { const selR = c.righe.filter((x) => S.sel.has(x.id)); return spalmaDialogo(c, selR.find((x) => x.id === S.rigaDx) || selR.find(isSpalmata) || selR[0], selR.map((x) => x.id)); }
   if (az === "modriga") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaRigaOfferta(c, r); }
   if (az === "moddb") { const r = c.righe.find((x) => S.sel.has(x.id)); return r && modificaNelDatabase(r._kCatalogo || r.k); }
   if (az === "capnuovo") return dialogo({
@@ -1800,6 +1810,8 @@ function righeDelBlocco(h) {
 /* Selezione: casella, clic su codice/descrizione, Maiusc+clic per un intervallo, casella del capitolato. */
 $("#righe-offerta").addEventListener("click", (e) => {
   const c = capAtt(); if (!c) return;
+  const spb = e.target.closest("[data-spalma]");
+  if (spb) { const v = c.righe.find((x) => x.id === spb.dataset.spalma); if (v) return spalmaDialogo(c, v, v.spalma?.su || []); }
   const ed = e.target.closest("[data-rinomina]");
   if (ed) return rinominaCapitolato(c, ed.dataset.rinomina);
   const sp = e.target.closest("[data-capsposta]");
@@ -1898,7 +1910,7 @@ function azioneRighe(az, opz = {}) {
     // la destinazione è l'ultima riga selezionata (le righe tagliate non contano); senza selezione si incolla in fondo
     const dest = scelte.filter((r) => !(sposta && ap.ids.has(r.id))).at(-1);
     if (sposta) for (const k of S.off.capitoli) k.righe = k.righe.filter((r) => !ap.ids.has(r.id));
-    const nuove = ap.righe.map((r) => ({ ...structuredClone(r), id: sposta ? r.id : db.nuovoId(),
+    const nuove = ap.righe.map((r) => ({ ...(sposta ? structuredClone(r) : senzaSpalma(structuredClone(r))), id: sposta ? r.id : db.nuovoId(),
       ...(dest ? { capitolato: dest.capitolato || "" } : {}) }));
     const i = dest ? c.righe.indexOf(dest) + 1 : c.righe.length;
     c.righe.splice(i, 0, ...nuove);
@@ -1908,7 +1920,7 @@ function azioneRighe(az, opz = {}) {
       + (ap.taglio && !sposta ? " Le righe originali restano nell'altra offerta." : ""), 4000);
   } else if (az === "dup") {
     // le copie vanno in fondo, nello stesso ordine, con il capitolato e la nota scelti (se indicati)
-    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId(),
+    const copie = scelte.map((r) => ({ ...senzaSpalma(structuredClone(r)), id: db.nuovoId(),
       ...(capSc ? { capitolato: capSc } : {}), ...(nota ? (isGenerico(r) ? { notaPostAgg: nota } : { notePost: nota }) : {}) }));
     c.righe.push(...copie);
     S.sel = new Set(copie.map((r) => r.id));
@@ -1928,7 +1940,7 @@ function azioneRighe(az, opz = {}) {
     for (let k = c.righe.length - 2; k >= 0; k--) if (S.sel.has(c.righe[k].id) && !S.sel.has(c.righe[k + 1].id)) [c.righe[k + 1], c.righe[k]] = [c.righe[k], c.righe[k + 1]];
   } else if (az === "dupqui") {
     // le copie vanno subito sotto l'ultima riga selezionata, nello stesso ordine
-    const copie = scelte.map((r) => ({ ...structuredClone(r), id: db.nuovoId() }));
+    const copie = scelte.map((r) => ({ ...senzaSpalma(structuredClone(r)), id: db.nuovoId() }));
     const ultimo = Math.max(...scelte.map((r) => c.righe.indexOf(r)));
     c.righe.splice(ultimo + 1, 0, ...copie);
     S.sel = new Set(copie.map((r) => r.id));
@@ -2155,6 +2167,72 @@ $("#menu-dx").addEventListener("click", (e) => {
 /* Dal tasto destro: apre il catalogo su quell'articolo, con il modulo di modifica; poi "Torna all'offerta" */
 /* Modifica di un campo comune a tutte le righe selezionate (vuoto = resta com'è). Vale solo per le righe
    dell'offerta: il database non cambia. */
+/* Spalma su righe: il costo di acquisto di una voce (es. attività tecnica o voce fittizia) si ripartisce sulle righe scelte,
+   in proporzione al prezzo (costo di acquisto della riga) o alle quantità. Vale solo per questa offerta. */
+function spalmaDialogo(c, voce, scelteIds = []) {
+  if (!voce) return;
+  const opz = opzCap(c);
+  const st = { voce: voce.id, modo: voce.spalma?.modo || "prezzo", su: new Set(isSpalmata(voce) ? voce.spalma.su : scelteIds.filter((id) => id !== voce.id)), cerca: "" };
+  const nome = (r) => `${codiceArticolo(r) || ""} ${r.nOrdine || ""}`.trim();
+  const candidate = () => c.righe.filter((r) => r.id !== st.voce && num(r.qta) !== 0 && !isSpalmata(r));
+  const disegna = (d) => {
+    const v = c.righe.find((r) => r.id === st.voce);
+    const prova = { ...c, righe: c.righe.map((r) => (r.id === st.voce ? { ...r, spalma: { su: [...st.su], modo: st.modo } } : r)) };
+    const vp = prova.righe.find((r) => r.id === st.voce);
+    const imp = calcolaRigaBase(v, c, opz.ricarichi);
+    const q = st.cerca.toUpperCase();
+    const lista = candidate().filter((r) => st.su.has(r.id) || !q || `${nome(r)} ${r.descrizione} ${r.capitolato}`.toUpperCase().includes(q));
+    lista.sort((a, b) => st.su.has(b.id) - st.su.has(a.id));
+    let tA = 0, tV = 0;
+    const righe = lista.slice(0, 300).map((r) => {
+      const prima = calcolaRiga(r, c, opz.ricarichi), dopo = calcolaRiga(prova.righe.find((x) => x.id === r.id), prova, opz.ricarichi);
+      const dA = dopo.acq.totale - prima.acq.totale, dV = dopo.totale - prima.totale, on = st.su.has(r.id);
+      if (on) { tA += dA; tV += dV; }
+      return `<tr class="${on ? "sel" : ""}"><td><input type="checkbox" data-sp-su="${esc(r.id)}" ${on ? "checked" : ""}></td>
+        <td class="mono small">${esc(nome(r))}</td><td class="small">${esc((r.descrizione || "").slice(0, 60))}${r.capitolato ? ` <span class="muted">· ${esc(r.capitolato)}</span>` : ""}</td>
+        <td class="num">${esc(numIt(prima.qta))}</td><td class="num">${euro(prima.acq.totale)}</td>
+        <td class="num">${on ? `+${euro(dA)}` : ""}</td><td class="num">${euro(prima.unitario)}</td><td class="num"><b>${on ? euro(dopo.unitario) : ""}</b></td></tr>`;
+    }).join("");
+    $("#sp-corpo", d).innerHTML = `<div class="small" style="margin:8px 0"><b>${esc(nome(vp))}</b> ${esc((vp.descrizione || "").slice(0, 80))}: costo di acquisto <b>${euro(imp.acq.totale)}</b> (vendita ${euro(imp.totale)}).
+        ${st.su.size ? `Ripartito su <b>${[...st.su].filter((id) => candidate().some((r) => r.id === id)).length}</b> righe: acquisto +${euro(tA)}, vendita +${euro(tV)}.` : '<span class="badge warn">spunta le righe su cui spalmarla</span>'}</div>
+      <div style="max-height:46vh;overflow:auto"><table class="tbl small"><thead><tr><th></th><th>Codice</th><th>Articolo</th><th class="num">Q.tà</th><th class="num">Costo riga</th><th class="num">+ costo</th><th class="num">Unitario</th><th class="num">Nuovo unitario</th></tr></thead>
+      <tbody>${righe || '<tr><td colspan="8" class="vuoto">Nessuna riga.</td></tr>'}</tbody></table></div>`;
+  };
+  dialogo({
+    titolo: "Spalma su righe", largo: true,
+    html: `<p class="muted small" style="margin-top:0">Il costo di acquisto della voce si somma a quello delle righe scelte e la loro vendita sale con lo stesso ricarico
+        (rapporto vendita/acquisto della riga). La voce resta qui, barrata, ma non va in Oracle e non ha importo. Vale solo per questa offerta: il database non cambia.</p>
+      <div class="riga-campi" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+        <label class="f">Voce da spalmare<select id="sp-voce">${c.righe.filter((r) => num(r.qta) !== 0).map((r) => `<option value="${esc(r.id)}" ${r.id === st.voce ? "selected" : ""}>${esc(nome(r))} · ${esc((r.descrizione || "").slice(0, 40))}</option>`).join("")}</select></label>
+        <label class="f">Ripartisci<select id="sp-modo"><option value="prezzo" ${st.modo === "prezzo" ? "selected" : ""}>in proporzione al prezzo (costo della riga)</option><option value="qta" ${st.modo === "qta" ? "selected" : ""}>in proporzione alle quantità</option></select></label>
+        <label class="f">Cerca righe<input id="sp-cerca" placeholder="codice, descrizione, capitolato" autocomplete="off"></label>
+      </div><div id="sp-corpo"></div>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, ...(isSpalmata(voce) ? [{ label: "Togli spalmatura", value: "togli", cls: "danger" }] : []), { label: "Spalma", value: "ok", cls: "primary" }],
+    onApri(d) {
+      disegna(d);
+      d.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t.id === "sp-voce") { st.voce = t.value; st.su.delete(t.value); const v = c.righe.find((r) => r.id === t.value); if (isSpalmata(v)) { st.su = new Set(v.spalma.su); st.modo = v.spalma.modo || "prezzo"; $("#sp-modo", d).value = st.modo; } }
+        else if (t.id === "sp-modo") st.modo = t.value;
+        else if (t.dataset.spSu) { if (t.checked) st.su.add(t.dataset.spSu); else st.su.delete(t.dataset.spSu); }
+        else return;
+        disegna(d);
+      });
+      d.addEventListener("input", (e) => { if (e.target.id === "sp-cerca") { st.cerca = e.target.value.trim(); disegna(d); } });
+    },
+    onConferma(val) {
+      const v = c.righe.find((r) => r.id === st.voce); if (!v) return;
+      if (val === "togli") { delete v.spalma; modificata(); ridisegnaOfferta(); return toast("Spalmatura tolta: la voce torna una riga normale."); }
+      const su = [...st.su].filter((id) => candidate().some((r) => r.id === id));
+      if (!su.length) { toast("Spunta almeno una riga su cui spalmare la voce."); return false; }
+      // una voce non può essere a sua volta destinazione di un'altra spalmatura
+      for (const r of c.righe) if (isSpalmata(r) && r.id !== v.id) r.spalma.su = r.spalma.su.filter((id) => id !== v.id);
+      v.spalma = { su, modo: st.modo };
+      modificata(); ridisegnaOfferta();
+      toast(`Voce spalmata su ${su.length} righe.`);
+    },
+  });
+}
 function modificaMultipla(c) {
   const righe = c.righe.filter((r) => S.sel.has(r.id));
   if (!righe.length) return;
@@ -4626,7 +4704,7 @@ async function controllaAcquisti(file) {
     const opz = opzCap(c), app = new Map();
     for (const r of c.righe || []) {
       if (!num(r.qta)) continue; // anche l'attività tecnica: prezzo al giorno, quantità = giornate
-      const x = calcolaRiga(r, c, opz.ricarichi);
+      const x = calcolaRigaBase(r, c, opz.ricarichi); // prezzi del fornitore: senza le voci spalmate
       const chiavi = (isGenerico(r) ? [r.nOrdine || r.descrizione] : [codiceArticolo(r), r.codice, r.nOrdine]).map(chiaveAcq).filter(Boolean);
       // stesso codice; oppure codice Oracle che finisce col codice dell'app (in Oracle c'è il prefisso del fornitore, es. "SIE ")
       const k = chiavi.find((y) => perCod.has(y)) || [...perCod.keys()].find((z) => chiavi.some((y) => y.length >= 6 && z.endsWith(y))) || chiavi[0];
