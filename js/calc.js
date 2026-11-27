@@ -254,7 +254,41 @@ export function quoteSpalma(v, cap, ricarichi = {}, k = condizioni(cap)) {
   dest.forEach((t, i) => out.set(t.id, importo * (somma > 0 ? pesi[i] / somma : 1 / dest.length)));
   return out;
 }
+/* Arrotondamento come Oracle: prezzo unitario al centesimo e totale riga = unitario × quantità al centesimo.
+   In più (cap.arrot, scelto per l'offerta) il prezzo di vendita si può arrotondare all'euro, alle decine, centinaia o migliaia,
+   per eccesso o al più vicino, su tutte le righe o solo su quelle con costi spalmati.
+   Con il formato "sconti" Oracle ricava il prezzo dal listino e dallo sconto a 2 decimali: l'app rifà lo stesso conto. */
+const cent = (v) => Math.round((v + Math.sign(v) * 1e-9) * 100) / 100;
+export const PASSI_ARROT = [0.01, 1, 10, 100, 1000];
+export function arrotPasso(v, passo, modo) {
+  if (!(passo > 0.01)) return cent(v);
+  const q = Math.round((v / passo) * 1e9) / 1e9;
+  const n = modo === "vicino" ? Math.round(q) : Math.ceil(q);
+  return cent((v > 0 && n < 1 ? 1 : n) * passo); // un prezzo non diventa mai 0: al minimo un passo
+}
+function arrotondaComeOracle(r, x, cap, k) {
+  const a = cap?.arrot || {}, passo = num(a.passo) || 0.01;
+  const ok = passo > 0.01 && (a.ambito === "spalmate" ? !!x.spalmato : true);
+  let u = ok ? arrotPasso(x.unitario, passo, a.modo) : cent(x.unitario);
+  let ua = cent(x.acq.unitario);
+  // formato sconti: Oracle = listino × (1 − sconto a 2 decimali), al centesimo
+  const la = num(r.listinoAcquisto);
+  const netto = k.out.formato === "netti" || isAttivita(r) || isGenerico(r) || !la;
+  // prezzo arrotondato all'euro o più: con lo sconto a 2 decimali Oracle non ci arriva esatto, quindi la riga va a prezzo netto
+  const nettoOracle = ok && !netto && k.out.prezzo !== "acquisto";
+  if (!netto && !nettoOracle) {
+    const oracle = (v) => cent(la * (1 - cent((1 - v / la) * 100) / 100));
+    if (k.out.prezzo === "acquisto") ua = oracle(ua); else u = oracle(u);
+  }
+  const acq = { ...x.acq, unitario: ua, totale: x.acq.totale === 0 && x.spalmata ? 0 : cent(ua * x.acq.qta) };
+  const giornate = aGiornate(r);
+  return { ...x, unitario: u, totale: x.spalmata ? 0 : cent(u * x.qta), acq,
+    scontoListino: !isAttivita(r) && la && !giornate ? 1 - u / la : x.scontoListino, arrotondato: ok ? passo : 0, nettoOracle };
+}
 export function calcolaRiga(r, cap, ricarichi = {}, k = condizioni(cap)) {
+  return arrotondaComeOracle(r, calcolaRigaGrezza(r, cap, ricarichi, k), cap, k);
+}
+function calcolaRigaGrezza(r, cap, ricarichi = {}, k = condizioni(cap)) {
   const base = calcolaRigaBase(r, cap, ricarichi, k);
   if (isSpalmata(r)) return { ...base, totale: 0, acq: { ...base.acq, totale: 0 }, spalmata: { acq: base.acq.totale, ven: base.totale } };
   const righe = cap?.tutteRighe || cap?.righe || [];
@@ -366,7 +400,7 @@ export function righeOracle(off, opz = {}) {
     // Prezzi netti: solo la colonna del netto. Sconti: un unico sconto in Sconto 3, calcolato sul listino
     // acquisto (il prezzo che Oracle conosce), anche negativo se il prezzo supera il listino.
     // Attività tecnica e generici vanno sempre a prezzo netto.
-    let conNetto = k.out.formato === "netti" || codice === "PITATT.TEC" || isGenerico(r);
+    let conNetto = k.out.formato === "netti" || codice === "PITATT.TEC" || isGenerico(r) || !!c.nettoOracle;
     if (!conNetto && !la) { conNetto = true; avvisi.push(`Senza listino acquisto, va a prezzo netto: ${codice} ${r.nOrdine || ""}`); }
     const prezzoNetto = conNetto ? arrot(v.unitario) : "";
     const sc = conNetto ? "" : arrot((1 - v.unitario / la) * 100);
