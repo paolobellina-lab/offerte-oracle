@@ -50,6 +50,23 @@ const fornitore = (g) => S.gmv.find((x) => x.codice === g)?.fornitore || "";
 const fornitoriTxt = (g) => [...new Set(S.gmv.filter((x) => x.codice === g).map((x) => x.fornitore || "").filter(Boolean))].join(" / ");
 /* Fornitore di un articolo: il suo (lo stesso GMA può esistere con più fornitori), altrimenti quello del GMA. */
 const fornitoreDi = (a) => (a?.fornitore || "").trim() || fornitore(a?.gmv);
+/* Stesso fornitore? Nomi confrontati senza spazi e punteggiatura ("Telmotor S.p.A." = "TELMOTOR").
+   Un articolo senza fornitore (né suo né del GMA) vale per tutti. Serve a non confondere, per esempio,
+   l'articolo Sensitron con lo stesso articolo rivenduto da Siemens. */
+const nomeForn = (s) => String(s || "").toUpperCase().replace(/S\.?\s*P\.?\s*A\.?|S\.?\s*R\.?\s*L\.?/g, "").replace(/[^A-Z0-9]/g, "");
+const stessoNome = (x, y) => { x = nomeForn(x); y = nomeForn(y); return x === y || (!!x && !!y && (x.startsWith(y) || y.startsWith(x))); };
+// fornitori possibili di un articolo: il suo, altrimenti quelli del GMA; se il GMA è di più fornitori decide il precodice del fornitore (es. SEN o SIE)
+function fornitoriArt(a) {
+  if ((a?.fornitore || "").trim()) return [a.fornitore.trim()];
+  const l = [...new Set(S.gmv.filter((x) => x.codice === a?.gmv).map((x) => x.fornitore || "").filter(Boolean))];
+  if (l.length > 1 && a.precodice) {
+    const p = l.filter((f) => chiaveDb(S.fornitori.find((z) => stessoNome(z.nome, f))?.precodice) === chiaveDb(a.precodice));
+    if (p.length) return p;
+  }
+  return l;
+}
+const fornTxt = (a) => fornitoriArt(a).join(" / ");
+const stessoFornitore = (a, forn) => { const l = fornitoriArt(a); return !l.length || !nomeForn(forn) || l.some((f) => stessoNome(f, forn)); };
 /* Regole di scadenza dei prezzi per precodice */
 const regole = () => Object.fromEntries(S.precodici.filter((p) => p.tipo).map((p) => [String(p.precodice).toUpperCase(), p]));
 const stato = (a) => statoPrezzo(a, regole());
@@ -3915,9 +3932,25 @@ function confrontaListinoFornitore(fogli, nomeFile) {
   const mappa = new Map();
   for (const a of letti.articoli) mappa.set(a.codice.replace(/\s+/g, "").toUpperCase(), { prezzo: a.listino, unitario: a.listino, sconto: 0, gmv: "" });
   mappa.saltate = 0; mappa.fornitore = true;
-  mappa.info = `Listino fornitore <b>${esc(nomeFile)}</b>: ${conInt.length} fogli letti, colonna codice “${esc(mappaCol.codice || "?")}”, prezzo “${esc(mappaCol.prezzo || "?")}”.
-    I codici si confrontano senza il precodice di Oracle (es. SIE, VAN).`;
-  return confrontaOracle(null, mappa);
+  // di che fornitore è il listino? Si aggiornano solo i suoi articoli (lo stesso codice può essere di due fornitori, es. Sensitron e Siemens)
+  const forns = tuttiFornitori();
+  const nf = nomeForn(nomeFile);
+  const ipotesi = forns.filter((f) => nomeForn(f).length >= 3 && nf.includes(nomeForn(f))).sort((x, y) => nomeForn(y).length - nomeForn(x).length)[0] || "";
+  dialogo({
+    titolo: "Di che fornitore è questo listino?",
+    html: `<p class="muted small" style="margin-top:0">Il file <b>${esc(nomeFile)}</b> non ha il precodice di Oracle: i codici si cercano solo tra gli articoli di questo fornitore (database e biblioteca),
+      così per esempio il listino Sensitron non tocca gli stessi articoli rivenduti da Siemens.</p>
+      <label class="f">Fornitore<select id="agf-forn"><option value="">— scegli —</option>${forns.map((f) => `<option ${f === ipotesi ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></label>`,
+    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Confronta", value: "ok", cls: "primary" }],
+    onConferma(v, d) {
+      const forn = $("#agf-forn", d).value;
+      if (!forn) { toast("Scegli il fornitore del listino."); return false; }
+      mappa.forn = forn;
+      mappa.info = `Listino fornitore <b>${esc(nomeFile)}</b> di <b>${esc(forn)}</b>: ${conInt.length} fogli letti, colonna codice “${esc(mappaCol.codice || "?")}”, prezzo “${esc(mappaCol.prezzo || "?")}”.
+        I codici si confrontano senza il precodice di Oracle (es. SIE, VAN) e solo con gli articoli di ${esc(forn)}.`;
+      setTimeout(() => confrontaOracle(null, mappa), 50);
+    },
+  });
 }
 async function confrontaOracle(righe, mappaPronta = null) {
   const box = $("#riepilogo-oracle");
@@ -3933,6 +3966,7 @@ async function confrontaOracle(righe, mappaPronta = null) {
   for (const a of S.catalogo) {
     const cod = codiceArticolo(a);
     if (isGenerico(a) || CODICI_GENERICI.has(cod)) continue;
+    if (mappa.forn && !stessoFornitore(a, mappa.forn)) continue;
     const [m, kTrov] = trova(cod, a.codice);
     if (!m) continue;
     trovati.add(kTrov);
@@ -3942,6 +3976,7 @@ async function confrontaOracle(righe, mappaPronta = null) {
   }
   for (const b of S.bib) {
     const cod = codiceBib(b);
+    if (mappa.forn && !stessoFornitore({ fornitore: b.fornitore }, mappa.forn)) continue;
     const [m, kTrov] = trova(cod, b.codice);
     if (!m) continue;
     trovati.add(kTrov);
@@ -4039,7 +4074,7 @@ const codiceBib = (a) => `${a.precodice ?? profiloDi(a.fornitore).precodice ?? "
 /* Differenze tra un articolo della biblioteca e lo stesso articolo (precodice + codice) nel database. */
 const ntDb = (t) => String(t ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 function diffDb(a) {
-  const x = S.dbPerCodice?.get(chiaveDb(codiceBib(a))); if (!x) return null;
+  const x = S.dbPerCodice?.get(chiaveDb(codiceBib(a))); if (!x || !stessoFornitore(x, a.fornitore)) return null;
   const ntd = (t) => ntDb(t).replace(/[^A-Z0-9À-Ý]+/g, " ").trim();
   const c = [];
   if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) c.push({ n: "Listino", f: "listinoAcquisto", v: num(a.listino), db: euro(x.listinoAcquisto), li: euro(a.listino), su: num(a.listino) > num(x.listinoAcquisto) });
@@ -4711,7 +4746,7 @@ async function importaElenco(file) {
   fogli = fogli.map((f) => ({ ...f, int: trovaInt(f.righe) })).filter((f) => f.int);
   if (!fogli.length) return toast("Nel file non trovo una tabella con le colonne codice e quantità.", 6000);
   const pref = fogli.find((f) => normInt(f.nome) === normInt(dbNome(c)) || normInt(f.nome) === normInt(c.nome)) || fogli[0];
-  const st = { foglio: pref.nome, m: { ...pref.int.m }, gen: true, escl: new Set() };
+  const st = { foglio: pref.nome, m: { ...pref.int.m }, gen: true, escl: new Set(), scelte: new Map(), prefForn: "" };
   // database: precodice+codice, codice, n° di ordinazione (prima gli articoli del database del capitolo)
   const ord = [...S.catalogo].sort((a, b) => (a.capitolo !== dbNome(c)) - (b.capitolo !== dbNome(c)));
   const perPC = new Map(), perC = new Map(), perN = new Map();
@@ -4726,7 +4761,15 @@ async function importaElenco(file) {
     const pc = chiaveDb(x.precodice + x.codice), co = chiaveDb(x.codice), no = chiaveDb(x.nOrdine);
     if (x.precodice && perPC.has(pc)) return { a: perPC.get(pc), come: "precodice + codice" };
     if (co && perPC.has(co)) return { a: perPC.get(co), come: "codice" };
-    if (co && perC.get(co)?.length) return { a: perC.get(co)[0], come: perC.get(co).length > 1 ? `codice (${perC.get(co).length} nel database, preso il primo)` : "codice senza precodice" };
+    if (co && perC.get(co)?.length) {
+      // lo stesso codice con precodici diversi (es. SEN e SIE: Sensitron diretto o rivenduto da Siemens): si sceglie nell'anteprima
+      const alt = [...new Map(perC.get(co).map((a) => [chiaveDb(codiceArticolo(a)), a])).values()];
+      if (alt.length > 1) {
+        const pref = st.prefForn && alt.find((a) => fornitoriArt(a).some((f) => stessoNome(f, st.prefForn)));
+        return { a: pref || alt[0], alt, come: "codice senza precodice" };
+      }
+      return { a: alt[0], come: "codice senza precodice" };
+    }
     if (no && perN.has(no)) return { a: perN.get(no), come: "n° di ordinazione" };
     if (no && perC.get(no)?.length) return { a: perC.get(no)[0], come: "n° di ordinazione = codice" };
     return null;
@@ -4742,7 +4785,10 @@ async function importaElenco(file) {
         notePre: v(r, "notePre"), notePost: v(r, "notePost"), descrizione: v(r, "descrizione"), prezzo: num(v(r, "prezzo")) };
       if (!x.codice && !x.nOrdine) continue;
       if (!x.qta) { senzaQ++; continue; }
-      x.t = cerca(x); righe.push(x);
+      x.t = cerca(x);
+      const i = righe.length;
+      if (x.t?.alt && st.scelte.has(i)) x.t.a = x.t.alt.find((a) => codiceArticolo(a) === st.scelte.get(i)) || x.t.a;
+      righe.push(x);
     }
     righe.senzaQ = senzaQ;
   };
@@ -4753,11 +4799,15 @@ async function importaElenco(file) {
     const trov = righe.filter((x) => x.t).length, gen = righe.filter((x) => !x.t).length;
     const capNuovi = [...new Set(righe.map((x) => x.capitolato).filter((n) => n && !c.capitolati.includes(n)))];
     $("#el-col", d).innerHTML = CAMPI_ELENCO.map((cc) => `<label class="f">${esc(cc.label)}<select data-el="${cc.k}">${opz(cc.k)}</select></label>`).join("");
+    const nAlt = righe.filter((x) => x.t?.alt).length;
+    const fAlt = [...new Set(righe.flatMap((x) => (x.t?.alt || []).flatMap((a) => fornitoriArt(a))))];
+    $("#el-alt", d).innerHTML = nAlt ? `<div class="avviso warn small" style="margin:8px 0 0">⚠ <b>${nAlt}</b> codici sono nel database con precodici diversi (fornitori diversi): scegli nella colonna “Nel database” quale prendere,
+      oppure per tutti <select id="el-pref"><option value="">— il primo trovato —</option>${fAlt.map((f) => `<option ${f === st.prefForn ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></div>` : "";
     $("#el-riep", d).innerHTML = `<b>${righe.length}</b> righe: <span class="ok"><b>${trov}</b> trovate nel database</span> · <span class="${gen ? "bad" : ""}"><b>${gen}</b> non trovate</span>${righe.senzaQ ? ` · ${righe.senzaQ} senza quantità (saltate)` : ""}${capNuovi.length ? ` · capitolati nuovi: ${capNuovi.map(esc).join(", ")}` : ""}`;
     $("#el-righe", d).innerHTML = righe.slice(0, 500).map((x, i) => `<tr${x.t ? "" : ' style="background:#fff3cd"'}>
       <td><input type="checkbox" data-el-r="${i}" ${st.escl.has(i) ? "" : "checked"}></td>
       <td class="mono small nowrap">${esc([x.precodice, x.codice].filter(Boolean).join(" ") || x.nOrdine)}</td><td class="num">${fNum.format(x.qta)}</td><td class="small">${esc(x.capitolato)}</td>
-      <td class="small">${x.t ? `<span class="mono"><b>${esc(codiceArticolo(x.t.a))}</b></span> ${esc((x.t.a.descrizione || "").slice(0, 70))}<br><span class="muted">${esc(x.t.a.capitolo)} · ${euro(x.t.a.listinoAcquisto)} · per ${esc(x.t.come)}</span>`
+      <td class="small">${x.t ? `${x.t.alt ? `<select data-el-alt="${i}" style="margin-bottom:2px">${x.t.alt.map((a) => `<option value="${esc(codiceArticolo(a))}" ${a === x.t.a ? "selected" : ""}>${esc(codiceArticolo(a))} · ${esc(fornTxt(a) || "?")} · ${esc(a.gmv || "")} · ${euro(a.listinoAcquisto)}</option>`).join("")}</select> <span class="badge warn">${x.t.alt.length} fornitori</span><br>` : `<span class="mono"><b>${esc(codiceArticolo(x.t.a))}</b></span> `}${esc((x.t.a.descrizione || "").slice(0, 70))}<br><span class="muted">${esc(x.t.a.capitolo)} · ${esc(fornTxt(x.t.a))} · ${euro(x.t.a.listinoAcquisto)} · per ${esc(x.t.come)}</span>`
         : `<span class="bad">non trovato</span>${st.gen ? ` → generico: ${esc((x.descrizione || x.notePost || "").slice(0, 60))} · ${euro(x.prezzo)}` : " → saltato"}`}</td></tr>`).join("");
   };
   dialogo({
@@ -4768,6 +4818,7 @@ async function importaElenco(file) {
         <label class="row small"><input type="checkbox" id="el-gen" checked> aggiungi i non trovati come articoli generici (descrizione e prezzo del file)</label>
       </div>
       <details style="margin-top:8px"><summary class="small muted">Colonne del file</summary><div class="lg-mappa" id="el-col" style="margin-top:6px"></div></details>
+      <div id="el-alt"></div>
       <p class="small" id="el-riep" style="margin:8px 0"></p>
       <div class="tbl-wrap" style="max-height:52vh"><table><thead><tr><th></th><th>Codice nel file</th><th class="num">Q.tà</th><th>Capitolato</th><th>Nel database</th></tr></thead><tbody id="el-righe"></tbody></table></div>`,
     pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Aggiungi le righe", value: "ok", cls: "primary" }],
@@ -4775,9 +4826,11 @@ async function importaElenco(file) {
       disegna(d);
       d.addEventListener("change", (e) => {
         const t = e.target;
-        if (t.id === "el-foglio") { st.foglio = t.value; st.m = { ...fogli.find((f) => f.nome === t.value).int.m }; st.escl.clear(); }
+        if (t.id === "el-foglio") { st.foglio = t.value; st.m = { ...fogli.find((f) => f.nome === t.value).int.m }; st.escl.clear(); st.scelte.clear(); }
+        else if (t.id === "el-pref") { st.prefForn = t.value; st.scelte.clear(); }
+        else if (t.dataset.elAlt !== undefined) { st.scelte.set(+t.dataset.elAlt, t.value); }
         else if (t.id === "el-gen") st.gen = t.checked;
-        else if (t.dataset.el) { if (t.value === "") delete st.m[t.dataset.el]; else st.m[t.dataset.el] = +t.value; st.escl.clear(); }
+        else if (t.dataset.el) { if (t.value === "") delete st.m[t.dataset.el]; else st.m[t.dataset.el] = +t.value; st.escl.clear(); st.scelte.clear(); }
         else if (t.dataset.elR !== undefined) { t.checked ? st.escl.delete(+t.dataset.elR) : st.escl.add(+t.dataset.elR); return; }
         else return;
         disegna(d);
@@ -4927,8 +4980,10 @@ async function apriListino(file, atteso = "") {
         const es = letti.articoli.slice(0, 6);
         // articoli già nel database (precodice + codice); se il precodice è vuoto o diverso, si propone quello usato nel database
         const dbCod = new Map(); for (const x of S.catalogo) dbCod.set(chiaveDb(x.codice), x.precodice || "");
-        const dbFull = new Set(S.catalogo.map((x) => chiaveDb(codiceArticolo(x))));
+        const dbFull = new Set(S.catalogo.filter((x) => stessoFornitore(x, st.fornitore)).map((x) => chiaveDb(codiceArticolo(x))));
         const giaDb = letti.articoli.filter((a) => dbFull.has(chiaveDb(st.precodice + a.codice))).length;
+        // solo gli articoli del database dello stesso fornitore: lo stesso codice di un altro fornitore (es. Sensitron rivenduto da Siemens) è un altro articolo
+        dbCod.clear(); for (const x of S.catalogo) if (stessoFornitore(x, st.fornitore)) dbCod.set(chiaveDb(x.codice), x.precodice || "");
         const preDb = new Map(); for (const a of letti.articoli) { const p = dbCod.get(chiaveDb(a.codice)); if (p !== undefined && chiaveDb(p) !== chiaveDb(st.precodice)) preDb.set(p, (preDb.get(p) || 0) + 1); }
         const [preSugg, nSugg] = [...preDb.entries()].sort((x, y) => y[1] - x[1])[0] || [];
         // differenze con gli articoli già nel database: listino, descrizione, modello, U.M., GMA
@@ -4936,7 +4991,7 @@ async function apriListino(file, atteso = "") {
         const nt = (t) => String(t ?? "").toUpperCase().replace(/\s+/g, " ").trim();
         const diff = [];
         for (const a of letti.articoli) {
-          const x = dbPer.get(chiaveDb(st.precodice + a.codice)); if (!x) continue;
+          const x = dbPer.get(chiaveDb(st.precodice + a.codice)); if (!x || !stessoFornitore(x, st.fornitore)) continue;
           const gmaL = (a.famiglia ? st.famiglie[a.famiglia] : "") || a.gma || (!a.famiglia ? st.gmaDefault : "") || "";
           const campi = [];
           if (Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004) campi.push(["Listino", euro(x.listinoAcquisto), euro(a.listino), num(a.listino) > num(x.listinoAcquisto) ? "su" : "giu"]);
@@ -5036,7 +5091,7 @@ async function salvaListino(st, letti, nomeFile) {
   try { await db.scrivi(ops); } catch (x) { errore(x, "Salvataggio non riuscito"); return false; }
   // articoli già nel database con un prezzo diverso: si segnalano (l'aggiornamento del database è un passo a parte)
   const perCod = new Map(articoli.map((a) => [chiaveDb(`${a.precodice}${a.codice}`), a]));
-  const diversi = S.catalogo.filter((x) => { const a = perCod.get(chiaveDb(codiceArticolo(x))); return a && Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004; });
+  const diversi = S.catalogo.filter((x) => { const a = perCod.get(chiaveDb(codiceArticolo(x))); return a && stessoFornitore(x, st.fornitore) && Math.abs(num(a.listino) - num(x.listinoAcquisto)) > 0.004; });
   setTimeout(() => dialogo({
     titolo: `Listino ${st.fornitore} caricato`,
     html: `<ul class="riep"><li><b>${u.nuovi}</b> articoli nuovi</li><li><b>${u.aggiornati.length}</b> con il prezzo cambiato</li><li>${u.invariati} invariati</li>
@@ -5323,4 +5378,4 @@ $("#file-backup").addEventListener("change", async (e) => {
 });
 
 // per i test automatici
-window.__app = { S, calcolaOfferta, opzCap, BIB, modificaRigaOfferta };
+window.__app = { S, calcolaOfferta, opzCap, BIB, modificaRigaOfferta, fornitoriArt };
