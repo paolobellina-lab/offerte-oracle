@@ -5,7 +5,7 @@ import {
   riepilogoCapitolo, ricaricoPct, marginePct, vendutaPerTarget, isGenerico, notePreRiga, notePostRiga, esclusoDaExport,
   codiceArticolo, statoPrezzo, CODICE_GENERICO, condizioni, migraCondizioni, leggiSconti, leggiRicarico, testoValido,
   fattoreStandard, pctTesto, impostaStandardGma, scontiEffettivi, standardGma, haScontiPropri, voceGma, gmaGenerico, gmaOracle,
-  isSpalmata, calcolaRigaBase, PASSI_ARROT,
+  isSpalmata, calcolaRigaBase,
 } from "./calc.js";
 // una copia di riga non porta con sé la spalmatura (altrimenti il costo si spalmerebbe due volte)
 const senzaSpalma = (r) => { const { spalma, ...x } = r; return x; };
@@ -331,7 +331,6 @@ function nuovoCapitolo(nome, base = {}) {
     ven: { modo: base.ven?.modo || "ricarico", ricGen: "", ricGma: {}, scGen: "", scGma: {} },
     out: { prezzo: base.out?.prezzo || "vendita", formato: base.out?.formato || "sconti" },
     imp: base.imp || "av", lis: { gen: "", gma: {} },
-    ...(S.off?.capitoli?.[0]?.arrot ? { arrot: { ...S.off.capitoli[0].arrot } } : {}), // l'arrotondamento vale per tutta l'offerta
     notaNuove: "", capitolati: [], capNuove: "", righe: [],
   };
 }
@@ -960,7 +959,6 @@ function disegnaOfferta(cambioSub = false) {
 function disegnaOffertaIn(cambioSub) {
   const o = S.off;
   if (!o) return;
-  { const ar = o.capitoli.find((c) => c.arrot)?.arrot; const b = $("#arrotonda-prezzi"); b.textContent = testoArrot(ar); b.classList.toggle("primary", !!ar); }
   // totali dell'offerta
   const cli = clienteOff();
   let venduto = 0, acquistato = 0, righe = 0, fuori = 0;
@@ -2235,42 +2233,6 @@ function spalmaDialogo(c, voce, scelteIds = []) {
     },
   });
 }
-/* Arrotonda il prezzo: vale per l'offerta (tutti i capitoli). Il centesimo, come Oracle, c'è sempre. */
-const PASSI_TXT = { 0.01: "al centesimo", 1: "all'euro", 10: "alle decine di euro", 100: "alle centinaia di euro", 1000: "alle migliaia di euro" };
-function testoArrot(a) {
-  const p = num(a?.passo) || 0.01;
-  if (p <= 0.01) return "Arrotonda il prezzo: al centesimo";
-  return `Arrotonda: ${PASSI_TXT[p] || p}, ${a.modo === "vicino" ? "al più vicino" : "per eccesso"}${a.ambito === "spalmate" ? ", solo righe spalmate" : ""}`;
-}
-function arrotondaDialogo() {
-  if (!S.off) return;
-  const a = S.off.capitoli.find((c) => c.arrot)?.arrot || {};
-  dialogo({
-    titolo: "Arrotonda il prezzo",
-    html: `<p class="muted small" style="margin-top:0">Come Oracle, i prezzi unitari sono sempre al centesimo e il totale di riga è unitario × quantità.
-        Qui puoi arrotondare di più il prezzo di vendita delle righe. Vale per tutti i capitoli di questa offerta; il database non cambia.</p>
-      <label class="f">Arrotonda il prezzo<select id="ar-passo">${PASSI_ARROT.map((p) => `<option value="${p}" ${p === (num(a.passo) || 0.01) ? "selected" : ""}>${PASSI_TXT[p]}</option>`).join("")}</select></label>
-      <label class="f" style="margin-top:8px">Come<select id="ar-modo"><option value="su" ${a.modo !== "vicino" ? "selected" : ""}>per eccesso</option><option value="vicino" ${a.modo === "vicino" ? "selected" : ""}>al valore più vicino</option></select></label>
-      <label class="f" style="margin-top:8px">Su quali righe<select id="ar-ambito"><option value="tutte" ${a.ambito !== "spalmate" ? "selected" : ""}>tutti i prezzi di vendita</option><option value="spalmate" ${a.ambito === "spalmate" ? "selected" : ""}>solo le righe con costi spalmati</option></select></label>
-      <p class="muted small" id="ar-prova"></p>`,
-    pulsanti: [{ label: "Annulla", value: "annulla" }, { label: "Applica", value: "ok", cls: "primary" }],
-    onApri(d) {
-      const prova = () => {
-        const n = { passo: +$("#ar-passo", d).value, modo: $("#ar-modo", d).value, ambito: $("#ar-ambito", d).value };
-        let prima = 0, dopo = 0;
-        for (const c of S.off.capitoli) { const o = opzCap(c); prima += calcolaOfferta(c, o).totale; dopo += calcolaOfferta({ ...c, arrot: n }, o).totale; }
-        $("#ar-prova", d).innerHTML = `Totale dell'offerta: ${euro(prima)} → <b>${euro(dopo)}</b>${Math.abs(dopo - prima) > 0.004 ? ` (${dopo > prima ? "+" : ""}${euro(dopo - prima)})` : ""}`;
-      };
-      d.addEventListener("change", prova); prova();
-    },
-    onConferma(v, d) {
-      const n = { passo: +$("#ar-passo", d).value, modo: $("#ar-modo", d).value, ambito: $("#ar-ambito", d).value };
-      for (const c of S.off.capitoli) { if (n.passo > 0.01) c.arrot = { ...n }; else delete c.arrot; }
-      modificata(); ridisegnaOfferta();
-    },
-  });
-}
-$("#arrotonda-prezzi").addEventListener("click", arrotondaDialogo);
 function modificaMultipla(c) {
   const righe = c.righe.filter((r) => S.sel.has(r.id));
   if (!righe.length) return;
